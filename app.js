@@ -327,14 +327,33 @@ const VP = {
     },
 
     // ── READER ──
+    previewProject() {
+        if (!this.currentProject) return;
+        this.currentProject.pages = this.ed.pages;
+        this.saveLocal();
+        const previewData = JSON.parse(JSON.stringify(this.currentProject));
+        previewData.data = previewData.pages;
+        this.reader.mode = 'preview';
+        this.reader.load(previewData);
+        this.showView('reader');
+    },
+
     async openReader(id) {
         try {
+            this.reader.mode = 'read';
             const pub = await this.api(`/zines/${id}`);
             this.reader.load(pub);
             this.showView('reader');
         } catch (e) { console.error(e); this.toast('Failed to load zine', 'error'); }
     },
-    closeReader() { this.showView('discover') },
+    closeReader() {
+        if (this.reader.mode === 'preview') {
+            this.showView('editor');
+        } else {
+            this.showView('discover');
+        }
+        this.reader.mode = 'read';
+    },
     reader: {
         data: null, pageIdx: 0,
         load(pub) { this.data = pub; this.data.pages = pub.data; this.pageIdx = 0; this.renderPage() }, // Remap 'data' prop to pages
