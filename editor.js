@@ -258,7 +258,7 @@ VP.ed = {
         if (el.borderRadius) d.style.borderRadius = el.borderRadius + 'px';
 
         if (el.type === 'text') {
-            d.className += ' el-text'; d.contentEditable = !el.locked;
+            d.className += ' el-text'; d.contentEditable = false;
             d.textContent = el.content;
             d.style.fontSize = el.fontSize + 'px'; d.style.fontFamily = el.fontFamily || 'sans-serif';
             d.style.color = el.color || '#000'; d.style.textAlign = el.align || 'left';
@@ -267,6 +267,8 @@ VP.ed = {
             if (el.lineHeight) d.style.lineHeight = el.lineHeight;
             if (el.letterSpacing) d.style.letterSpacing = el.letterSpacing + 'px';
             if (el.textShadow) d.style.textShadow = el.textShadow;
+            d.ondblclick = e => { if (!el.locked) { d.contentEditable = true; d.focus() } };
+            d.onblur = e => { d.contentEditable = false; if (d.textContent !== el.content) { el.content = d.textContent; this.pushHistory() } };
             d.addEventListener('input', e => { el.content = e.target.textContent });
         } else if (el.type === 'image') {
             d.className += ' el-img';
@@ -287,7 +289,7 @@ VP.ed = {
             if (el.shape === 'triangle') { d.style.background = 'transparent'; d.style.width = '0'; d.style.height = '0'; d.style.borderLeft = (el.width / 2) + 'px solid transparent'; d.style.borderRight = (el.width / 2) + 'px solid transparent'; d.style.borderBottom = el.height + 'px solid ' + (el.fill || '#000') }
             if (el.shape === 'line_h') { d.style.borderRadius = '2px' }
         } else if (el.type === 'balloon') {
-            d.className += ' el-text'; d.contentEditable = !el.locked; d.textContent = el.content;
+            d.className += ' el-text'; d.contentEditable = false; d.textContent = el.content;
             d.style.fontSize = (el.fontSize || 14) + 'px'; d.style.padding = '10px'; d.style.display = 'flex'; d.style.alignItems = 'center'; d.style.justifyContent = 'center'; d.style.textAlign = 'center';
             const bt = el.balloonType || 'dialog';
             if (bt === 'dialog') { d.style.background = '#fff'; d.style.border = '2px solid #000'; d.style.borderRadius = '20px' }
@@ -296,6 +298,8 @@ VP.ed = {
             if (bt === 'caption') { d.style.background = '#000'; d.style.color = '#fff' }
             if (bt === 'whisper') { d.style.background = '#f8f8f8'; d.style.border = '1px dashed #999'; d.style.borderRadius = '16px'; d.style.fontStyle = 'italic' }
             if (bt === 'narration') { d.style.background = '#ffe'; d.style.border = '1px solid #cc9'; d.style.fontStyle = 'italic' }
+            d.ondblclick = e => { if (!el.locked) { d.contentEditable = true; d.focus() } };
+            d.onblur = e => { d.contentEditable = false; if (d.textContent !== el.content) { el.content = d.textContent; this.pushHistory() } };
             d.addEventListener('input', e => { el.content = e.target.textContent });
         } else if (el.type === 'silhouette') {
             d.style.background = el.fill || '#000';
