@@ -368,6 +368,16 @@ const VP = {
             html += '</div>';
             book.innerHTML = html;
             document.getElementById('readerPageNum').textContent = (this.pageIdx + 1) + ' / ' + this.data.pages.length;
+
+            // Initialize Shaders in Reader
+            requestAnimationFrame(() => {
+                book.querySelectorAll('.vp-shader-canvas').forEach(c => {
+                    if (window.VPShader) {
+                        const code = decodeURIComponent(escape(atob(c.dataset.code)));
+                        VPShader.start(c, 'custom', code);
+                    }
+                });
+            });
         },
         next() { if (this.data && this.pageIdx < this.data.pages.length - 1) { this.pageIdx++; this.renderPage() } },
         prev() { if (this.pageIdx > 0) { this.pageIdx--; this.renderPage() } }
