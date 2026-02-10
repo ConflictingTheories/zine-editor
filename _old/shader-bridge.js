@@ -3,14 +3,14 @@
 // Bridges mushu-flow into the VP editor
 // ═══════════════════════════════════════════
 
-import { mushu, flow, shader } from './node_modules/mushu-flow/src/index.js';
-import { noise2D, fbm2D, color, voronoi, simplex2D } from './node_modules/mushu-flow/src/glsl/index.js';
+import { mushu, flow, shader } from 'mushu-flow';
+import { noise2D, fbm2D, color, voronoi, simplex2D } from 'mushu-flow/glsl';
 
 // ── Shader Presets ──
 const PRESETS = {
-    fire: {
-        name: '🔥 Fire',
-        code: `
+  fire: {
+    name: '🔥 Fire',
+    code: `
       ${fbm2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -22,10 +22,10 @@ const PRESETS = {
         O = vec4(col, intensity > 0.1 ? 1.0 : 0.0);
       }
     `
-    },
-    plasma: {
-        name: '🌀 Plasma',
-        code: `
+  },
+  plasma: {
+    name: '🌀 Plasma',
+    code: `
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
         float t = time * 0.5;
@@ -40,10 +40,10 @@ const PRESETS = {
         O = vec4(col, 1.0);
       }
     `
-    },
-    lightning: {
-        name: '⚡ Lightning',
-        code: `
+  },
+  lightning: {
+    name: '⚡ Lightning',
+    code: `
       ${noise2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -57,10 +57,10 @@ const PRESETS = {
         O = vec4(col, max(bolt, glow + flash) > 0.05 ? 1.0 : 0.0);
       }
     `
-    },
-    smoke: {
-        name: '💨 Smoke',
-        code: `
+  },
+  smoke: {
+    name: '💨 Smoke',
+    code: `
       ${fbm2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -72,10 +72,10 @@ const PRESETS = {
         O = vec4(col, smoke * 0.8);
       }
     `
-    },
-    water: {
-        name: '🌊 Water',
-        code: `
+  },
+  water: {
+    name: '🌊 Water',
+    code: `
       ${noise2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -91,10 +91,10 @@ const PRESETS = {
         O = vec4(col, 1.0);
       }
     `
-    },
-    voidNoise: {
-        name: '🕳️ Void',
-        code: `
+  },
+  voidNoise: {
+    name: '🕳️ Void',
+    code: `
       ${fbm2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -109,10 +109,10 @@ const PRESETS = {
         O = vec4(col, 1.0);
       }
     `
-    },
-    energy: {
-        name: '✨ Energy',
-        code: `
+  },
+  energy: {
+    name: '✨ Energy',
+    code: `
       ${noise2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -128,10 +128,10 @@ const PRESETS = {
         O = vec4(col, pattern > 0.1 ? 1.0 : 0.0);
       }
     `
-    },
-    galaxy: {
-        name: '🌌 Galaxy',
-        code: `
+  },
+  galaxy: {
+    name: '🌌 Galaxy',
+    code: `
       ${fbm2D}
       void mainImage(out vec4 O, vec2 C) {
         vec2 uv = C / resolution;
@@ -148,7 +148,7 @@ const PRESETS = {
         O = vec4(col, 1.0);
       }
     `
-    }
+  }
 };
 
 // ── Active shader instances ──
@@ -156,53 +156,53 @@ const activeShaders = new Map();
 
 // ── Public API mounted on window.VPShader ──
 window.VPShader = {
-    presets: PRESETS,
+  presets: PRESETS,
 
-    /**
-     * Start a shader on a canvas element
-     * @param {HTMLCanvasElement} canvas
-     * @param {string} presetKey — key from PRESETS or 'custom'
-     * @param {string=} customCode — if presetKey === 'custom'
-     * @returns {object} The mushu flow instance (for stopping)
-     */
-    start(canvas, presetKey, customCode) {
-        // Stop any existing shader on this canvas
-        this.stop(canvas);
+  /**
+   * Start a shader on a canvas element
+   * @param {HTMLCanvasElement} canvas
+   * @param {string} presetKey — key from PRESETS or 'custom'
+   * @param {string=} customCode — if presetKey === 'custom'
+   * @returns {object} The mushu flow instance (for stopping)
+   */
+  start(canvas, presetKey, customCode) {
+    // Stop any existing shader on this canvas
+    this.stop(canvas);
 
-        const code = presetKey === 'custom'
-            ? customCode
-            : (PRESETS[presetKey]?.code || PRESETS.plasma.code);
+    const code = presetKey === 'custom'
+      ? customCode
+      : (PRESETS[presetKey]?.code || PRESETS.plasma.code);
 
-        try {
-            const inst = mushu(canvas).gl(code);
-            activeShaders.set(canvas, inst);
-            return inst;
-        } catch (e) {
-            console.warn('Shader failed to start:', e);
-            return null;
-        }
-    },
-
-    /**
-     * Stop a shader running on a canvas
-     */
-    stop(canvas) {
-        const inst = activeShaders.get(canvas);
-        if (inst && typeof inst.stop === 'function') {
-            inst.stop();
-        }
-        activeShaders.delete(canvas);
-    },
-
-    /**
-     * Get list of preset names for UI
-     */
-    getPresetList() {
-        return Object.entries(PRESETS).map(([key, val]) => ({
-            key,
-            name: val.name
-        }));
+    try {
+      const inst = mushu(canvas).gl(code);
+      activeShaders.set(canvas, inst);
+      return inst;
+    } catch (e) {
+      console.warn('Shader failed to start:', e);
+      return null;
     }
+  },
+
+  /**
+   * Stop a shader running on a canvas
+   */
+  stop(canvas) {
+    const inst = activeShaders.get(canvas);
+    if (inst && typeof inst.stop === 'function') {
+      inst.stop();
+    }
+    activeShaders.delete(canvas);
+  },
+
+  /**
+   * Get list of preset names for UI
+   */
+  getPresetList() {
+    return Object.entries(PRESETS).map(([key, val]) => ({
+      key,
+      name: val.name
+    }));
+  }
 };
 
 console.log('🍡 mushu-flow shader bridge loaded');

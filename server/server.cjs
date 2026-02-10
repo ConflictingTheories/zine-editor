@@ -201,7 +201,7 @@ app.get('/api/zines/:id', (req, res) => {
 // Static Files
 // Serve root folder, but exclude backend files
 app.use((req, res, next) => {
-    if (req.path.endsWith('.sqlite') || req.path === '/server.js') {
+    if (req.path.endsWith('.sqlite') || req.path === '/server/' || req.path === '/server.js') {
         return res.status(403).send('Forbidden');
     }
     next();
