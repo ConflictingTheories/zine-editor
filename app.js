@@ -280,6 +280,7 @@ const VP = {
             this.projects = this.projects.filter(p => p.id !== 'tutorial_zine');
         }
         const demo = window.getTutorialData();
+        demo._dirty = true;
         this.projects.unshift(demo);
         this.saveLocal();
         this.renderDashboard();
@@ -308,6 +309,7 @@ const VP = {
 
         // Must appear synced first?
         if (!this.currentProject.serverId) {
+            this.currentProject._dirty = true;
             // Force sync first
             await this.sync();
             if (!this.currentProject.serverId) { this.toast('Must be online and synced to publish', 'error'); return; }

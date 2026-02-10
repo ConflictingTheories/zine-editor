@@ -44,7 +44,12 @@ VP.ed = {
         this.history.push(JSON.stringify(this.pages));
         if (this.history.length > this.maxHist) this.history.shift();
         this.historyIdx = this.history.length - 1;
-        if (VP.currentProject) { VP.currentProject.pages = this.pages; VP.saveLocal(); if (VP.isOnline) VP.sync() }
+        if (VP.currentProject) {
+            VP.currentProject.pages = this.pages;
+            VP.currentProject._dirty = true;
+            VP.saveLocal();
+            if (VP.isOnline) VP.sync();
+        }
     },
     undo() { if (this.historyIdx > 0) { this.historyIdx--; this.pages = JSON.parse(this.history[this.historyIdx]); this.sel = null; this.render(); this.updateThumbs(); VP.toast('Undo', 'info') } },
     redo() { if (this.historyIdx < this.history.length - 1) { this.historyIdx++; this.pages = JSON.parse(this.history[this.historyIdx]); this.sel = null; this.render(); this.updateThumbs(); VP.toast('Redo', 'info') } },
