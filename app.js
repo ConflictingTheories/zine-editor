@@ -286,6 +286,15 @@ const VP = {
         this.toast('Tutorial Loaded!', 'success');
     },
 
+    showHelp() {
+        this.showModal('helpModal');
+    },
+
+    showHelpTab(id, btn) {
+        document.querySelectorAll('.help-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.help-pane').forEach(p => p.classList.toggle('active', p.id === 'help-' + id));
+    },
+
     saveLocal() {
         localStorage.setItem('vp_projects', JSON.stringify(this.projects));
     },
