@@ -337,7 +337,8 @@ VP.ed = {
     showProps(el) {
         const c = document.getElementById('propsContent');
         const fonts = ['Crimson Text', 'Cinzel', 'Cinzel Decorative', 'Bebas Neue', 'Special Elite', 'Bangers', 'Playfair Display', 'EB Garamond', 'Orbitron', 'Roboto Mono', 'Montserrat', 'Assistant', 'Comic Neue', 'Courier Prime', 'MedievalSharp', 'Inter'];
-        let h = `<div class="prop-row-inline"><div class="prop-row"><label>X</label><input type="number" value="${Math.round(el.x)}" onchange="VP.ed.updProp('x',+this.value)"></div><div class="prop-row"><label>Y</label><input type="number" value="${Math.round(el.y)}" onchange="VP.ed.updProp('y',+this.value)"></div></div>`;
+        let h = `<div class="prop-row"><label>Element Label</label><input type="text" value="${el.label || ''}" onchange="VP.ed.updProp('label',this.value)" placeholder="ID for interactions"></div>`;
+        h += `<div class="prop-row-inline"><div class="prop-row"><label>X</label><input type="number" value="${Math.round(el.x)}" onchange="VP.ed.updProp('x',+this.value)"></div><div class="prop-row"><label>Y</label><input type="number" value="${Math.round(el.y)}" onchange="VP.ed.updProp('y',+this.value)"></div></div>`;
         h += `<div class="prop-row-inline"><div class="prop-row"><label>W</label><input type="number" value="${Math.round(el.width)}" onchange="VP.ed.updProp('width',+this.value)"></div><div class="prop-row"><label>H</label><input type="number" value="${Math.round(el.height)}" onchange="VP.ed.updProp('height',+this.value)"></div></div>`;
         h += `<div class="prop-row"><label>Rotation ${el.rotation || 0}°</label><input type="range" min="0" max="360" value="${el.rotation || 0}" oninput="VP.ed.updProp('rotation',+this.value)"></div>`;
         h += `<div class="prop-row"><label>Opacity ${Math.round((el.opacity ?? 1) * 100)}%</label><input type="range" min="0" max="1" step=".01" value="${el.opacity ?? 1}" oninput="VP.ed.updProp('opacity',+this.value)"></div>`;
@@ -368,9 +369,43 @@ VP.ed = {
             h += `<div class="prop-row"><label>Preset</label><select onchange="VP.ed.updProp('shaderPreset',this.value)">${VPShader.getPresetList().map(p => `<option value="${p.key}"${el.shaderPreset === p.key ? ' selected' : ''}>${p.name}</option>`).join('')}</select></div>`;
         }
         h += `<div class="prop-row"><label>Blend Mode</label><select onchange="VP.ed.updProp('blendMode',this.value)">${['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'hard-light', 'difference'].map(m => `<option value="${m}"${el.blendMode === m ? ' selected' : ''}>${m}</option>`).join('')}</select></div>`;
+        h += `<div class="prop-row"><label><input type="checkbox" ${el.isHidden ? 'checked' : ''} onchange="VP.ed.updProp('isHidden',this.checked)"> Hidden by default</label></div>`;
         h += `<div class="prop-row-inline"><button class="prop-btn" onclick="VP.ed.moveLayer('up')">▲ Forward</button><button class="prop-btn" onclick="VP.ed.moveLayer('down')">▼ Back</button></div>`;
         h += `<div class="prop-row"><button class="prop-btn danger" onclick="VP.ed.deleteSelected()">✕ Delete Element</button></div>`;
         c.innerHTML = h;
+        this.showInteractions(el);
+    },
+
+    showInteractions(el) {
+        const c = document.getElementById('interactionContent');
+        let h = '';
+        const actions = [
+            { id: '', name: 'None' },
+            { id: 'goto', name: 'Go to Page' },
+            { id: 'unlock', name: 'Unlock Page' },
+            { id: 'password', name: 'Password Prompt' },
+            { id: 'toggle', name: 'Toggle Element' },
+            { id: 'sfx', name: 'Play SFX' },
+            { id: 'link', name: 'Open URL' }
+        ];
+
+        h += `<div class="prop-row"><label>Action Type</label><select onchange="VP.ed.updProp('action',this.value)">${actions.map(a => `<option value="${a.id}"${(el.action || '') === a.id ? ' selected' : ''}>${a.name}</option>`).join('')}</select></div>`;
+
+        if (el.action === 'goto' || el.action === 'unlock' || el.action === 'password') {
+            h += `<div class="prop-row"><label>Target Page #</label><input type="number" min="1" max="${this.pages.length}" value="${el.actionVal || 1}" onchange="VP.ed.updProp('actionVal',this.value)"></div>`;
+        } else if (el.action === 'toggle') {
+            const page = this.curPage();
+            const options = (page.elements || []).filter(e => e.label && e !== el).map(e => `<option value="${e.label}"${el.actionVal === e.label ? ' selected' : ''}>${e.label} (${e.type})</option>`).join('');
+            h += `<div class="prop-row"><label>Target Element</label><select onchange="VP.ed.updProp('actionVal',this.value)"><option value="">Select Element...</option>${options}</select></div>`;
+            h += `<p style="font-size:10px;color:var(--vp-text-dim)">Only elements with a 'Label' appear here.</p>`;
+        } else if (el.action === 'sfx') {
+            h += `<div class="prop-row"><label>SFX URL</label><input type="text" value="${el.actionVal || ''}" onchange="VP.ed.updProp('actionVal',this.value)" placeholder="https://.../sound.mp3"></div>`;
+            h += `<div class="prop-row-inline"><button class="prop-btn" style="font-size:10px" onclick="VP.am.playSFX('${el.actionVal || ''}')">Test Sound</button></div>`;
+        } else if (el.action === 'link') {
+            h += `<div class="prop-row"><label>Target URL</label><input type="text" value="${el.actionVal || ''}" onchange="VP.ed.updProp('actionVal',this.value)" placeholder="https://..."></div>`;
+        }
+
+        c.innerHTML = h || '<p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic">No actions available</p>';
     },
 
     showEffects(el) {
@@ -401,7 +436,15 @@ VP.ed = {
         let h = `<h4 style="font-size:.75em;color:var(--vp-accent);margin-bottom:10px">PAGE PROPERTIES</h4>`;
         h += `<div class="prop-row"><label>Background</label><input type="color" value="${page.background || '#ffffff'}" onchange="VP.ed.updPageProp('background',this.value)"></div>`;
         h += `<div class="prop-row"><label>Texture</label><select onchange="VP.ed.updPageProp('texture',this.value)"><option value="">None</option><option value="https://www.transparenttextures.com/patterns/old-mathematics.png"${page.texture?.includes('old-math') ? 'selected' : ''}>Old Paper</option><option value="https://www.transparenttextures.com/patterns/dark-matter.png"${page.texture?.includes('dark-matter') ? 'selected' : ''}>Dark Matter</option><option value="https://www.transparenttextures.com/patterns/carbon-fibre.png"${page.texture?.includes('carbon') ? 'selected' : ''}>Carbon Fibre</option><option value="https://www.transparenttextures.com/patterns/pinstriped-suit.png"${page.texture?.includes('pinstripe') ? 'selected' : ''}>Pinstripe</option></select></div>`;
+        h += `<div class="prop-row"><label>Page BGM (Loop)</label><input type="text" value="${page.bgm || ''}" onchange="VP.ed.updPageProp('bgm',this.value)" placeholder="https://.../mood.mp3"></div>`;
+        h += `<div class="prop-row-inline"><button class="prop-btn" style="font-size:10px" onclick="VP.am.playBGM('${page.bgm || ''}')">Test Loop</button><button class="prop-btn" style="font-size:10px" onclick="VP.am.stopBGM()">Stop</button></div>`;
+        h += `<div class="prop-row"><label><input type="checkbox" ${page.isLocked ? 'checked' : ''} onchange="VP.ed.updPageProp('isLocked',this.checked)"> Locked (Skip in flow)</label></div>`;
+        if (page.isLocked) {
+            h += `<div class="prop-row"><label>Access Password</label><input type="text" value="${page.password || ''}" onchange="VP.ed.updPageProp('password',this.value)" placeholder="Mystery code"></div>`;
+        }
         c.innerHTML = h;
+        document.getElementById('effectsContent').innerHTML = '<p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic;padding:16px">Select an element for effects</p>';
+        document.getElementById('interactionContent').innerHTML = '<p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic;padding:16px">Select an element for logic</p>';
     },
 
     updProp(prop, val) { if (this.sel) { this.sel[prop] = val; this.render(); this.showProps(this.sel); this.showEffects(this.sel); this.pushHistory() } },
@@ -417,6 +460,10 @@ VP.ed = {
     },
 
     setOrientation(o) { document.getElementById('canvas').className = 'ed-canvas ' + o; this.render() },
+    setTab(id) {
+        document.querySelectorAll('.prop-tab').forEach(t => t.classList.toggle('active', t.innerText.toLowerCase().includes(id.slice(0, 3))));
+        document.querySelectorAll('.prop-pane').forEach(p => p.classList.toggle('active', p.id.toLowerCase().includes(id)));
+    },
     toggleGrid() { this.gridOn = !this.gridOn; document.getElementById('canvas').classList.toggle('show-grid', this.gridOn); document.getElementById('gridToggle').classList.toggle('active', this.gridOn) },
     toggleSnap() { this.snapOn = !this.snapOn; document.getElementById('snapToggle').classList.toggle('active', this.snapOn); VP.toast(this.snapOn ? 'Snap on' : 'Snap off', 'info') },
 
@@ -434,9 +481,11 @@ VP.ed = {
     },
 
     // Export helpers
-    elementToHTML(el) {
+    elementToHTML(el, isExport = true) {
         let s = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;transform:rotate(${el.rotation || 0}deg);z-index:${el.zIndex || 0};opacity:${el.opacity ?? 1};mix-blend-mode:${el.blendMode || 'normal'};`;
+        if (el.isHidden) s += 'display:none;';
         let content = '';
+        const handler = isExport ? 'H' : 'VP.handleInteraction';
         if (el.type === 'text' || el.type === 'balloon') {
             s += `font-size:${el.fontSize}px;font-family:${el.fontFamily || 'sans-serif'};color:${el.color || '#000'};text-align:${el.align || 'left'};`;
             if (el.bold) s += 'font-weight:bold;'; if (el.italic) s += 'font-style:italic;';
@@ -458,7 +507,12 @@ VP.ed = {
         }
         if (el.shadow) s += `box-shadow:${el.shadow};`;
         if (el.animation && el.animation !== 'none') s += `animation:${el.animation} ${el.animDuration || 1}s ease ${el.animLoop ? 'infinite' : 'both'};`;
-        return `<div style="${s}">${content}</div>`;
+
+        let attr = `style="${s}" class="reader-el-item" data-label="${el.label || ''}"`;
+        if (el.action) {
+            attr = `style="${s}cursor:pointer" class="reader-el-item" data-label="${el.label || ''}" data-action="${el.action}" data-action-val="${el.actionVal || ''}" onclick="${handler}(this, event)"`;
+        }
+        return `<div ${attr}>${content}</div>`;
     },
 
     async exportPDF() {
@@ -480,14 +534,73 @@ VP.ed = {
     exportHTML() {
         const ld = document.getElementById('loadingOverlay'); ld.classList.add('active');
         setTimeout(() => {
-            let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title><style>body{margin:0;padding:20px;background:#111;font-family:Arial,sans-serif}.page-wrap{max-width:528px;margin:0 auto;display:none}.page-wrap.active{display:block}.page{position:relative;width:100%;aspect-ratio:5.5/8.5;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.5);margin-bottom:20px;overflow:hidden}.el{position:absolute}.nav{text-align:center;padding:20px}.btn{padding:10px 24px;background:#d4af37;color:#000;border:none;cursor:pointer;font-weight:600;margin:0 8px;border-radius:6px}#pg{color:#aaa;margin:0 16px}</style></head><body>`;
+            let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
+            <style>
+                body{margin:0;padding:20px;background:#111;font-family:Arial,sans-serif}
+                .page-wrap{max-width:528px;margin:0 auto;display:none}.page-wrap.active{display:block}
+                .page{position:relative;width:100%;aspect-ratio:5.5/8.5;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.5);margin-bottom:20px;overflow:hidden}.el{position:absolute}
+                .nav{text-align:center;padding:20px}.btn{padding:10px 24px;background:#d4af37;color:#000;border:none;cursor:pointer;font-weight:600;margin:0 8px;border-radius:6px}
+                #pg{color:#aaa;margin:0 16px}
+                .modal{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:1000}
+                .modal.active{display:flex}
+                .modal-content{background:#1a1a1f;padding:30px;border:1px solid #d4af37;border-radius:8px;color:#fff;max-width:300px;text-align:center}
+                input{width:100%;padding:10px;margin:15px 0;background:#000;border:1px solid #444;color:#fff;border-radius:4px}
+                .shake{animation:shake 0.4s} @keyframes shake{0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)}}
+            </style></head><body>`;
+
             this.pages.forEach((p, i) => {
-                html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}"><div class="page" style="background:${p.background}">`;
+                html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-bgm="${p.bgm || ''}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${p.password || ''}" style="background:${p.background}">`;
                 if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>`;
                 p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += this.elementToHTML(e) });
                 html += `</div></div>`;
             });
-            const sc = `let c=0,t=${this.pages.length};function show(n){for(let i=0;i<t;i++){const e=document.getElementById('p'+i);if(e)e.className='page-wrap'+(i===n?' active':'');}document.getElementById('pg').textContent=(n+1)+'/'+t;}function next(){if(c<t-1){c++;show(c)}}function prev(){if(c>0){c--;show(c)}}`;
+
+            const sc = `
+            let c=0,t=${this.pages.length},au=null,up=new Set(),pp=-1;
+            function H(el,e){
+                e.stopPropagation(); const a=el.dataset.action,v=el.dataset.actionVal;
+                if(a==='goto'){ show(parseInt(v)-1); }
+                else if(a==='unlock'){ up.add(parseInt(v)-1); alert('Path Unlocked!'); }
+                else if(a==='password'){ pp=parseInt(v)-1; document.getElementById('pw').classList.add('active'); document.getElementById('pi').focus(); }
+                else if(a==='toggle'){
+                    const target = Array.from(document.querySelectorAll('.reader-el-item')).find(x => x.dataset.label === v);
+                    if(target) target.style.display = (target.style.display==='none') ? 'block' : 'none';
+                }
+                else if(a==='sfx'){ new Audio(v).play(); }
+                else if(a==='link'){ window.open(v,'_blank'); }
+            }
+            function PWS(){
+                const i=document.getElementById('pi'), p=document.getElementById('p'+pp);
+                if(p && p.dataset.pass === i.value){
+                    up.add(pp); document.getElementById('pw').classList.remove('active'); show(pp); i.value='';
+                } else { i.classList.add('shake'); setTimeout(()=>i.classList.remove('shake'),400); }
+            }
+            function P(url){
+                if(au&&au.src===url)return; if(au){au.pause();au=null;}
+                if(!url)return; au=new Audio(url); au.loop=true; au.play().catch(e=>console.warn(e));
+            }
+            function show(n){
+                if(n<0||n>=t)return; c=n;
+                for(let i=0;i<t;i++){ const e=document.getElementById('p'+i); e.className='page-wrap'+(i===n?' active':''); }
+                document.getElementById('pg').textContent=(n+1)+'/'+t;
+                P(document.getElementById('p'+n).dataset.bgm);
+            }
+            function next(){
+                let n=c+1; while(n<t){
+                    const p=document.getElementById('p'+n);
+                    if(!p.dataset.locked || up.has(n)){ show(n); return; }
+                    n++;
+                }
+            }
+            function prev(){
+                let n=c-1; while(n>=0){
+                    const p=document.getElementById('p'+n);
+                    if(!p.dataset.locked || up.has(n)){ show(n); return; }
+                    n--;
+                }
+            }
+            window.onload=()=>{ show(0); }`;
+
             const msc = `import { mushu } from 'https://unpkg.com/mushu-flow@1.1.0/src/index.js';
             document.querySelectorAll('.vp-shader-canvas').forEach(c => {
                 try { 
@@ -495,7 +608,11 @@ VP.ed = {
                     mushu(c).gl(code); 
                 } catch(e) { console.warn(e); }
             });`;
-            html += `<div class="nav"><button class="btn" onclick="prev()">◀ Prev</button><span id="pg">1/${this.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div><` + `script>${sc}<` + `/script><script type="module">${msc}<` + `/script></body></html>`;
+
+            html += `<div class="nav"><button class="btn" onclick="prev()">◀ Prev</button><span id="pg">1/${this.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div>`;
+            html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
+            html += `<` + `script>${sc}<` + `/script><script type="module">${msc}<` + `/script></body></html>`;
+
             const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-zine.html'; a.click();
             ld.classList.remove('active'); VP.closeModal('exportModal'); VP.toast('HTML exported!', 'success');
         }, 300);
@@ -504,14 +621,81 @@ VP.ed = {
     exportInteractive() {
         const ld = document.getElementById('loadingOverlay'); ld.classList.add('active');
         setTimeout(() => {
-            let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Interactive</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0f;display:flex;justify-content:center;align-items:center;height:100vh;perspective:2000px;overflow:hidden;font-family:sans-serif}.book{position:relative;width:420px;height:648px;transform-style:preserve-3d}.pg{position:absolute;width:100%;height:100%;background:#fff;box-shadow:0 5px 25px rgba(0,0,0,.5);transform-origin:left;transition:transform .8s cubic-bezier(.645,.045,.355,1);backface-visibility:hidden;overflow:hidden}.pg.flip{transform:rotateY(-180deg)}.ctrl{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:16px;z-index:100}.btn{padding:10px 24px;background:#d4af37;border:none;color:#000;cursor:pointer;border-radius:6px;font-weight:600}.btn:hover{transform:scale(1.05)}</style></head><body><div class="book" id="bk">`;
+            let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Interactive</title>
+            <style>
+                *{margin:0;padding:0;box-sizing:border-box}
+                body{background:#0a0a0f;display:flex;justify-content:center;align-items:center;height:100vh;perspective:2000px;overflow:hidden;font-family:sans-serif}
+                .book{position:relative;width:420px;height:648px;transform-style:preserve-3d}
+                .pg{position:absolute;width:100%;height:100%;background:#fff;box-shadow:0 5px 25px rgba(0,0,0,.5);transform-origin:left;transition:transform .8s cubic-bezier(.645,.045,.355,1);backface-visibility:hidden;overflow:hidden}
+                .pg.flip{transform:rotateY(-180deg)}.ctrl{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:16px;z-index:100}
+                .btn{padding:10px 24px;background:#d4af37;border:none;color:#000;cursor:pointer;border-radius:6px;font-weight:600}.btn:hover{transform:scale(1.05)}
+                .modal{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:1000}
+                .modal.active{display:flex}
+                .modal-content{background:#1a1a1f;padding:30px;border:1px solid #d4af37;border-radius:8px;color:#fff;max-width:300px;text-align:center}
+                input{width:100%;padding:10px;margin:15px 0;background:#000;border:1px solid #444;color:#fff;border-radius:4px}
+                .shake{animation:shake 0.4s} @keyframes shake{0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)}}
+            </style></head><body><div class="book" id="bk">`;
+
             this.pages.forEach((p, i) => {
-                html += `<div class="pg" id="pg${i}" style="z-index:${this.pages.length - i};background:${p.background}">`;
+                html += `<div class="pg" id="pg${i}" data-bgm="${p.bgm || ''}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${p.password || ''}" style="z-index:${this.pages.length - i};background:${p.background}">`;
                 if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2;pointer-events:none"></div>`;
                 p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += this.elementToHTML(e) });
                 html += `</div>`;
             });
-            const sc = `let c=0,t=${this.pages.length};function next(){if(c<t-1){document.getElementById('pg'+c).classList.add('flip');c++}}function prev(){if(c>0){c--;document.getElementById('pg'+c).classList.remove('flip')}}document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')next();if(e.key==='ArrowLeft')prev()})`;
+
+            const sc = `
+            let c=0,t=${this.pages.length},au=null,up=new Set(),pp=-1;
+            function H(el,e){
+                e.stopPropagation(); const a=el.dataset.action,v=el.dataset.actionVal;
+                if(a==='goto'){ 
+                    const idx=parseInt(v)-1; if(idx>=0&&idx<t){ 
+                        if(document.getElementById('pg'+idx).dataset.locked && !up.has(idx)){ pp=idx; document.getElementById('pw').classList.add('active'); return; }
+                        while(c<idx)next(); while(c>idx)prev(); 
+                    } 
+                }
+                else if(a==='unlock'){ up.add(parseInt(v)-1); alert('Path Unlocked!'); }
+                else if(a==='password'){ pp=parseInt(v)-1; document.getElementById('pw').classList.add('active'); document.getElementById('pi').focus(); }
+                else if(a==='toggle'){
+                    const target = Array.from(document.querySelectorAll('.reader-el-item')).find(x => x.dataset.label === v);
+                    if(target) target.style.display = (target.style.display==='none') ? 'block' : 'none';
+                }
+                else if(a==='sfx'){ new Audio(v).play(); }
+                else if(a==='link'){ window.open(v,'_blank'); }
+            }
+            function PWS(){
+                const i=document.getElementById('pi'), p=document.getElementById('pg'+pp);
+                if(p && p.dataset.pass === i.value){
+                    up.add(pp); document.getElementById('pw').classList.remove('active'); 
+                    const idx=pp; while(c<idx)next(); while(c>idx)prev(); i.value='';
+                } else { i.classList.add('shake'); setTimeout(()=>i.classList.remove('shake'),400); }
+            }
+            function P(url){
+                if(au&&au.src===url)return; if(au){au.pause();au=null;}
+                if(!url)return; au=new Audio(url); au.loop=true; au.play().catch(e=>console.warn(e));
+            }
+            function next(){
+                let n=c+1; while(n<t){
+                    const p=document.getElementById('pg'+n);
+                    if(!p.dataset.locked || up.has(n)){ 
+                        while(c<n){ document.getElementById('pg'+c).classList.add('flip'); c++; }
+                        P(document.getElementById('pg'+c).dataset.bgm); return;
+                    }
+                    n++;
+                }
+            }
+            function prev(){
+                let n=c-1; while(n>=0){
+                    const p=document.getElementById('pg'+n);
+                    if(!p.dataset.locked || up.has(n)){ 
+                        while(c>n){ c--; document.getElementById('pg'+c).classList.remove('flip'); }
+                        P(document.getElementById('pg'+c).dataset.bgm); return;
+                    }
+                    n--;
+                }
+            }
+            document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')next();if(e.key==='ArrowLeft')prev()});
+            window.onload=()=>{ P(document.getElementById('pg0').dataset.bgm); }`;
+
             const msc = `import { mushu } from 'https://unpkg.com/mushu-flow@1.1.0/src/index.js';
             document.querySelectorAll('.vp-shader-canvas').forEach(c => {
                 try { 
@@ -519,7 +703,11 @@ VP.ed = {
                     mushu(c).gl(code); 
                 } catch(e) { console.warn(e); }
             });`;
-            html += `</div><div class="ctrl"><button class="btn" onclick="prev()">◀ PREV</button><button class="btn" onclick="next()">NEXT ▶</button></div><` + `script>${sc}<` + `/script><script type="module">${msc}<` + `/script></body></html>`;
+
+            html += `</div><div class="ctrl"><button class="btn" onclick="prev()">◀ PREV</button><button class="btn" onclick="next()">NEXT ▶</button></div>`;
+            html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
+            html += `<` + `script>${sc}<` + `/script><script type="module">${msc}<` + `/script></body></html>`;
+
             const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-interactive.html'; a.click();
             ld.classList.remove('active'); VP.closeModal('exportModal'); VP.toast('Interactive exported!', 'success');
         }, 500);

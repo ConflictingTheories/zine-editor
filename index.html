@@ -786,6 +786,44 @@
             border-bottom: 1px solid var(--vp-border)
         }
 
+        .prop-tabs {
+            display: flex;
+            background: var(--vp-surface2);
+            border-bottom: 1px solid var(--vp-border);
+            flex-shrink: 0;
+        }
+
+        .prop-tab {
+            flex: 1;
+            padding: 12px 5px;
+            background: transparent;
+            border: none;
+            color: var(--vp-text-dim);
+            font-size: .65em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all .2s;
+        }
+
+        .prop-tab.active {
+            color: var(--vp-accent);
+            border-bottom-color: var(--vp-accent);
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .prop-pane {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .prop-pane.active {
+            display: block;
+        }
+
         .prop-row {
             margin-bottom: 10px
         }
@@ -1813,18 +1851,27 @@
 
             <!-- Right panel -->
             <div class="ed-right">
-                <div class="prop-section">
-                    <h4>Properties</h4>
-                    <div id="propsContent">
-                        <p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic">Select an element to edit
-                        </p>
+                <div class="prop-tabs" id="propTabs">
+                    <button class="prop-tab active" onclick="VP.ed.setTab('props')">Props</button>
+                    <button class="prop-tab" onclick="VP.ed.setTab('effects')">Effects</button>
+                    <button class="prop-tab" onclick="VP.ed.setTab('interactions')">Logic</button>
+                </div>
+                <div id="paneProps" class="prop-pane active">
+                    <div class="prop-section" id="propsContent">
+                        <p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic;padding:16px">Select an
+                            element to edit</p>
                     </div>
                 </div>
-                <div class="prop-section">
-                    <h4>Effects</h4>
-                    <div id="effectsContent">
-                        <p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic">Select an element for
-                            effects</p>
+                <div id="paneEffects" class="prop-pane">
+                    <div class="prop-section" id="effectsContent">
+                        <p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic;padding:16px">Select an
+                            element for effects</p>
+                    </div>
+                </div>
+                <div id="paneInteractions" class="prop-pane">
+                    <div class="prop-section" id="interactionContent">
+                        <p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic;padding:16px">Select an
+                            element for logic</p>
                     </div>
                 </div>
             </div>
@@ -2087,6 +2134,19 @@
     <script src="editor.js"></script>
     <script type="module" src="shader-bridge.js"></script>
     <script>window.addEventListener('load', () => VP.init());</script>
+    <!-- Password Modal -->
+    <div class="modal" id="passwordModal">
+        <div class="modal-content" style="max-width:300px;text-align:center">
+            <h3>🔒 Locked Content</h3>
+            <p style="font-size:.85em;margin-bottom:15px">Enter the secret password to unlock this path.</p>
+            <input type="password" id="passInput" placeholder="Password" style="width:100%;margin-bottom:15px">
+            <div style="display:flex;gap:10px">
+                <button class="btn" onclick="VP.handlePassSubmit()" style="flex:1">Unlock</button>
+                <button class="btn" onclick="VP.closeModal('passwordModal')"
+                    style="flex:1;background:#333;color:#fff">Cancel</button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

@@ -12,6 +12,26 @@ const VP = {
     user: JSON.parse(localStorage.getItem('vp_user')),
     token: localStorage.getItem('vp_token'),
     isOnline: navigator.onLine,
+
+    // ── AUDIO MANAGER ──
+    am: {
+        current: null, sfx: {},
+        playBGM(url) {
+            if (this.current && this.current.src === url) return;
+            this.stopBGM();
+            if (!url) return;
+            this.current = new Audio(url);
+            this.current.loop = true;
+            this.current.volume = 0.5;
+            this.current.play().catch(e => console.warn("Audio blocked", e));
+        },
+        stopBGM() { if (this.current) { this.current.pause(); this.current = null; } },
+        playSFX(url) {
+            const a = new Audio(url);
+            a.volume = 0.7;
+            a.play().catch(e => console.warn("SFX blocked", e));
+        }
+    },
     isSyncing: false,
 
     // ── API & SYNC ──
@@ -347,6 +367,7 @@ const VP = {
         } catch (e) { console.error(e); this.toast('Failed to load zine', 'error'); }
     },
     closeReader() {
+        this.am.stopBGM();
         if (this.reader.mode === 'preview') {
             this.showView('editor');
         } else {
@@ -355,16 +376,29 @@ const VP = {
         this.reader.mode = 'read';
     },
     reader: {
-        data: null, pageIdx: 0,
-        load(pub) { this.data = pub; this.data.pages = pub.data; this.pageIdx = 0; this.renderPage() }, // Remap 'data' prop to pages
+        data: null, pageIdx: 0, unlockedPages: new Set(),
+        load(pub) {
+            this.data = pub;
+            this.data.pages = pub.data;
+            this.pageIdx = 0;
+            this.unlockedPages = new Set();
+            this.renderPage();
+        },
         renderPage() {
             if (!this.data) return;
             const book = document.getElementById('readerBook');
             const page = this.data.pages[this.pageIdx];
             if (!page) { book.innerHTML = ''; return }
+
+            // Handle Page BGM
+            if (page.bgm) VP.am.playBGM(page.bgm);
+            else VP.am.stopBGM();
+
             let html = `<div class="reader-page" style="background:${page.background || '#fff'}">`;
             if (page.texture) html += `<div style="position:absolute;inset:0;background-image:url('${page.texture}');background-size:cover;opacity:.2;pointer-events:none"></div>`;
-            (page.elements || []).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(el => { html += VP.ed.elementToHTML(el) });
+            (page.elements || []).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(el => {
+                html += VP.ed.elementToHTML(el, false);
+            });
             html += '</div>';
             book.innerHTML = html;
             document.getElementById('readerPageNum').textContent = (this.pageIdx + 1) + ' / ' + this.data.pages.length;
@@ -379,8 +413,94 @@ const VP = {
                 });
             });
         },
-        next() { if (this.data && this.pageIdx < this.data.pages.length - 1) { this.pageIdx++; this.renderPage() } },
-        prev() { if (this.pageIdx > 0) { this.pageIdx--; this.renderPage() } }
+        next() {
+            if (!this.data) return;
+            let nextIdx = this.pageIdx + 1;
+            while (nextIdx < this.data.pages.length) {
+                const p = this.data.pages[nextIdx];
+                if (!p.isLocked || this.unlockedPages.has(nextIdx)) {
+                    this.pageIdx = nextIdx;
+                    this.renderPage();
+                    return;
+                }
+                nextIdx++;
+            }
+        },
+        prev() {
+            let prevIdx = this.pageIdx - 1;
+            while (prevIdx >= 0) {
+                const p = this.data.pages[prevIdx];
+                if (!p.isLocked || this.unlockedPages.has(prevIdx)) {
+                    this.pageIdx = prevIdx;
+                    this.renderPage();
+                    return;
+                }
+                prevIdx--;
+            }
+        }
+    },
+
+    handleInteraction(el, e) {
+        e.stopPropagation();
+        const action = el.dataset.action;
+        const val = el.dataset.actionVal;
+        if (action === 'goto') {
+            const idx = parseInt(val) - 1;
+            if (!isNaN(idx) && idx >= 0 && idx < this.reader.data.pages.length) {
+                this.reader.pageIdx = idx;
+                this.reader.renderPage();
+            }
+        } else if (action === 'unlock') {
+            const idx = parseInt(val) - 1;
+            if (!isNaN(idx)) {
+                this.reader.unlockedPages.add(idx);
+                this.toast('Path unlocked!', 'success');
+            }
+        } else if (action === 'password') {
+            const idx = parseInt(val) - 1;
+            if (!isNaN(idx)) {
+                this._pendingPassPage = idx;
+                this.showModal('passwordModal');
+                setTimeout(() => document.getElementById('passInput').focus(), 100);
+            }
+        } else if (action === 'toggle') {
+            const book = document.getElementById('readerBook');
+            const target = Array.from(book.querySelectorAll('.reader-el-item')).find(x => x.dataset.label === val);
+            if (target) {
+                target.style.display = (target.style.display === 'none') ? 'block' : 'none';
+                // Trigger shader resize if it's a shader
+                if (target.querySelector('canvas')) {
+                    requestAnimationFrame(() => {
+                        const c = target.querySelector('canvas');
+                        if (c && window.VPShader) VPShader.resize(c);
+                    });
+                }
+            }
+        } else if (action === 'sfx') {
+            this.am.playSFX(val);
+        } else if (action === 'link') {
+            window.open(val, '_blank');
+        }
+    },
+
+    handlePassSubmit() {
+        const input = document.getElementById('passInput');
+        const pass = input.value;
+        const targetIdx = this._pendingPassPage;
+        const page = this.reader.data.pages[targetIdx];
+
+        if (page && page.password === pass) {
+            this.reader.unlockedPages.add(targetIdx);
+            this.closeModal('passwordModal');
+            this.reader.pageIdx = targetIdx;
+            this.reader.renderPage();
+            this.toast('Success! Path opened.', 'success');
+            input.value = '';
+        } else {
+            this.toast('Incorrect password', 'error');
+            input.classList.add('shake');
+            setTimeout(() => input.classList.remove('shake'), 400);
+        }
     },
 
     // ── INIT ──
