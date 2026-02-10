@@ -1614,9 +1614,14 @@
             <button class="topnav-tab" data-view="discover" onclick="VP.showView('discover')">Discover</button>
         </div>
         <div class="topnav-right">
+            <div class="cloud-status" id="cloudStatus" title="Offline"
+                style="margin-right:8px;font-size:1.2em;cursor:default">☁️</div>
             <span class="user-tier" id="tierBadge">FREE</span>
             <button class="topnav-btn secondary" onclick="VP.showPremiumModal()">Upgrade</button>
-            <div class="topnav-avatar" id="userAvatar">VP</div>
+            <div class="user-profile">
+                <!-- Injected by JS -->
+                <div class="topnav-avatar" id="userAvatar">VP</div>
+            </div>
         </div>
     </nav>
 
@@ -1976,6 +1981,31 @@
     <!-- Hidden file input -->
     <input type="file" id="fileInput" accept="image/*" style="display:none">
     <input type="file" id="projectInput" accept=".json" style="display:none">
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-box" style="max-width:400px">
+            <button class="modal-close" onclick="VP.closeModal('authModal')">✕</button>
+            <h2 id="authTitle" style="text-align:center">Login</h2>
+            <div class="form-row" id="authUserGroup" style="display:none">
+                <label>Username</label>
+                <input type="text" id="authUser" placeholder="Username">
+            </div>
+            <div class="form-row">
+                <label>Email</label>
+                <input type="email" id="authEmail" placeholder="user@example.com">
+            </div>
+            <div class="form-row">
+                <label>Password</label>
+                <input type="password" id="authPass" placeholder="••••••••">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:24px">
+                <button class="btn-primary topnav-btn" onclick="VP.submitAuth()" style="width:100%">Login</button>
+                <button class="btn-secondary topnav-btn secondary" onclick="VP.toggleAuthMode()" id="authToggleBtn"
+                    style="width:100%">Need an account?</button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
