@@ -491,8 +491,46 @@ VP.ed = {
 
     applyTheme(key) {
         const t = this.themes[key]; if (!t) return;
+        const oldKey = VP.currentProject?.theme || 'classic';
+        const oldT = this.themes[oldKey];
+
         if (VP.currentProject) VP.currentProject.theme = key;
         document.getElementById('statusText').textContent = 'REALITY: ' + t.status;
+
+        if (oldKey !== key && confirm('Do you want to update existing items to match the new theme?')) {
+            this.pages.forEach(p => {
+                // Background mapping
+                Object.keys(oldT).forEach(k => {
+                    if (k.startsWith('--ed-') && !k.includes('font') && p.background === oldT[k]) {
+                        p.background = t[k];
+                    }
+                });
+
+                (p.elements || []).forEach(el => {
+                    // Font mapping
+                    if (el.fontFamily) {
+                        const norm = f => f.replace(/'/g, '').split(',')[0].trim();
+                        if (norm(el.fontFamily) === norm(oldT['--ed-display'])) el.fontFamily = t['--ed-display'].replace(/'/g, '');
+                        if (norm(el.fontFamily) === norm(oldT['--ed-font'])) el.fontFamily = t['--ed-font'].replace(/'/g, '');
+                        if (norm(el.fontFamily) === norm(oldT['--ed-accent'])) el.fontFamily = t['--ed-accent'].replace(/'/g, '');
+                    }
+                    // Color mapping
+                    Object.keys(oldT).forEach(k => {
+                        if (k.startsWith('--ed-') && !k.includes('font')) {
+                            const oldVal = oldT[k].toLowerCase();
+                            const newVal = t[k];
+                            if (el.color && el.color.toLowerCase() === oldVal) el.color = newVal;
+                            if (el.fill && el.fill.toLowerCase() === oldVal) el.fill = newVal;
+                            if (el.stroke && el.stroke.toLowerCase() === oldVal) el.stroke = newVal;
+                        }
+                    });
+                });
+            });
+            this.pushHistory();
+            this.render();
+            this.updateThumbs();
+        }
+
         VP.saveLocal(); if (VP.isOnline) VP.sync(); VP.toast('Theme: ' + key, 'success');
     },
 
