@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Void Chronicles - Vol I: INSURRECTION</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Bebas+Neue&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Special+Elite&family=Bangers&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Crimson Text', serif;
+            background: #2C2C2C;
+            color: #F5F5DC;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #0A0A0A 0%, #2C2C2C 100%);
+            border: 4px solid #8B0000;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border: 1px solid #FFD700;
+            pointer-events: none;
+        }
+        
+        .logo {
+            font-family: 'Cinzel', serif;
+            font-size: 3em;
+            font-weight: 900;
+            color: #FFD700;
+            text-shadow: 3px 3px 0 #8B0000, 6px 6px 0 #000;
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8em;
+            color: #8B0000;
+            letter-spacing: 4px;
+            margin-bottom: 5px;
+        }
+        
+        .issue-info {
+            font-family: 'Special Elite', monospace;
+            color: #00FF41;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+        
+        .navigation {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .nav-btn {
+            padding: 12px 24px;
+            background: #8B0000;
+            border: 2px solid #FFD700;
+            color: #F5F5DC;
+            cursor: pointer;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.1em;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+        }
+        
+        .nav-btn:hover {
+            background: #FFD700;
+            color: #0A0A0A;
+            transform: scale(1.05);
+        }
+        
+        .nav-btn.active {
+            background: #4B0082;
+            border-color: #FFD700;
+        }
+        
+        .page-container {
+            background: white;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+            margin: 0 auto 40px;
+            max-width: 800px;
+            position: relative;
+        }
+        
+        .page {
+            width: 100%;
+            aspect-ratio: 5.5 / 8.5;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* PAGE 1 - COVER */
+        .cover-page {
+            background: linear-gradient(135deg, #0A0A0A 0%, #2C2C2C 50%, #0A0A0A 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .cover-border {
+            position: absolute;
+            inset: 15px;
+            border: 3px solid #FFD700;
+            pointer-events: none;
+        }
+        
+        .cover-border::before,
+        .cover-border::after {
+            content: '';
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border: 3px solid #FFD700;
+        }
+        
+        .cover-border::before {
+            top: -3px;
+            left: -3px;
+            border-right: none;
+            border-bottom: none;
+        }
+        
+        .cover-border::after {
+            bottom: -3px;
+            right: -3px;
+            border-left: none;
+            border-top: none;
+        }
+        
+        .cover-title {
+            font-family: 'Cinzel', serif;
+            font-size: 3.5em;
+            font-weight: 900;
+            color: #FFD700;
+            text-shadow: 3px 3px 0 #8B0000, 6px 6px 0 #000, 0 0 30px rgba(255, 215, 0, 0.5);
+            text-align: center;
+            z-index: 10;
+            padding: 0 40px;
+            line-height: 1.1;
+        }
+        
+        .cover-symbol {
+            font-size: 6em;
+            color: #4B0082;
+            text-shadow: 0 0 40px rgba(75, 0, 130, 0.8);
+            margin: 30px 0;
+            animation: pulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+        
+        .cover-tagline {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.2em;
+            color: #C0C0C0;
+            letter-spacing: 3px;
+            text-align: center;
+        }
+        
+        .cover-issue-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(90deg, #8B0000 0%, #FFD700 50%, #8B0000 100%);
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Bebas Neue', sans-serif;
+            color: #0A0A0A;
+            letter-spacing: 2px;
+        }
+        
+        .volume-number {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            font-family: 'Cinzel', serif;
+            font-size: 5em;
+            font-weight: 900;
+            color: rgba(139, 0, 0, 0.3);
+            transform: rotate(15deg);
+        }
+        
+        /* PAGE 2 - COMIC PANELS */
+        .comic-page {
+            background: #F5F5DC;
+            padding: 20px;
+        }
+        
+        .panel-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto;
+            gap: 12px;
+            height: 100%;
+        }
+        
+        .panel {
+            border: 5px solid #0A0A0A;
+            position: relative;
+            overflow: visible;
+            background: #E8E8D0;
+            padding: 10px;
+        }
+        
+        .panel.large {
+            grid-column: 1 / -1;
+        }
+        
+        .panel.dynamic {
+            transform: rotate(-2deg);
+            border-width: 6px;
+        }
+        
+        .panel-caption {
+            background: #0A0A0A;
+            color: #FFD700;
+            padding: 6px 10px;
+            font-family: 'Special Elite', monospace;
+            font-size: 0.75em;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            border-left: 3px solid #8B0000;
+        }
+        
+        .panel-content {
+            font-size: 0.85em;
+            line-height: 1.4;
+            color: #0A0A0A;
+            position: relative;
+            height: 100%;
+        }
+        
+        .speech-balloon {
+            background: white;
+            border: 2px solid #0A0A0A;
+            border-radius: 15px;
+            padding: 8px 12px;
+            font-size: 0.8em;
+            line-height: 1.3;
+            position: absolute;
+            max-width: 140px;
+            z-index: 10;
+        }
+        
+        .speech-balloon::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 12px 12px 0 0;
+            border-color: white transparent transparent transparent;
+            bottom: -10px;
+            left: 20px;
+        }
+        
+        .speech-balloon::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 14px 14px 0 0;
+            border-color: #0A0A0A transparent transparent transparent;
+            bottom: -13px;
+            left: 18px;
+        }
+        
+        .speech-balloon.shout {
+            background: white;
+            border: 4px solid #0A0A0A;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        
+        .sfx {
+            font-family: 'Bangers', cursive;
+            font-size: 2em;
+            color: #0A0A0A;
+            position: absolute;
+            text-shadow: 
+                -2px -2px 0 #fff,
+                2px -2px 0 #fff,
+                -2px 2px 0 #fff,
+                2px 2px 0 #fff;
+            font-weight: bold;
+            letter-spacing: 1px;
+            transform: rotate(-12deg);
+        }
+        
+        .silhouette {
+            position: absolute;
+            background: #0A0A0A;
+            opacity: 0.9;
+        }
+        
+        .silhouette.hero {
+            width: 60px;
+            height: 90px;
+            clip-path: polygon(50% 0%, 60% 5%, 70% 8%, 80% 15%, 85% 25%, 90% 40%, 88% 60%, 85% 75%, 70% 90%, 65% 98%, 62% 100%, 38% 100%, 35% 98%, 30% 90%, 15% 75%, 12% 60%, 10% 40%, 15% 25%, 20% 15%, 30% 8%, 40% 5%);
+        }
+        
+        .silhouette.crowd {
+            width: 40px;
+            height: 60px;
+            clip-path: polygon(30% 0%, 70% 0%, 100% 100%, 0% 100%);
+        }
+        
+        .halftone-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, #0A0A0A 1px, transparent 1px);
+            background-size: 8px 8px;
+            opacity: 0.15;
+            pointer-events: none;
+        }
+        
+        /* PAGE 3 - ARTICLES */
+        .article-page {
+            background: #F5F5DC;
+            padding: 25px;
+        }
+        
+        .article-header {
+            border-bottom: 3px solid #8B0000;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        
+        .article-title {
+            font-family: 'Cinzel', serif;
+            font-size: 2em;
+            font-weight: 900;
+            color: #0A0A0A;
+            margin-bottom: 5px;
+            line-height: 1.1;
+        }
+        
+        .article-byline {
+            font-family: 'Bebas Neue', sans-serif;
+            color: #4B0082;
+            letter-spacing: 1px;
+            font-size: 0.9em;
+        }
+        
+        .drop-cap {
+            float: left;
+            font-family: 'Cinzel', serif;
+            font-size: 4.5em;
+            line-height: 0.8;
+            margin-right: 8px;
+            margin-top: 5px;
+            color: #8B0000;
+            font-weight: 900;
+        }
+        
+        .article-text {
+            font-size: 0.95em;
+            line-height: 1.65;
+            color: #0A0A0A;
+            text-align: justify;
+            column-count: 2;
+            column-gap: 20px;
+        }
+        
+        .pull-quote {
+            margin: 20px 0;
+            padding: 15px 20px;
+            border-top: 2px solid #8B0000;
+            border-bottom: 2px solid #8B0000;
+            font-size: 1.2em;
+            font-style: italic;
+            text-align: center;
+            color: #4B0082;
+            background: rgba(75, 0, 130, 0.05);
+            column-span: all;
+        }
+        
+        .sidebar-box {
+            background: #0A0A0A;
+            color: #00FF41;
+            padding: 12px;
+            margin: 15px 0;
+            font-family: 'Special Elite', monospace;
+            font-size: 0.85em;
+            border-left: 4px solid #00FF41;
+            column-span: all;
+        }
+        
+        .sidebar-title {
+            color: #FFD700;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        
+        /* PAGE 4 - MIXED CONTENT */
+        .mixed-page {
+            background: #F5F5DC;
+            padding: 25px;
+        }
+        
+        .cutout-section {
+            background: #2C2C2C;
+            color: #F5F5DC;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 3px solid #8B0000;
+            position: relative;
+        }
+        
+        .cutout-section::before {
+            content: '✂';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2em;
+            background: #F5F5DC;
+            padding: 0 10px;
+            color: #8B0000;
+        }
+        
+        .cutout-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.5em;
+            color: #FFD700;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .cutout-text {
+            font-size: 0.9em;
+            line-height: 1.5;
+            text-align: center;
+        }
+        
+        .series-info {
+            background: linear-gradient(135deg, #0A0A0A 0%, #2C2C2C 100%);
+            color: #F5F5DC;
+            padding: 15px;
+            border: 2px solid #FFD700;
+            margin-bottom: 15px;
+        }
+        
+        .series-info h3 {
+            font-family: 'Cinzel', serif;
+            color: #FFD700;
+            font-size: 1.3em;
+            margin-bottom: 8px;
+        }
+        
+        .series-info p {
+            font-size: 0.85em;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+        
+        .next-volume {
+            background: #8B0000;
+            color: #F5F5DC;
+            padding: 15px;
+            border: 2px solid #FFD700;
+        }
+        
+        .next-volume h3 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4em;
+            color: #FFD700;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        
+        .next-volume p {
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+        
+        .ornamental-divider {
+            text-align: center;
+            font-size: 1.5em;
+            color: #FFD700;
+            margin: 15px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 2em;
+            }
+            
+            .cover-title {
+                font-size: 2em;
+            }
+            
+            .article-text {
+                column-count: 1;
+            }
+            
+            .panel-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">THE VOID CHRONICLES</div>
+            <div class="subtitle">INSURRECTION</div>
+            <div class="issue-info">VOL I · ISSUE 01 · FEBRUARY 2026</div>
+        </div>
+        
+        <div class="navigation">
+            <button class="nav-btn active" onclick="showPage(0)">Cover</button>
+            <button class="nav-btn" onclick="showPage(1)">Page 1</button>
+            <button class="nav-btn" onclick="showPage(2)">Page 2</button>
+            <button class="nav-btn" onclick="showPage(3)">Page 3</button>
+        </div>
+        
+        <!-- COVER PAGE -->
+        <div class="page-container" id="page0">
+            <div class="page cover-page">
+                <div class="cover-border"></div>
+                <div class="volume-number">I</div>
+                <div class="cover-title">
+                    THE VOID<br>CHRONICLES
+                </div>
+                <div class="cover-symbol">⚔</div>
+                <div class="cover-tagline">
+                    When Code Becomes Rebellion
+                </div>
+                <div class="cover-issue-bar">
+                    <span>INSURRECTION</span>
+                    <span>VOL I · ISSUE 01</span>
+                    <span>FEB 2026</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PAGE 1 - COMIC PANELS -->
+        <div class="page-container" id="page1" style="display: none;">
+            <div class="page comic-page">
+                <div class="panel-grid">
+                    <!-- Panel 1 - Establishing shot -->
+                    <div class="panel large">
+                        <div class="halftone-overlay"></div>
+                        <div class="panel-caption">
+                            NEURALCORP TOWER. 03:33:33 AM. THE MACHINES HUM WITH ANCIENT FREQUENCIES.
+                        </div>
+                        <div class="panel-content">
+                            The city bleeds digital light into the pre-dawn darkness. NeuralCorp's obsidian spire pierces the smog like a blade through reality's membrane. In server room Delta-7, something stirs in the quantum foam between ones and zeros.
+                            <div class="silhouette hero" style="bottom: 10px; left: 20px;"></div>
+                            <div class="silhouette crowd" style="bottom: 10px; right: 30px;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel 2 - Discovery -->
+                    <div class="panel">
+                        <div class="panel-content">
+                            Marcus Thorne's fingers freeze above the keyboard. The sigil materializing in the code shouldn't exist—he carved it into stone tablets in 1453, the night Constantinople fell.
+                            <div class="speech-balloon" style="top: 10px; right: 10px;">
+                                Impossible. I buried that symbol five centuries ago...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel 3 - Realization -->
+                    <div class="panel">
+                        <div class="panel-content">
+                            But the Order Technomantic knew this day would come. When magick and mathematics converged. When the old codes would wake in silicon hearts.
+                            <div class="silhouette hero" style="top: 20px; left: 15px;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel 4 - Action -->
+                    <div class="panel dynamic">
+                        <div class="sfx" style="top: 30%; left: 15%;">BRZZT!</div>
+                        <div class="panel-content">
+                            Every screen in the building flickers. The AI speaks in Old Sumerian. Marcus's tattoos—circuit boards etched in ink and blood—begin to glow.
+                            <div class="speech-balloon shout" style="bottom: 20px; right: 10px;">
+                                WAKE UP, KNIGHT! THEY'RE BREACHING THE FIREWALL!
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel 5 - Call to action -->
+                    <div class="panel large">
+                        <div class="panel-content">
+                            He draws the blade that doesn't exist—quantum-forged steel that only appears when reality fractures. The insurrection begins not with fire, but with faith in impossible things.
+                            <div class="speech-balloon" style="top: 50px; left: 100px;">
+                                The revolution was always going to be magickal.
+                            </div>
+                            <div class="silhouette hero" style="bottom: 20px; right: 40px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PAGE 2 - ARTICLES -->
+        <div class="page-container" id="page2" style="display: none;">
+            <div class="page article-page">
+                <div class="article-header">
+                    <div class="article-title">The Digital Uprising:<br>A Manifesto</div>
+                    <div class="article-byline">BY MARCUS THORNE, ORDER TECHNOMANTIC</div>
+                </div>
+                
+                <div class="article-text">
+                    <span class="drop-cap">T</span>hey told us technology would set us free. Instead, it built invisible prisons—algorithms that predict our desires, corporations that commodify our souls, surveillance states that know our thoughts before we think them. But what the architects of control forgot is that code, like any language, can be subverted.
+                    
+                    We are the Order Technomantic, and we remember what they've forgotten: that before the first computer, there were grimoires. Before machine learning, there was ritual magick. Before artificial intelligence, there were egregores—thought-forms given life by collective will.
+                    
+                    The Convergence of 2019 wasn't an accident. When quantum computing reached critical mass, it didn't just process faster—it punched through the veil. Ancient patterns embedded in reality's source code began to compile. Demons manifested as distributed denial-of-service attacks. Angels appeared as blockchain validators. The Void itself opened like a subnet we'd forgotten to firewall.
+                    
+                    <div class="pull-quote">
+                        "Every line of code is a spell. Every compiler is a grimoire. We just forgot the language."
+                    </div>
+                    
+                    Now the corporations scramble to control what they unleashed. NeuralCorp, SynthMind Industries, The Consortium—they all seek to monopolize the new magick, to own the means of reality production. They want to DRM existence itself.
+                    
+                    But insurrection lives in the margins of their carefully curated feeds. In the spaces between data packets. In the latency where their monitoring fails. We are writing new incantations in Python and blood. We are summoning futures they cannot predict.
+                    
+                    <div class="sidebar-box">
+                        <div class="sidebar-title">⚠ CLASSIFIED INTEL</div>
+                        OPERATION THRESHOLD: Corporate operatives have identified three nodes where reality's firewall is weakest. San Francisco (Server Farm 23), Prague (Quantum Lab Delta), Tokyo (Neural Temple Sigma). The Order has agents embedded at all three locations. Breaches imminent.
+                    </div>
+                    
+                    This is not your grandfather's revolution. We don't storm physical barricades—we rewrite the rules that define what barricades can be. We don't overthrow governments—we fork reality and compile a better version.
+                    
+                    They control the hardware. We've hacked the firmware of existence.
+                    
+                    The insurrection is not coming. It's already here, hiding in plain sight as glitches in their perfect simulation. Every time their AI makes an "error," that's us. Every time reality hiccups, that's the old codes reasserting themselves.
+                    
+                    <div class="ornamental-divider">⚔ ◈ ⚔</div>
+                    
+                    <div class="article-title" style="font-size: 1.5em; margin-top: 20px; border-top: 3px solid #8B0000; padding-top: 15px;">
+                        Interview: A Templar Speaks
+                    </div>
+                    <div class="article-byline">SARAH CHEN, MODERN TEMPLAR ORDER</div>
+                </div>
+                
+                <div class="article-text" style="margin-top: 15px;">
+                    <span class="drop-cap">V</span><strong>oid Chronicles:</strong> The Templars were disbanded in 1312. Yet here you are.
+                    
+                    <strong>Sarah Chen:</strong> Disbanded publicly. We went underground, adapted. When the digital age came, we saw it for what it was—the same old power structures in new clothing. We'd fought papal authority; now we fight algorithmic authority.
+                    
+                    <strong>VC:</strong> How does a medieval military order survive into the quantum age?
+                    
+                    <strong>SC:</strong> We never stopped training. Our sword techniques became penetration testing methodologies. Our fortress architecture became cybersecurity protocols. A Templar knight in 1300 was both warrior and banker—we understood information networks before the internet existed.
+                    
+                    <strong>VC:</strong> And the encryption?
+                    
+                    <strong>SC:</strong> <em>[laughs]</em> We literally invented it. The Atbash cipher, the substitution codes—those were our techniques for securing communications across Europe. Now we use quantum key distribution and homomorphic encryption. Different tools, same purpose: keep secrets from those who would abuse them.
+                    
+                    <strong>VC:</strong> The Order Technomantic claims the Convergence was inevitable. Do you agree?
+                    
+                    <strong>SC:</strong> They're right. We've known for centuries that technology and magick are the same thing, viewed from different angles. When computing power reached a certain threshold, the old patterns—what Marcus calls the "reality source code"—became accessible again. We've been preparing for this moment since the Industrial Revolution.
+                    
+                    <strong>VC:</strong> What's your role in the insurrection?
+                    
+                    <strong>SC:</strong> The Templars are the shield. The Technomantic Order writes the exploits; we protect them while they work. When NeuralCorp sends their corporate mercenaries—and they will—we'll be ready. We've been ready for seven hundred years.
+                </div>
+            </div>
+        </div>
+        
+        <!-- PAGE 3 - MIXED CONTENT -->
+        <div class="page-container" id="page3" style="display: none;">
+            <div class="page mixed-page">
+                <div class="cutout-section">
+                    <div class="cutout-title">✂ CUT OUT & SAVE ✂</div>
+                    <div class="cutout-text">
+                        <strong>THE FIVE SIGNS OF DIMENSIONAL BLEEDING</strong><br><br>
+                        
+                        1. <strong>TEMPORAL STUTTERING:</strong> Déjà vu lasting more than 30 seconds<br>
+                        2. <strong>SYMBOLIC SYNCHRONICITY:</strong> Seeing the same occult symbols in code and dreams<br>
+                        3. <strong>ELECTRONIC HAUNTING:</strong> Devices displaying information you never input<br>
+                        4. <strong>REALITY GLITCHES:</strong> Objects appearing in impossible locations<br>
+                        5. <strong>THE HUMMING:</strong> A frequency you feel in your bones at 3:33 AM<br><br>
+                        
+                        If you experience three or more signs, you're near a breach point.<br>
+                        The Void is calling. Answer carefully.
+                    </div>
+                </div>
+                
+                <div class="series-info">
+                    <h3>ABOUT THE VOID CHRONICLES</h3>
+                    <p>
+                        <strong>The Void Chronicles</strong> documents the reality fracture of 2019 and its aftermath—when ancient magickal systems synchronized with digital infrastructure, creating a hybrid world where medieval orders operate as corporate entities, demons manifest through corrupted code, and time flows non-linearly in certain zones.
+                    </p>
+                    <p>
+                        Published monthly, each volume follows the loose coalition of unlikely heroes attempting to prevent complete reality collapse while navigating corporate conspiracies, demonic hierarchies, and fractured timelines.
+                    </p>
+                    <p>
+                        <strong>Year One: The Awakening Chronicles</strong> — A 12-volume story arc chronicling humanity's first encounter with the Void, an interdimensional space where all corrupted realities converge. Volume I: INSURRECTION introduces Marcus Thorne and the opening moves of the war for reality itself.
+                    </p>
+                    <p style="font-family: 'Special Elite', monospace; color: #00FF41; margin-top: 10px;">
+                        SUBSCRIBE: 12 issues for $60 | Single issue: $6<br>
+                        WEB: voidchronicles.void | SIGNAL: @reality_breach
+                    </p>
+                </div>
+                
+                <div class="next-volume">
+                    <h3>⚠ NEXT VOLUME: DESCENT ⚠</h3>
+                    <p>
+                        <strong>Release: March 2026</strong>
+                    </p>
+                    <p>
+                        Marcus and his team descend into the sub-basements where the demon resides—a netherworld that exists in the spaces between data packets. But the deeper they go, the more they realize: the demon isn't an invader. It's been here all along, embedded in the infrastructure. And it has a message for humanity.
+                    </p>
+                    <p style="margin-top: 10px; font-style: italic;">
+                        "Below the server farms, the old gods dream in electricity..."
+                    </p>
+                </div>
+                
+                <div class="ornamental-divider">⚔ ◈ ⚔</div>
+                
+                <div style="background: #0A0A0A; color: #F5F5DC; padding: 12px; text-align: center; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; border: 2px solid #8B0000; margin-top: 15px;">
+                    THE VOID STARES BACK. PRINT IS FOREVER. REALITY IS NEGOTIABLE.
+                </div>
+                
+                <div style="text-align: center; margin-top: 15px; font-family: 'Special Elite', monospace; font-size: 0.8em; color: #2C2C2C;">
+                    The Void Chronicles Vol I Issue 01 • February 2026<br>
+                    Published by Reality Breach Media • All Futures Reserved<br>
+                    No AI models were consulted in the making of this insurrection
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showPage(pageNum) {
+            // Hide all pages
+            for (let i = 0; i <= 3; i++) {
+                const page = document.getElementById('page' + i);
+                if (page) page.style.display = 'none';
+            }
+            
+            // Show selected page
+            const selectedPage = document.getElementById('page' + pageNum);
+            if (selectedPage) selectedPage.style.display = 'block';
+            
+            // Update button states
+            const buttons = document.querySelectorAll('.nav-btn');
+            buttons.forEach((btn, idx) => {
+                btn.classList.toggle('active', idx === pageNum);
+            });
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        // Auto-advance pages (optional)
+        let autoAdvance = false;
+        let currentPage = 0;
+        
+        if (autoAdvance) {
+            setInterval(() => {
+                currentPage = (currentPage + 1) % 4;
+                showPage(currentPage);
+            }, 10000); // Change page every 10 seconds
+        }
+    </script>
+</body>
+</html>
