@@ -1,0 +1,20 @@
+{
+  "name": "Void Press Zine Builder",
+  "short_name": "Void Press",
+  "start_url": "/zine_builder.html",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#d4af37",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192.png?text=VP",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512.png?text=VP",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

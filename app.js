@@ -1,13 +1,116 @@
 // ═══════════════════════════════════════════
-// VOID PRESS - Core Application Engine
+// VOID PRESS - Core Application Engine (PWA)
 // ═══════════════════════════════════════════
 
 const VP = {
+    // State
     projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
-    published: JSON.parse(localStorage.getItem('vp_published') || '[]'),
+    published: [], // Loaded from API
     currentProject: null,
-    isPremium: localStorage.getItem('vp_premium') === 'true',
+    isPremium: false,
     selectedTheme: 'classic',
+    user: JSON.parse(localStorage.getItem('vp_user')),
+    token: localStorage.getItem('vp_token'),
+    isOnline: navigator.onLine,
+    isSyncing: false,
+
+    // ── API & SYNC ──
+    async api(endpoint, method = 'GET', body = null) {
+        if (!this.isOnline) throw new Error('Offline');
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+        const res = await fetch('/api' + endpoint, { method, headers, body: body ? JSON.stringify(body) : null });
+        if (!res.ok) {
+            if (res.status === 401 || res.status === 403) this.logout();
+            throw new Error(await res.text());
+        }
+        return res.json();
+    },
+
+    async sync() {
+        if (!this.isOnline || !this.token || this.isSyncing) return;
+        this.isSyncing = true;
+        this.updateCloudIcon('syncing');
+        try {
+            // Push unsynced local projects
+            for (const p of this.projects) {
+                if (p._dirty) {
+                    const res = await this.api('/zines', 'POST', { serverId: p.serverId, title: p.title, data: p.pages, theme: p.theme });
+                    p.serverId = res.id;
+                    delete p._dirty;
+                }
+            }
+            this.saveLocal();
+            // Pull remote projects (simple overwrite for MVP, ideally merge)
+            const remote = await this.api('/zines');
+            remote.forEach(r => {
+                const local = this.projects.find(p => p.serverId === r.id);
+                if (!local) {
+                    // New remote project
+                    this.projects.push({ id: Date.now(), serverId: r.id, title: r.title, theme: 'classic', pages: [], _remote: true });
+                }
+            });
+            this.saveLocal();
+            this.updateCloudIcon('online');
+            this.renderDashboard();
+        } catch (e) {
+            console.error('Sync failed', e);
+            this.updateCloudIcon('error');
+        }
+        this.isSyncing = false;
+    },
+
+    updateCloudIcon(status) {
+        const el = document.getElementById('cloudStatus');
+        if (!el) return;
+        if (status === 'online') el.textContent = '☁️'; // Synced
+        if (status === 'offline') el.textContent = '☁️⃠'; // Offline
+        if (status === 'syncing') el.textContent = '🔄'; // Syncing
+        if (status === 'error') el.textContent = '⚠️'; // Error
+        el.title = status.toUpperCase();
+    },
+
+    // ── AUTH ──
+    showAuth() { this.showModal('authModal'); },
+    toggleAuthMode() {
+        const isLogin = document.getElementById('authTitle').textContent === 'Login';
+        document.getElementById('authTitle').textContent = isLogin ? 'Register' : 'Login';
+        document.getElementById('authUserGroup').style.display = isLogin ? 'block' : 'none';
+        document.getElementById('authToggleBtn').textContent = isLogin ? 'Have an account?' : 'Need an account?';
+        document.querySelector('#authModal .btn-primary').textContent = isLogin ? 'Register' : 'Login';
+    },
+    async submitAuth() {
+        const isRegister = document.getElementById('authTitle').textContent === 'Register';
+        const email = document.getElementById('authEmail').value;
+        const password = document.getElementById('authPass').value;
+        const username = document.getElementById('authUser').value;
+
+        try {
+            const endpoint = isRegister ? '/auth/register' : '/auth/login';
+            const body = isRegister ? { email, password, username } : { email, password };
+            const res = await this.api(endpoint, 'POST', body);
+
+            this.token = res.token;
+            this.user = res.user;
+            localStorage.setItem('vp_token', this.token);
+            localStorage.setItem('vp_user', JSON.stringify(this.user));
+
+            this.closeModal('authModal');
+            this.toast(`Welcome, ${this.user.username}!`, 'success');
+            this.renderDashboard();
+            this.sync();
+        } catch (e) {
+            alert(e.message || 'Auth failed');
+        }
+    },
+    logout() {
+        this.token = null;
+        this.user = null;
+        localStorage.removeItem('vp_token');
+        localStorage.removeItem('vp_user');
+        this.toast('Logged out', 'info');
+        this.renderDashboard();
+    },
 
     // ── VIEW MANAGEMENT ──
     showView(name) {
@@ -36,25 +139,39 @@ const VP = {
     // ── DASHBOARD ──
     renderDashboard() {
         const g = document.getElementById('zineGrid');
-        const pubCount = this.published.length;
-        const totalReads = this.published.reduce((s, p) => s + (p.reads || 0), 0);
+        const userPubs = this.published.filter(p => p.author === this.user?.username); // simple client filter
+        const pubCount = userPubs.length; // Approximate
+        const totalReads = userPubs.reduce((s, p) => s + (p.reads || 0), 0);
+
         document.getElementById('statTotal').textContent = this.projects.length;
         document.getElementById('statPublished').textContent = pubCount;
         document.getElementById('statReads').textContent = totalReads;
         const maxPub = this.isPremium ? '∞' : '3';
         document.getElementById('statLimit').textContent = pubCount + '/' + maxPub;
-        document.getElementById('tierBadge').textContent = this.isPremium ? 'PREMIUM' : 'FREE';
-        document.getElementById('tierBadge').className = 'user-tier' + (this.isPremium ? ' premium' : '');
+
+        const tierEl = document.getElementById('tierBadge');
+        tierEl.textContent = this.user?.is_premium ? 'PREMIUM' : 'FREE';
+        tierEl.className = 'user-tier' + (this.user?.is_premium ? ' premium' : '');
 
         let html = '<div class="zine-card create-card" onclick="VP.showThemePicker()"><div class="zine-card-cover"><div class="cover-icon">+</div></div><div class="zine-card-body"><h3>Create New Zine</h3><p>Start a new project</p></div></div>';
+
         this.projects.forEach((p, i) => {
-            const isPub = this.published.find(x => x.projectId === p.id);
+            const isPub = p.serverId && this.published.find(x => x.id === p.serverId); // Only if sync worked
             const badge = isPub ? '<span class="zine-card-badge badge-published">Published</span>' : '<span class="zine-card-badge badge-draft">Draft</span>';
             const colors = this.ed.themes[p.theme || 'classic'];
             const bg = colors ? `background:linear-gradient(135deg,${colors['--ed-black'] || '#1a1a1a'},${colors['--ed-gray'] || '#34495e'})` : '';
-            html += `<div class="zine-card"><div class="zine-card-cover" style="${bg}">${badge}<div class="cover-icon" style="color:${colors?.['--ed-gold'] || '#d4af37'}">📖</div></div><div class="zine-card-body"><h3>${p.title || 'Untitled Zine'}</h3><p>${p.pages?.length || 0} pages · ${p.theme || 'classic'}</p><div class="zine-card-actions"><button onclick="event.stopPropagation();VP.openProject(${i})">Edit</button><button onclick="event.stopPropagation();VP.renameProject(${i})">Rename</button><button class="del" onclick="event.stopPropagation();VP.deleteProject(${i})">Delete</button></div></div></div>`;
+            const statusIcon = p._dirty ? '☁️⃠' : '☁️';
+
+            html += `<div class="zine-card"><div class="zine-card-cover" style="${bg}">${badge}<div class="cover-icon" style="color:${colors?.['--ed-gold'] || '#d4af37'}">📖</div></div><div class="zine-card-body"><h3>${p.title || 'Untitled Zine'} <span style="font-size:12px">${statusIcon}</span></h3><p>${p.pages?.length || 0} pages · ${p.theme || 'classic'}</p><div class="zine-card-actions"><button onclick="event.stopPropagation();VP.openProject(${i})">Edit</button><button onclick="event.stopPropagation();VP.renameProject(${i})">Rename</button><button class="del" onclick="event.stopPropagation();VP.deleteProject(${i})">Delete</button></div></div></div>`;
         });
         g.innerHTML = html;
+
+        // Show login prompt if no user
+        if (!this.user) {
+            document.querySelector('.user-profile').innerHTML = '<button onclick="VP.showAuth()" class="btn-primary" style="padding:4px 12px;font-size:12px">Login</button>';
+        } else {
+            document.querySelector('.user-profile').innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div class="avatar">${this.user.username[0]}</div><button onclick="VP.logout()" style="background:none;border:none;color:#fff;cursor:pointer">Logout</button></div>`;
+        }
     },
 
     showThemePicker() {
@@ -75,56 +192,84 @@ const VP = {
     },
 
     createZineWithTheme() {
-        const project = { id: Date.now(), title: 'Untitled Zine', theme: this.selectedTheme, pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }], created: new Date().toISOString() };
+        const project = { id: Date.now(), title: 'Untitled Zine', theme: this.selectedTheme, pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }], created: new Date().toISOString(), _dirty: true };
         this.projects.push(project);
-        this.saveAll();
+        this.saveLocal();
         this.closeModal('themePickerModal');
         this.currentProject = project;
         this.ed.loadProject(project);
         this.showView('editor');
         this.toast('New zine created!', 'success');
+        this.sync();
     },
 
     openProject(idx) {
-        this.currentProject = this.projects[idx];
-        this.ed.loadProject(this.currentProject);
-        this.showView('editor');
+        // If remote only (no data), fetch it
+        const p = this.projects[idx];
+        if (p._remote) {
+            this.toast('Downloading zine...', 'info');
+            this.api(`/zines/${p.serverId}`).then(res => {
+                p.pages = res.data;
+                delete p._remote;
+                this.saveLocal();
+                this.currentProject = p;
+                this.ed.loadProject(p);
+                this.showView('editor');
+            }).catch(e => this.toast('Failed to load zine', 'error'));
+        } else {
+            this.currentProject = p;
+            this.ed.loadProject(this.currentProject);
+            this.showView('editor');
+        }
     },
 
     renameProject(idx) {
         const name = prompt('New name:', this.projects[idx].title);
-        if (name) { this.projects[idx].title = name; this.saveAll(); this.renderDashboard() }
+        if (name) { this.projects[idx].title = name; this.projects[idx]._dirty = true; this.saveLocal(); this.renderDashboard(); this.sync(); }
     },
 
     deleteProject(idx) {
         if (confirm('Delete this zine permanently?')) {
-            const id = this.projects[idx].id;
+            const p = this.projects[idx];
             this.projects.splice(idx, 1);
-            this.published = this.published.filter(p => p.projectId !== id);
-            this.saveAll(); this.renderDashboard(); this.toast('Zine deleted', 'error');
+            this.saveLocal(); this.renderDashboard(); this.toast('Zine deleted', 'error');
+            if (p.serverId && this.token) {
+                this.api(`/zines/${p.serverId}`, 'DELETE').catch(console.error);
+            }
         }
     },
 
-    saveAll() {
+    saveLocal() {
         localStorage.setItem('vp_projects', JSON.stringify(this.projects));
-        localStorage.setItem('vp_published', JSON.stringify(this.published));
     },
 
     // ── PUBLISHING ──
-    publishZine() {
+    async publishZine() {
         if (!this.currentProject) { this.toast('No project open', 'error'); return }
         if (!document.getElementById('pubGuidelines').checked) { this.toast('Please accept guidelines', 'error'); return }
         const title = document.getElementById('pubTitle').value || this.currentProject.title;
         if (!title) { this.toast('Title required', 'error'); return }
-        const existing = this.published.find(p => p.projectId === this.currentProject.id);
-        if (!existing && !this.isPremium && this.published.length >= 3) {
-            this.closeModal('publishModal'); this.showModal('premiumModal');
-            this.toast('Free tier limit reached (3 zines)', 'error'); return;
+
+        // Must appear synced first?
+        if (!this.currentProject.serverId) {
+            // Force sync first
+            await this.sync();
+            if (!this.currentProject.serverId) { this.toast('Must be online and synced to publish', 'error'); return; }
         }
-        const pub = { projectId: this.currentProject.id, title, author: document.getElementById('pubAuthor').value || 'Anonymous', description: document.getElementById('pubDesc').value || '', genre: document.getElementById('pubGenre').value, tags: (document.getElementById('pubTags').value || '').split(',').map(t => t.trim()).filter(Boolean), visibility: document.getElementById('pubVisibility').value, pages: JSON.parse(JSON.stringify(this.currentProject.pages)), theme: this.currentProject.theme, publishedAt: new Date().toISOString(), reads: existing?.reads || 0 };
-        if (existing) { const idx = this.published.indexOf(existing); this.published[idx] = pub }
-        else this.published.push(pub);
-        this.saveAll(); this.closeModal('publishModal'); this.toast('🚀 Zine published!', 'success');
+
+        const pubData = {
+            author_name: document.getElementById('pubAuthor').value || this.user?.username || 'Anonymous',
+            genre: document.getElementById('pubGenre').value,
+            tags: (document.getElementById('pubTags').value || '').split(',').map(t => t.trim()).filter(Boolean).join(',')
+        };
+
+        try {
+            await this.api(`/publish/${this.currentProject.serverId}`, 'POST', pubData);
+            this.saveLocal(); this.closeModal('publishModal'); this.toast('🚀 Zine published!', 'success');
+            this.disc.render(); // refresh discover
+        } catch (e) {
+            this.toast('Publish failed: ' + e.message, 'error');
+        }
     },
 
     showPremiumModal() { this.showModal('premiumModal') },
@@ -150,20 +295,28 @@ const VP = {
     // ── DISCOVER ──
     disc: {
         currentFilter: 'all', searchQuery: '',
-        render() {
+        async render() {
             const grid = document.getElementById('discoverGrid');
-            let items = VP.published.filter(p => p.visibility === 'public');
-            if (this.currentFilter !== 'all') items = items.filter(p => p.genre === this.currentFilter);
-            if (this.searchQuery) { const q = this.searchQuery.toLowerCase(); items = items.filter(p => (p.title + p.author + p.description + p.tags.join(' ')).toLowerCase().includes(q)) }
-            if (!items.length) { grid.innerHTML = '<p style="color:var(--vp-text-dim);grid-column:1/-1;text-align:center;padding:60px 0;font-size:1.1em">No zines found. Be the first to publish!</p>'; return }
-            const themeIcons = { classic: '📜', fantasy: '⚔️', cyberpunk: '🌐', conspiracy: '🔍', worldbuilding: '🗺️', comics: '💥', arcane: '🔮' };
-            let html = '';
-            items.forEach((p, i) => {
-                const colors = VP.ed.themes[p.theme || 'classic'];
-                const bg = colors ? `background:linear-gradient(135deg,${colors['--ed-black'] || '#1a1a1a'},${colors['--ed-gray'] || '#34495e'})` : '';
-                html += `<div class="discover-card" onclick="VP.openReader(${i})"><div class="discover-card-cover" style="${bg}"><div class="cover-bg">${themeIcons[p.genre] || '📖'}</div></div><div class="discover-card-body"><h3>${p.title}</h3><div class="author">by ${p.author}</div><div class="meta"><span>📖 ${p.pages?.length || 0} pages</span><span>👁 ${p.reads || 0} reads</span></div><div class="discover-card-tags">${p.tags.map(t => `<span>${t}</span>`).join('')}</div></div></div>`;
-            });
-            grid.innerHTML = html;
+            grid.innerHTML = '<p>Loading...</p>';
+            try {
+                // Fetch from API
+                let url = '/published?';
+                if (this.currentFilter !== 'all') url += `genre=${this.currentFilter}&`;
+                if (this.searchQuery) url += `q=${this.searchQuery}`;
+
+                const items = await VP.api(url);
+                if (!items.length) { grid.innerHTML = '<p style="color:var(--vp-text-dim);grid-column:1/-1;text-align:center;padding:60px 0;font-size:1.1em">No zines found. Be the first to publish!</p>'; return }
+
+                const themeIcons = { classic: '📜', fantasy: '⚔️', cyberpunk: '🌐', conspiracy: '🔍', worldbuilding: '🗺️', comics: '💥', arcane: '🔮' };
+                let html = '';
+                items.forEach((p, i) => {
+                    const bg = `background:linear-gradient(135deg,#1a1a1a,#34495e)`; // Cannot read theme from summary list easily w/o extra query, simulate for now
+                    html += `<div class="discover-card" onclick="VP.openReader(${p.id})"><div class="discover-card-cover" style="${bg}"><div class="cover-bg">${themeIcons[p.genre] || '📖'}</div></div><div class="discover-card-body"><h3>${p.title}</h3><div class="author">by ${p.author_name}</div><div class="meta"><span>Published ${new Date(p.published_at).toLocaleDateString()}</span><span>👁 ${p.read_count || 0} reads</span></div><div class="discover-card-tags">${(p.tags || '').split(',').map(t => `<span>${t}</span>`).join('')}</div></div></div>`;
+                });
+                grid.innerHTML = html;
+            } catch (e) {
+                grid.innerHTML = '<p>Offline or error loading feed.</p>';
+            }
         },
         filter(genre, btn) {
             this.currentFilter = genre;
@@ -174,18 +327,17 @@ const VP = {
     },
 
     // ── READER ──
-    openReader(idx) {
-        const items = VP.published.filter(p => p.visibility === 'public');
-        let filtered = items;
-        if (this.disc.currentFilter !== 'all') filtered = filtered.filter(p => p.genre === this.disc.currentFilter);
-        const pub = filtered[idx]; if (!pub) return;
-        pub.reads = (pub.reads || 0) + 1; this.saveAll();
-        this.reader.load(pub); this.showView('reader');
+    async openReader(id) {
+        try {
+            const pub = await this.api(`/zines/${id}`);
+            this.reader.load(pub);
+            this.showView('reader');
+        } catch (e) { console.error(e); this.toast('Failed to load zine', 'error'); }
     },
     closeReader() { this.showView('discover') },
     reader: {
         data: null, pageIdx: 0,
-        load(pub) { this.data = pub; this.pageIdx = 0; this.renderPage() },
+        load(pub) { this.data = pub; this.data.pages = pub.data; this.pageIdx = 0; this.renderPage() }, // Remap 'data' prop to pages
         renderPage() {
             if (!this.data) return;
             const book = document.getElementById('readerBook');
@@ -206,6 +358,19 @@ const VP = {
     init() {
         this.renderDashboard();
         this.ed.init();
+
+        // PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(reg => console.log('SW registered')).catch(err => console.log('SW failed', err));
+        }
+        window.addEventListener('online', () => { this.isOnline = true; this.updateCloudIcon('online'); this.sync(); });
+        window.addEventListener('offline', () => { this.isOnline = false; this.updateCloudIcon('offline'); });
+        this.updateCloudIcon(this.isOnline ? 'online' : 'offline');
+
+        // Sync Cycle
+        setInterval(() => this.sync(), 60000); // 1 min sync
+        setTimeout(() => this.sync(), 2000); // Initial sync
+
         document.addEventListener('click', () => document.getElementById('ctxMenu').classList.remove('active'));
         document.addEventListener('keydown', e => {
             if (e.key === '?' && !e.ctrlKey) { document.getElementById('shortcutsOverlay').classList.toggle('active'); return }
