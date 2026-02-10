@@ -2,7 +2,7 @@
 // VOID PRESS - Editor Engine
 // ═══════════════════════════════════════════
 VP.ed = {
-    pages: [], pageIdx: 0, sel: null, zoom: 1, clipboard: null, idCtr: 0,
+    pages: [], pageIdx: 0, sel: null, _zoom: 1, clipboard: null, idCtr: 0,
     gridOn: false, snapOn: true, history: [], historyIdx: -1, maxHist: 50,
 
     themes: {
@@ -161,11 +161,11 @@ VP.ed = {
         e.preventDefault();
         const canvas = document.getElementById('canvas');
         const rect = canvas.getBoundingClientRect();
-        const offX = e.clientX / this.zoom - el.x - rect.left / this.zoom;
-        const offY = e.clientY / this.zoom - el.y - rect.top / this.zoom;
+        const offX = e.clientX / this._zoom - el.x - rect.left / this._zoom;
+        const offY = e.clientY / this._zoom - el.y - rect.top / this._zoom;
         const onMove = ev => {
-            let nx = ev.clientX / this.zoom - offX - rect.left / this.zoom;
-            let ny = ev.clientY / this.zoom - offY - rect.top / this.zoom;
+            let nx = ev.clientX / this._zoom - offX - rect.left / this._zoom;
+            let ny = ev.clientY / this._zoom - offY - rect.top / this._zoom;
             if (this.snapOn) { nx = Math.round(nx / 10) * 10; ny = Math.round(ny / 10) * 10 }
             el.x = nx; el.y = ny; this.render();
         };
@@ -177,7 +177,7 @@ VP.ed = {
         e.stopPropagation(); e.preventDefault();
         const sx = e.clientX, sy = e.clientY, sw = el.width, sh = el.height, sleft = el.x, stop = el.y;
         const onMove = ev => {
-            const dx = (ev.clientX - sx) / this.zoom, dy = (ev.clientY - sy) / this.zoom;
+            const dx = (ev.clientX - sx) / this._zoom, dy = (ev.clientY - sy) / this._zoom;
             if (handle.includes('e')) el.width = Math.max(20, sw + dx);
             if (handle.includes('w')) { el.width = Math.max(20, sw - dx); el.x = sleft + dx }
             if (handle.includes('s')) el.height = Math.max(20, sh + dy);
@@ -192,8 +192,8 @@ VP.ed = {
         e.stopPropagation(); e.preventDefault();
         const canvas = document.getElementById('canvas');
         const rect = canvas.getBoundingClientRect();
-        const cx = rect.left + (el.x + el.width / 2) * this.zoom;
-        const cy = rect.top + (el.y + el.height / 2) * this.zoom;
+        const cx = rect.left + (el.x + el.width / 2) * this._zoom;
+        const cy = rect.top + (el.y + el.height / 2) * this._zoom;
         const onMove = ev => {
             const angle = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI + 90;
             el.rotation = Math.round(((angle % 360) + 360) % 360);
@@ -386,13 +386,12 @@ VP.ed = {
     updPageProp(prop, val) { const p = this.curPage(); p[prop] = val; this.render(); this.updateThumbs(); this.pushHistory() },
 
     // Zoom
-    zoom(delta) {
+    doZoom(delta) {
         const canvas = document.getElementById('canvas');
-        if (delta === 'fit') { const w = document.getElementById('canvasWrap'); this.zoom = Math.min((w.clientWidth - 80) / canvas.offsetWidth, (w.clientHeight - 80) / canvas.offsetHeight, 1) }
-        else this.zoom = Math.max(.25, Math.min(3, this.zoom + delta));
-        // fix: the property name collides with method name, use _zoom
-        canvas.style.transform = `scale(${this.zoom})`;
-        document.getElementById('zoomLevel').textContent = Math.round(this.zoom * 100) + '%';
+        if (delta === 'fit') { const w = document.getElementById('canvasWrap'); this._zoom = Math.min((w.clientWidth - 80) / canvas.offsetWidth, (w.clientHeight - 80) / canvas.offsetHeight, 1) }
+        else this._zoom = Math.max(.25, Math.min(3, this._zoom + delta));
+        canvas.style.transform = `scale(${this._zoom})`;
+        document.getElementById('zoomLevel').textContent = Math.round(this._zoom * 100) + '%';
     },
 
     setOrientation(o) { document.getElementById('canvas').className = 'ed-canvas ' + o; this.render() },
@@ -485,33 +484,3 @@ VP.ed = {
     }
 };
 
-// Fix zoom property collision - rename internal zoom level
-(function () {
-    let _zoomLevel = 1;
-    const origZoom = VP.ed.zoom.bind(VP.ed);
-    Object.defineProperty(VP.ed, 'zoom', { get() { return _zoomLevel }, set(v) { _zoomLevel = v } });
-    VP.ed.doZoom = function (delta) {
-        const canvas = document.getElementById('canvas');
-        if (delta === 'fit') { const w = document.getElementById('canvasWrap'); _zoomLevel = Math.min((w.clientWidth - 80) / canvas.offsetWidth, (w.clientHeight - 80) / canvas.offsetHeight, 1) }
-        else _zoomLevel = Math.max(.25, Math.min(3, _zoomLevel + delta));
-        canvas.style.transform = `scale(${_zoomLevel})`;
-        document.getElementById('zoomLevel').textContent = Math.round(_zoomLevel * 100) + '%';
-    };
-    // Rebind the zoom buttons
-    VP.ed._origZoom = VP.ed.doZoom;
-})();
-// Override zoom calls in HTML to use doZoom
-const _origInit = VP.ed.init;
-VP.ed.init = function () {
-    _origInit.call(this);
-    // Re-bind zoom button handlers
-    document.querySelectorAll('.zoom-group button').forEach(b => {
-        const oc = b.getAttribute('onclick');
-        if (oc && oc.includes('zoom')) {
-            b.removeAttribute('onclick');
-            if (oc.includes("-.1")) b.onclick = () => VP.ed.doZoom(-.1);
-            else if (oc.includes(".1")) b.onclick = () => VP.ed.doZoom(.1);
-            else if (oc.includes("'fit'")) b.onclick = () => VP.ed.doZoom('fit');
-        }
-    });
-};
