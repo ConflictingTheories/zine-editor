@@ -3,11 +3,22 @@ import { useVP } from '../context/VPContext.jsx'
 import AssetModal from './AssetModal.jsx'
 import ExportModal from './ExportModal.jsx'
 
+const THEME_OPTIONS = [
+    { key: 'classic', name: 'Classic Literature', desc: 'Elegant prose & serif beauty', colors: ['#5c0a0a', '#d4af37', '#fdfaf1', '#4b2c5e'] },
+    { key: 'fantasy', name: 'Medieval Fantasy', desc: 'Swords, sorcery & scrolls', colors: ['#8b0000', '#ffd700', '#f5f5dc', '#4b0082'] },
+    { key: 'cyberpunk', name: 'Cyberpunk', desc: 'Neon grids & digital void', colors: ['#ff003c', '#00f3ff', '#fcee0a', '#bc00ff'] },
+    { key: 'conspiracy', name: 'Dark Conspiracies', desc: 'Redacted truths & shadows', colors: ['#4a0000', '#00ff00', '#c5b358', '#e8e4d9'] },
+    { key: 'worldbuilding', name: 'World Building', desc: 'Maps, lore & kingdoms', colors: ['#e74c3c', '#27ae60', '#f1c40f', '#8e44ad'] },
+    { key: 'comics', name: 'Comics', desc: 'POW! BAM! WHAM!', colors: ['#ff0000', '#ffd700', '#663399', '#32cd32'] },
+    { key: 'arcane', name: 'Arcane Lore', desc: 'Sigils, runes & the unknowable', colors: ['#6a040f', '#ff9e00', '#3c096c', '#70e000'] }
+]
+
 function Modal() {
-    const { vpState, closeModal, login, register, createProject, showView } = useVP()
+    const { vpState, updateVpState, closeModal, login, register, createProject, publishZine } = useVP()
     const [authMode, setAuthMode] = useState('login')
     const [authData, setAuthData] = useState({ email: '', password: '', username: '' })
     const [publishData, setPublishData] = useState({ title: '', author: '', description: '', genre: 'classic', tags: '' })
+    const [helpTab, setHelpTab] = useState('shortcuts')
 
     const handleAuthSubmit = async (e) => {
         e.preventDefault()
@@ -20,9 +31,17 @@ function Modal() {
 
     const handlePublishSubmit = async (e) => {
         e.preventDefault()
-        // TODO: Implement publish logic
-        console.log('Publishing:', publishData)
-        closeModal('publishModal')
+        if (!document.getElementById('pubGuidelines')?.checked) {
+            return
+        }
+        await publishZine({
+            title: publishData.title || vpState.currentProject?.title,
+            author: publishData.author,
+            description: publishData.description,
+            genre: publishData.genre,
+            tags: publishData.tags
+        })
+        setPublishData({ title: '', author: '', description: '', genre: 'classic', tags: '' })
     }
 
     const renderAuthModal = () => (
@@ -171,25 +190,14 @@ function Modal() {
                 <button className="modal-close" onClick={() => closeModal('themePicker')}>✕</button>
                 <h2>Choose Your Theme</h2>
                 <p style={{ color: 'var(--vp-text-dim)', marginBottom: '12px' }}>
-                    Select an aesthetic for your new zine.
+                    Select an aesthetic for your new zine, then click Create Zine.
                 </p>
                 <div className="theme-grid">
-                    {[
-                        { key: 'classic', name: 'Classic Literature', desc: 'Elegant prose & serif beauty', colors: ['#5c0a0a', '#d4af37', '#fdfaf1', '#4b2c5e'] },
-                        { key: 'fantasy', name: 'Medieval Fantasy', desc: 'Swords, sorcery & scrolls', colors: ['#8b0000', '#ffd700', '#f5f5dc', '#4b0082'] },
-                        { key: 'cyberpunk', name: 'Cyberpunk', desc: 'Neon grids & digital void', colors: ['#ff003c', '#00f3ff', '#fcee0a', '#bc00ff'] },
-                        { key: 'conspiracy', name: 'Dark Conspiracies', desc: 'Redacted truths & shadows', colors: ['#4a0000', '#00ff00', '#c5b358', '#e8e4d9'] },
-                        { key: 'worldbuilding', name: 'World Building', desc: 'Maps, lore & kingdoms', colors: ['#e74c3c', '#27ae60', '#f1c40f', '#8e44ad'] },
-                        { key: 'comics', name: 'Comics', desc: 'POW! BAM! WHAM!', colors: ['#ff0000', '#ffd700', '#663399', '#32cd32'] },
-                        { key: 'arcane', name: 'Arcane Lore', desc: 'Sigils, runes & the unknowable', colors: ['#6a040f', '#ff9e00', '#3c096c', '#70e000'] }
-                    ].map(theme => (
+                    {THEME_OPTIONS.map(theme => (
                         <div
                             key={theme.key}
                             className={`theme-card ${vpState.selectedTheme === theme.key ? 'selected' : ''}`}
-                            onClick={() => {
-                                createProject(theme.key)
-                                closeModal('themePicker')
-                            }}
+                            onClick={() => updateVpState({ selectedTheme: theme.key })}
                         >
                             <h4>{theme.name}</h4>
                             <p>{theme.desc}</p>
@@ -201,23 +209,125 @@ function Modal() {
                         </div>
                     ))}
                 </div>
+                <button className="topnav-btn" onClick={() => createProject(vpState.selectedTheme)} style={{ width: '100%', marginTop: '20px' }}>
+                    Create Zine
+                </button>
             </div>
         </div>
     )
 
-    // Render active modals
+    const renderHelpModal = () => (
+        <div className="modal-overlay active" id="helpModal">
+            <div className="modal-box" style={{ maxWidth: '800px' }}>
+                <button className="modal-close" onClick={() => closeModal('helpModal')}>✕</button>
+                <h2>Voyagers&apos; Reference Guide</h2>
+                <div className="help-layout">
+                    <div className="help-sidebar">
+                        <button className={`help-nav-btn ${helpTab === 'shortcuts' ? 'active' : ''}`} onClick={() => setHelpTab('shortcuts')}>⌨ Shortcuts</button>
+                        <button className={`help-nav-btn ${helpTab === 'actions' ? 'active' : ''}`} onClick={() => setHelpTab('actions')}>🧠 Logic Actions</button>
+                        <button className={`help-nav-btn ${helpTab === 'vfx' ? 'active' : ''}`} onClick={() => setHelpTab('vfx')}>🪄 Screen Effects</button>
+                        <button className={`help-nav-btn ${helpTab === 'shaders' ? 'active' : ''}`} onClick={() => setHelpTab('shaders')}>🎨 Shaders</button>
+                    </div>
+                    <div className="help-content-area">
+                        {helpTab === 'shortcuts' && (
+                            <div className="help-pane active">
+                                <h3>Editor Shortcuts</h3>
+                                <div className="shortcut-grid">
+                                    <div className="shortcut-row"><span>Undo</span><kbd>Ctrl+Z</kbd></div>
+                                    <div className="shortcut-row"><span>Redo</span><kbd>Ctrl+Shift+Z</kbd></div>
+                                    <div className="shortcut-row"><span>Copy</span><kbd>Ctrl+C</kbd></div>
+                                    <div className="shortcut-row"><span>Paste</span><kbd>Ctrl+V</kbd></div>
+                                    <div className="shortcut-row"><span>Delete</span><kbd>Del / Backspace</kbd></div>
+                                    <div className="shortcut-row"><span>Quick Save</span><kbd>Ctrl+S</kbd></div>
+                                </div>
+                            </div>
+                        )}
+                        {helpTab === 'actions' && (
+                            <div className="help-pane active">
+                                <h3>Narrative Logic Actions</h3>
+                                <p>Assign these to elements in the <b>Logic</b> tab to create branching stories.</p>
+                                <div className="ref-list">
+                                    <div className="ref-item"><b>Go to Page</b><span>Jumps the reader to a specific page number.</span></div>
+                                    <div className="ref-item"><b>Unlock Page</b><span>Reveals a locked page in the normal flow.</span></div>
+                                    <div className="ref-item"><b>Password Prompt</b><span>Triggers a password check for secret pages.</span></div>
+                                    <div className="ref-item"><b>Toggle Element</b><span>Shows or hides another element (requires a Label).</span></div>
+                                </div>
+                            </div>
+                        )}
+                        {helpTab === 'vfx' && (
+                            <div className="help-pane active">
+                                <h3>Screen Effects (VFX)</h3>
+                                <p>Dramatic visual triggers: Flash, Lightning, Shake, Pulse.</p>
+                                <div className="ref-list">
+                                    <div className="ref-item"><b>Flash</b><span>Sudden burst of white light.</span></div>
+                                    <div className="ref-item"><b>Lightning</b><span>Double-strobe flickering effect.</span></div>
+                                    <div className="ref-item"><b>Shake</b><span>Vibrates the screen.</span></div>
+                                    <div className="ref-item"><b>Pulse</b><span>Rhythmic zoom effect.</span></div>
+                                </div>
+                            </div>
+                        )}
+                        {helpTab === 'shaders' && (
+                            <div className="help-pane active">
+                                <h3>Shader Blocks</h3>
+                                <p>Add a Shader element from the toolbar for dynamic backgrounds (Plasma, Noise, Geometric).</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+
+    const renderPremiumModal = () => (
+        <div className="modal-overlay active" id="premiumModal">
+            <div className="modal-box" style={{ maxWidth: '700px' }}>
+                <button className="modal-close" onClick={() => closeModal('premiumModal')}>✕</button>
+                <h2>Upgrade to Premium</h2>
+                <p style={{ color: 'var(--vp-text-dim)', marginBottom: '20px' }}>Unlock the full power of Void Press.</p>
+                <div className="premium-features">
+                    <div className="premium-col">
+                        <h3>Free</h3>
+                        <div className="price">$0</div>
+                        <ul>
+                            <li>3 published zines (rotating)</li>
+                            <li>Basic themes</li>
+                            <li>PDF &amp; HTML export</li>
+                            <li>Community discovery</li>
+                        </ul>
+                    </div>
+                    <div className="premium-col highlight">
+                        <h3>Premium</h3>
+                        <div className="price">$5<span style={{ fontSize: '0.4em', color: 'var(--vp-text-dim)' }}>/mo</span></div>
+                        <ul>
+                            <li>Unlimited publishing</li>
+                            <li>Priority in discovery</li>
+                            <li>Custom branding</li>
+                            <li>Analytics dashboard</li>
+                            <li>Premium badge</li>
+                            <li>All export formats</li>
+                        </ul>
+                        <button className="topnav-btn" onClick={() => { updateVpState({ user: { ...vpState.user, is_premium: true } }); closeModal('premiumModal'); }} style={{ width: '100%', marginTop: '16px' }}>Upgrade Now</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+
     return (
         <>
-            {vpState.modals.authModal?.active && renderAuthModal()}
-            {vpState.modals.publishModal?.active && renderPublishModal()}
-            {vpState.modals.themePicker?.active && renderThemePickerModal()}
-            {vpState.modals.assetModal?.active && (
+            {vpState.modals?.authModal?.active && renderAuthModal()}
+            {vpState.modals?.publishModal?.active && renderPublishModal()}
+            {vpState.modals?.themePicker?.active && renderThemePickerModal()}
+            {vpState.modals?.themePickerModal?.active && renderThemePickerModal()}
+            {vpState.modals?.helpModal?.active && renderHelpModal()}
+            {vpState.modals?.premiumModal?.active && renderPremiumModal()}
+            {vpState.modals?.assetModal?.active && (
                 <AssetModal
                     type={vpState.modals.assetModal.subtype}
                     onClose={() => closeModal('assetModal')}
                 />
             )}
-            {vpState.modals.exportModal?.active && (
+            {vpState.modals?.exportModal?.active && (
                 <ExportModal onClose={() => closeModal('exportModal')} />
             )}
         </>

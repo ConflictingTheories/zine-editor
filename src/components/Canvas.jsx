@@ -1,13 +1,15 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { useEditor } from '../hooks/useEditor.js'
 import ShaderElement from './ShaderElement.jsx'
+import ContextMenu from './ContextMenu.jsx'
 
-function Canvas({ page, pageIdx }) {
+function Canvas({ page, pageIdx, snapOn = true, gridOn = false }) {
     const { vpState, updateVpState } = useVP()
     const { selection } = vpState
     const { startDrag, startResize, startRotate } = useEditor()
     const canvasRef = useRef(null)
+    const [ctxMenu, setCtxMenu] = useState({ visible: false, x: 0, y: 0, element: null })
 
     const handleElementClick = (e, elId) => {
         e.stopPropagation()
@@ -18,14 +20,22 @@ function Canvas({ page, pageIdx }) {
         updateVpState({ selection: { type: 'page', id: page.id, pageIdx } })
     }
 
+    const handleContextMenu = (e, el) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, element: el })
+    }
+
     return (
+        <>
         <div
-            className={`ed-canvas ${page.orientation || 'portrait'}`}
-            style={{ background: page.background || '#fff' }}
+            className={`ed-canvas ${page.orientation || 'portrait'} ${gridOn ? 'show-grid' : ''}`}
+            style={{ background: page.background || '#fff', width: 528, height: 816 }}
             onClick={handleCanvasClick}
+            onContextMenu={e => handleContextMenu(e, null)}
             ref={canvasRef}
         >
-            {page.elements.map((el) => {
+            {(page.elements || []).filter(el => !el.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map((el) => {
                 const isSelected = selection.type === 'element' && selection.id === el.id
 
                 const elementStyle = {
@@ -171,6 +181,7 @@ function Canvas({ page, pageIdx }) {
                         style={elementStyle}
                         onMouseDown={(e) => isSelected && !el.locked && startDrag(e, el, pageIdx)}
                         onClick={(e) => handleElementClick(e, el.id)}
+                        onContextMenu={(e) => handleContextMenu(e, el)}
                     >
                         {renderContent()}
 
@@ -191,6 +202,16 @@ function Canvas({ page, pageIdx }) {
                 )
             })}
         </div>
+        <ContextMenu
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            visible={ctxMenu.visible}
+            onClose={() => setCtxMenu(prev => ({ ...prev, visible: false }))}
+            selection={selection}
+            pageIdx={pageIdx}
+            selectedElement={ctxMenu.element}
+        />
+        </>
     )
 }
 

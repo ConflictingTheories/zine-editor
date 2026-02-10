@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { getTutorialData } from '../data/tutorialData.js'
 
 const VPContext = createContext()
 
@@ -18,6 +19,7 @@ const VPProvider = ({ children }) => {
         toasts: [],
         modals: {},
         currentView: 'dashboard',
+        readerMode: null,
         selection: { type: null, id: null, pageIdx: 0 },
         history: [],
         historyIdx: -1
@@ -51,6 +53,433 @@ const VPProvider = ({ children }) => {
     }
 
     const [clipboard, setClipboard] = useState(null)
+    const [activeVfx, setActiveVfx] = useState(null)
+    const bgmRef = useRef(null)
+
+    const showView = (name) => {
+        setVpState(prev => ({ ...prev, currentView: name, ...(name !== 'reader' ? { readerMode: null } : {}) }))
+    }
+
+    const previewProject = () => {
+        setVpState(prev => ({ ...prev, currentView: 'reader', readerMode: 'preview' }))
+    }
+
+    const toast = (msg, type = 'info') => {
+        const id = Date.now()
+        setVpState(prev => ({
+            ...prev,
+            toasts: [...prev.toasts, { id, msg, type }]
+        }))
+        setTimeout(() => {
+            setVpState(prev => ({
+                ...prev,
+                toasts: prev.toasts.filter(t => t.id !== id)
+            }))
+        }, 3000)
+    }
+
+    const showModal = (id, subtype) => {
+        setVpState(prev => ({
+            ...prev,
+            modals: { ...prev.modals, [id]: { active: true, subtype: subtype || null } }
+        }))
+    }
+
+    const closeModal = (id) => {
+        setVpState(prev => ({
+            ...prev,
+            modals: { ...prev.modals, [id]: { active: false } }
+        }))
+    }
+
+    const saveLocal = () => {
+        setVpState(prev => {
+            try {
+                localStorage.setItem('vp_projects', JSON.stringify(prev.projects))
+            } catch (e) {}
+            return prev
+        })
+    }
+
+    useEffect(() => {
+        const stored = localStorage.getItem('vp_projects')
+        if (stored) return
+        const initial = [getTutorialData()]
+        setVpState(prev => ({ ...prev, projects: initial }))
+        localStorage.setItem('vp_projects', JSON.stringify(initial))
+    }, [])
+
+    useEffect(() => {
+        if (vpState.projects?.length > 0) {
+            try {
+                localStorage.setItem('vp_projects', JSON.stringify(vpState.projects))
+            } catch (e) {}
+        }
+    }, [vpState.projects])
+
+    const updateCurrentProject = (project) => {
+        setVpState(prev => {
+            const idx = prev.projects.findIndex(p => p.id === project.id)
+            const nextProjects = idx >= 0 ? prev.projects.map((p, i) => i === idx ? { ...project, _dirty: true } : p) : prev.projects
+            return { ...prev, currentProject: project, projects: nextProjects }
+        })
+        pushHistory(project)
+    }
+
+    const api = async (endpoint, method = 'GET', body = null) => {
+        if (!vpState.isOnline) throw new Error('Offline')
+        const headers = { 'Content-Type': 'application/json' }
+        if (vpState.token) headers['Authorization'] = `Bearer ${vpState.token}`
+        const res = await fetch('/api' + endpoint, { method, headers, body: body ? JSON.stringify(body) : null })
+        if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+                setVpState(prev => ({ ...prev, user: null, token: null }))
+                localStorage.removeItem('vp_token')
+                localStorage.removeItem('vp_user')
+            }
+            throw new Error(await res.text())
+        }
+        return res.json()
+    }
+
+    const login = async (email, password) => {
+        const res = await api('/auth/login', 'POST', { email, password })
+        setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
+        localStorage.setItem('vp_token', res.token)
+        localStorage.setItem('vp_user', JSON.stringify(res.user))
+        closeModal('authModal')
+        toast(`Welcome, ${res.user.username}!`, 'success')
+    }
+
+    const register = async (email, password, username) => {
+        const res = await api('/auth/register', 'POST', { email, password, username })
+        setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
+        localStorage.setItem('vp_token', res.token)
+        localStorage.setItem('vp_user', JSON.stringify(res.user))
+        closeModal('authModal')
+        toast(`Welcome, ${res.user.username}!`, 'success')
+    }
+
+    const logout = () => {
+        setVpState(prev => ({ ...prev, token: null, user: null }))
+        localStorage.removeItem('vp_token')
+        localStorage.removeItem('vp_user')
+        toast('Logged out', 'info')
+    }
+
+    const createProject = (themeKey) => {
+        const project = {
+            id: Date.now(),
+            title: 'Untitled Zine',
+            theme: themeKey || vpState.selectedTheme,
+            pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
+            created: new Date().toISOString(),
+            _dirty: true
+        }
+        setVpState(prev => ({
+            ...prev,
+            projects: [project, ...prev.projects],
+            currentProject: project,
+            currentView: 'editor',
+            selection: { type: 'page', id: project.pages[0].id, pageIdx: 0 },
+            history: [JSON.parse(JSON.stringify(project))],
+            historyIdx: 0
+        }))
+        saveLocal()
+        closeModal('themePickerModal')
+        closeModal('themePicker')
+        toast('New zine created!', 'success')
+    }
+
+    const openProject = (idx) => {
+        const projects = vpState.projects
+        const p = projects[idx]
+        if (p._remote) {
+            toast('Downloading zine...', 'info')
+            api(`/zines/${p.serverId}`).then(res => {
+                const project = { ...p, pages: res.data, _remote: false }
+                const nextProjects = [...projects]
+                nextProjects[idx] = project
+                setVpState(prev => ({
+                    ...prev,
+                    projects: nextProjects,
+                    currentProject: project,
+                    currentView: 'editor',
+                    selection: { type: 'page', id: project.pages[0].id, pageIdx: 0 },
+                    history: [JSON.parse(JSON.stringify(project))],
+                    historyIdx: 0
+                }))
+                saveLocal()
+            }).catch(() => toast('Failed to load zine', 'error'))
+        } else {
+            setVpState(prev => ({
+                ...prev,
+                currentProject: p,
+                currentView: 'editor',
+                selection: { type: 'page', id: p.pages[0].id, pageIdx: 0 },
+                history: [JSON.parse(JSON.stringify(p))],
+                historyIdx: 0
+            }))
+        }
+    }
+
+    const saveProject = () => {
+        if (!vpState.currentProject) {
+            toast('No project open', 'error')
+            return
+        }
+        const project = vpState.currentProject
+        const idx = vpState.projects.findIndex(p => p.id === project.id)
+        if (idx >= 0) {
+            const next = [...vpState.projects]
+            next[idx] = { ...project, _dirty: false }
+            setVpState(prev => ({ ...prev, projects: next }))
+        }
+        saveLocal()
+        toast('Project saved!', 'success')
+    }
+
+    const sync = async () => {
+        if (!vpState.isOnline || !vpState.token) return
+        setVpState(prev => ({ ...prev, isSyncing: true }))
+        try {
+            const projects = vpState.projects
+            for (const p of projects) {
+                if (p._dirty && p.pages) {
+                    const res = await api('/zines', 'POST', { serverId: p.serverId, title: p.title, data: p.pages, theme: p.theme })
+                    p.serverId = res.id
+                    delete p._dirty
+                }
+            }
+            setVpState(prev => ({ ...prev, projects: [...prev.projects] }))
+            saveLocal()
+        } catch (e) {
+            console.error('Sync failed', e)
+        }
+        setVpState(prev => ({ ...prev, isSyncing: false }))
+    }
+
+    const genId = () => 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+
+    const addElement = (pageIdx, element) => {
+        if (!vpState.currentProject) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const page = project.pages[pageIdx]
+        if (!page) return
+        const el = { ...element, id: element.id || genId(), zIndex: page.elements.length }
+        if (!page.elements) page.elements = []
+        page.elements.push(el)
+        setVpState(prev => ({
+            ...prev,
+            currentProject: project,
+            selection: { type: 'element', id: el.id, pageIdx }
+        }))
+        pushHistory(project)
+        const projIdx = vpState.projects.findIndex(p => p.id === project.id)
+        if (projIdx >= 0) {
+            const next = [...vpState.projects]
+            next[projIdx] = { ...project, _dirty: true }
+            setVpState(prev2 => ({ ...prev2, projects: next }))
+        }
+    }
+
+    const updateElement = (pageIdx, elementId, updates) => {
+        if (!vpState.currentProject) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const page = project.pages[pageIdx]
+        const el = page?.elements?.find(e => e.id === elementId)
+        if (!el) return
+        Object.assign(el, updates)
+        setVpState(prev => ({ ...prev, currentProject: project }))
+        pushHistory(project)
+        const projIdx = vpState.projects.findIndex(p => p.id === project.id)
+        if (projIdx >= 0) {
+            const next = [...vpState.projects]
+            next[projIdx] = { ...project, _dirty: true }
+            setVpState(prev2 => ({ ...prev2, projects: next }))
+        }
+    }
+
+    const deleteElement = () => {
+        if (!vpState.currentProject || vpState.selection.type !== 'element') return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx, id } = vpState.selection
+        const elements = project.pages[pageIdx].elements
+        const i = elements.findIndex(e => e.id === id)
+        if (i === -1) return
+        elements.splice(i, 1)
+        setVpState(prev => ({
+            ...prev,
+            currentProject: project,
+            selection: { type: 'page', id: project.pages[pageIdx].id, pageIdx }
+        }))
+        pushHistory(project)
+    }
+
+    const addPage = () => {
+        if (!vpState.currentProject) return
+        if (vpState.currentProject.pages.length >= 32) {
+            toast('Max 32 pages', 'error')
+            return
+        }
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const newPage = { id: Date.now(), elements: [], background: '#ffffff', texture: null }
+        project.pages.push(newPage)
+        const pageIdx = project.pages.length - 1
+        setVpState(prev => ({
+            ...prev,
+            currentProject: project,
+            selection: { type: 'page', id: newPage.id, pageIdx }
+        }))
+        pushHistory(project)
+    }
+
+    const playBGM = (url) => {
+        if (bgmRef.current && bgmRef.current.src === url) return
+        if (bgmRef.current) {
+            bgmRef.current.pause()
+            bgmRef.current = null
+        }
+        if (!url) return
+        const a = new Audio(url)
+        a.loop = true
+        a.volume = 0.5
+        a.play().catch(() => {})
+        bgmRef.current = a
+    }
+
+    const stopBGM = () => {
+        if (bgmRef.current) {
+            bgmRef.current.pause()
+            bgmRef.current = null
+        }
+    }
+
+    const playSFX = (url) => {
+        if (!url) return
+        const a = new Audio(url)
+        a.volume = 0.7
+        a.play().catch(() => {})
+    }
+
+    const triggerVfx = (type) => {
+        setActiveVfx(type)
+        setTimeout(() => setActiveVfx(null), 600)
+    }
+
+    const getAssets = (type) => {
+        const panels = [
+            { id: 'rect', preview: '<div style="width:80%;height:80%;border:3px solid #ccc"></div>', name: 'Rect' },
+            { id: 'rect-rounded', preview: '<div style="width:80%;height:80%;border:3px solid #ccc;border-radius:10px"></div>', name: 'Rounded' },
+            { id: 'torn', preview: '<div style="width:80%;height:80%;border:3px dashed #ccc"></div>', name: 'Torn' },
+            { id: 'neon', preview: '<div style="width:80%;height:80%;border:2px solid #00f3ff;box-shadow:0 0 8px #bc00ff"></div>', name: 'Neon' }
+        ]
+        const shapes = [
+            { id: 'circle', preview: '<div style="width:50px;height:50px;border-radius:50%;background:#888"></div>', name: 'Circle' },
+            { id: 'square', preview: '<div style="width:50px;height:50px;background:#888"></div>', name: 'Square' },
+            { id: 'triangle', preview: '<div style="width:0;height:0;border-left:25px solid transparent;border-right:25px solid transparent;border-bottom:50px solid #888"></div>', name: 'Triangle' },
+            { id: 'diamond', preview: '<div style="width:40px;height:40px;background:#888;transform:rotate(45deg)"></div>', name: 'Diamond' },
+            { id: 'line_h', preview: '<div style="width:60px;height:3px;background:#888"></div>', name: 'Line' },
+            { id: 'arrow', preview: '<span style="font-size:24px">➤</span>', name: 'Arrow' }
+        ]
+        const balloons = [
+            { id: 'dialog', preview: '<div style="background:#fff;border:2px solid #333;border-radius:16px;padding:6px;font-size:9px">Hello!</div>', name: 'Dialog' },
+            { id: 'thought', preview: '<div style="background:#fff;border:2px solid #333;border-radius:50%;padding:8px;font-size:9px">💭</div>', name: 'Thought' },
+            { id: 'shout', preview: '<div style="background:#fff;border:3px solid #333;padding:6px;font-size:9px;font-weight:bold">BANG!</div>', name: 'Shout' },
+            { id: 'caption', preview: '<div style="background:#000;color:#fff;padding:6px;font-size:9px">CAPTION</div>', name: 'Caption' },
+            { id: 'whisper', preview: '<div style="background:#f8f8f8;border:1px dashed #999;border-radius:16px;padding:6px;font-size:8px;color:#666">psst...</div>', name: 'Whisper' },
+            { id: 'narration', preview: '<div style="background:#ffe;border:1px solid #cc9;padding:6px;font-size:8px">Meanwhile...</div>', name: 'Narration' }
+        ]
+        const sfx = [
+            { id: 'crash', preview: '<span style="font-family:Bangers;font-size:20px;color:#e44">CRASH!</span>', name: 'Crash' },
+            { id: 'boom', preview: '<span style="font-family:Bangers;font-size:20px;color:#f80">BOOM!</span>', name: 'Boom' },
+            { id: 'zap', preview: '<span style="font-family:Bangers;font-size:20px;color:#ff0">ZAP!</span>', name: 'Zap' },
+            { id: 'pow', preview: '<span style="font-family:Bangers;font-size:20px;color:#f44">POW!</span>', name: 'POW' },
+            { id: 'whoosh', preview: '<span style="font-family:Bangers;font-size:20px;color:#4af">WHOOSH</span>', name: 'Whoosh' },
+            { id: 'splat', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLAT!</span>', name: 'Splat' }
+        ]
+        const symbols = [
+            { id: 'pentagram', preview: '<span style="font-size:32px">⛤</span>', name: 'Pentagram' },
+            { id: 'skull', preview: '<span style="font-size:32px">☠</span>', name: 'Skull' },
+            { id: 'star_symbol', preview: '<span style="font-size:32px">✦</span>', name: 'Star' },
+            { id: 'eye', preview: '<span style="font-size:32px">👁</span>', name: 'Eye' },
+            { id: 'omega', preview: '<span style="font-size:32px">Ω</span>', name: 'Omega' },
+            { id: 'trident', preview: '<span style="font-size:32px">🔱</span>', name: 'Trident' }
+        ]
+        const shaderList = typeof window !== 'undefined' && window.VPShader?.getPresetList
+            ? window.VPShader.getPresetList()
+            : [
+                { key: 'plasma', name: 'Plasma' },
+                { key: 'fire', name: 'Fire' },
+                { key: 'water', name: 'Water' },
+                { key: 'lightning', name: 'Lightning' },
+                { key: 'voidNoise', name: 'Void' },
+                { key: 'galaxy', name: 'Galaxy' }
+            ]
+        const shaders = shaderList.map(p => ({
+            id: p.key,
+            name: p.name,
+            preview: `<div style="width:50px;height:50px;background:linear-gradient(135deg,#222,#444);border-radius:4px;display:flex;align-items:center;justify-content:center;color:#8a889a;font-size:10px;text-align:center;padding:4px;border:1px solid #444">${p.name}</div>`
+        }))
+        const map = { panels, shapes, balloons, sfx, symbols, shaders }
+        return map[type] || []
+    }
+
+    const publishZine = async (formData) => {
+        if (!vpState.currentProject) {
+            toast('No project open', 'error')
+            return
+        }
+        const project = vpState.currentProject
+        if (!formData.title?.trim()) {
+            toast('Title required', 'error')
+            return
+        }
+        try {
+            if (!project.serverId) {
+                const res = await api('/zines', 'POST', { title: formData.title || project.title, data: project.pages, theme: project.theme })
+                project.serverId = res.id
+                setVpState(prev => ({
+                    ...prev,
+                    currentProject: project,
+                    projects: prev.projects.map(p => p.id === project.id ? { ...project, serverId: res.id } : p)
+                }))
+            }
+            await api(`/publish/${project.serverId}`, 'POST', {
+                author_name: formData.author || vpState.user?.username || 'Anonymous',
+                genre: formData.genre || 'classic',
+                tags: (formData.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(',')
+            })
+            closeModal('publishModal')
+            toast('🚀 Zine published!', 'success')
+        } catch (e) {
+            toast('Publish failed: ' + (e.message || 'Error'), 'error')
+        }
+    }
+
+    const addAsset = (type, assetId) => {
+        const pageIdx = vpState.selection?.pageIdx ?? 0
+        const base = { id: genId(), x: 120, y: 120, rotation: 0, opacity: 1, zIndex: 0, borderWidth: 0, borderColor: '#000', borderRadius: 0 }
+        let el = { ...base }
+        if (type === 'panels') {
+            el = { ...base, type: 'panel', width: 220, height: 160, panelBorderWidth: 4, panelBorderColor: assetId === 'neon' ? '#00f3ff' : '#0a0a0a', panelBorderStyle: assetId === 'torn' ? 'dashed' : 'solid', panelRadius: assetId === 'rect-rounded' ? 12 : 0, fill: 'transparent', panelShadow: assetId === 'neon' ? '0 0 15px #bc00ff' : 'none' }
+        } else if (type === 'shapes') {
+            const shapes = { circle: { type: 'shape', shape: 'circle', width: 100, height: 100, fill: '#0a0a0a' }, square: { type: 'shape', shape: 'rect', width: 100, height: 100, fill: '#0a0a0a' }, triangle: { type: 'shape', shape: 'triangle', width: 100, height: 100, fill: '#0a0a0a' }, diamond: { type: 'shape', shape: 'diamond', width: 80, height: 100, fill: '#0a0a0a' }, line_h: { type: 'shape', shape: 'line_h', width: 200, height: 4, fill: '#0a0a0a' }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } }
+            el = { ...base, ...(shapes[assetId] || shapes.circle) }
+        } else if (type === 'balloons') {
+            const b = { dialog: { balloonType: 'dialog', width: 200, height: 80, content: 'Dialog text...', fontSize: 14 }, thought: { balloonType: 'thought', width: 160, height: 120, content: 'Thinking...', fontSize: 13 }, shout: { balloonType: 'shout', width: 170, height: 80, content: 'SHOUT!', fontSize: 18 }, caption: { balloonType: 'caption', width: 220, height: 50, content: 'Caption text', fontSize: 13 }, whisper: { balloonType: 'whisper', width: 180, height: 70, content: 'whisper...', fontSize: 12 }, narration: { balloonType: 'narration', width: 240, height: 60, content: 'Meanwhile...', fontSize: 14 } }
+            el = { ...base, type: 'balloon', ...(b[assetId] || b.dialog) }
+        } else if (type === 'sfx') {
+            const t = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', whoosh: 'WHOOSH!', pow: 'POW!', splat: 'SPLAT!' }
+            el = { ...base, type: 'text', content: t[assetId] || 'BAM!', fontSize: 52, fontFamily: 'Bangers', color: '#0a0a0a', width: 180, height: 70, strokeWidth: 2, strokeColor: '#fff' }
+        } else if (type === 'symbols') {
+            const s = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', omega: 'Ω', trident: '🔱' }
+            el = { ...base, type: 'text', content: s[assetId] || '✦', fontSize: 56, color: '#d4af37', width: 80, height: 80, fontFamily: 'sans-serif' }
+        } else if (type === 'shaders') {
+            el = { ...base, type: 'shader', shaderPreset: assetId || 'plasma', width: 220, height: 220, opacity: 1 }
+        }
+        addElement(pageIdx, el)
+    }
 
     const undo = () => {
         if (vpState.historyIdx > 0) {
@@ -97,8 +526,7 @@ const VPProvider = ({ children }) => {
         const currentPage = project.pages[pageIdx]
         const newPage = JSON.parse(JSON.stringify(currentPage))
         newPage.id = Date.now()
-        // New IDs for elements
-        if (newPage.elements) newPage.elements.forEach(e => e.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9))
+        if (newPage.elements) newPage.elements.forEach(e => { e.id = genId() })
         project.pages.splice(pageIdx + 1, 0, newPage)
         updateVpState({
             currentProject: project,
@@ -264,6 +692,7 @@ const VPProvider = ({ children }) => {
         vpState,
         updateVpState,
         showView,
+        previewProject,
         api,
         login,
         register,
@@ -297,6 +726,7 @@ const VPProvider = ({ children }) => {
         triggerVfx,
         getAssets,
         addAsset,
+        publishZine,
         themes
     }
 

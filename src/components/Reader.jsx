@@ -4,10 +4,11 @@ import ShaderElement from './ShaderElement.jsx'
 
 function Reader() {
     const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx } = useVP()
-    const { currentProject } = vpState
+    const { currentProject, readerMode } = vpState
     const [pageIdx, setPageIdx] = useState(0)
     const [unlockedPages, setUnlockedPages] = useState(new Set())
     const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
+    const [toggledLabels, setToggledLabels] = useState(new Set())
 
     const project = currentProject
     if (!project) return <div className="reader-empty">No project loaded</div>
@@ -49,12 +50,17 @@ function Reader() {
         if (!action) return
 
         switch (action) {
-            case 'goto':
-                const target = parseInt(actionVal) - 1
-                if (!isNaN(target) && target >= 0 && target < project.pages.length) {
+            case 'goto': {
+                const target = parseInt(actionVal, 10) - 1
+                if (isNaN(target) || target < 0 || target >= project.pages.length) break
+                const targetPage = project.pages[target]
+                if (targetPage?.isLocked && !unlockedPages.has(target)) {
+                    setPasswordModal({ active: true, targetIdx: target, value: '' })
+                } else {
                     setPageIdx(target)
                 }
                 break
+            }
             case 'unlock':
                 const unlockIdx = parseInt(actionVal) - 1
                 if (!isNaN(unlockIdx)) {
@@ -77,9 +83,12 @@ function Reader() {
                 window.open(actionVal, '_blank')
                 break
             case 'toggle':
-                // Note: visibility toggle logic for specific labels would need 
-                // a more complex state management if we want it to persist across page turns
-                // For now, it's a simple local toggle in a real reader.
+                if (actionVal) setToggledLabels(prev => {
+                    const next = new Set(prev)
+                    if (next.has(actionVal)) next.delete(actionVal)
+                    else next.add(actionVal)
+                    return next
+                })
                 break
             default:
                 break
@@ -100,7 +109,10 @@ function Reader() {
     return (
         <div className="reader-view">
             <div className="reader-toolbar">
-                <button className="btn-secondary" onClick={() => showView('dashboard')}>Close</button>
+                <button className="reader-close btn-secondary" onClick={() => {
+                    if (readerMode === 'preview') showView('editor')
+                    else showView('discover')
+                }}>✕ Close</button>
                 <div style={{ flex: 1 }}></div>
                 <span>{pageIdx + 1} / {project.pages.length}</span>
             </div>
@@ -115,10 +127,13 @@ function Reader() {
                             pointerEvents: 'none'
                         }} />
                     )}
-                    {page.elements.filter(e => !e.hidden).map(el => (
+                    {page.elements.filter(e => !e.hidden).map(el => {
+                        const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
+                        return (
                         <div
                             key={el.id}
-                            className="reader-el"
+                            className="reader-el reader-el-item"
+                            data-label={el.label || ''}
                             style={{
                                 position: 'absolute',
                                 left: el.x, top: el.y, width: el.width, height: el.height,
@@ -126,7 +141,8 @@ function Reader() {
                                 zIndex: el.zIndex,
                                 opacity: el.opacity ?? 1,
                                 mixBlendMode: el.blendMode || 'normal',
-                                cursor: el.action ? 'pointer' : 'default'
+                                cursor: el.action ? 'pointer' : 'default',
+                                display: hiddenByToggle ? 'none' : undefined
                             }}
                             onClick={() => handleInteraction(el)}
                         >
@@ -159,7 +175,8 @@ function Reader() {
                                 <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
                             )}
                         </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </div>
 

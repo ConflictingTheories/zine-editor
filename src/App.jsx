@@ -6,6 +6,7 @@ import Editor from './components/Editor.jsx'
 import Discover from './components/Discover.jsx'
 import Reader from './components/Reader.jsx'
 import VfxSystem from './components/VfxSystem.jsx'
+import Toast from './components/Toast.jsx'
 import { useVP } from './context/VPContext.jsx'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
             </main>
             <Modal />
             <VfxSystem />
+            <Toast />
         </div>
     )
 }

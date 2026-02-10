@@ -29,8 +29,8 @@ function AssetModal({ type, onClose }) {
                                 onClose()
                             }}
                         >
-                            <div className="asset-preview">{asset.preview}</div>
-                            <div className="asset-name">{asset.name}</div>
+                            <div className="asset-preview" dangerouslySetInnerHTML={{ __html: asset.preview }} />
+                            {asset.name && <div className="asset-name">{asset.name}</div>}
                         </div>
                     ))}
                 </div>

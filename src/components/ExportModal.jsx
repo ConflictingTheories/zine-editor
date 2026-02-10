@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { exportToHTML, exportToPDF } from '../utils/exportSystem'
 
 function ExportModal({ onClose }) {
     const { vpState } = useVP()
     const { currentProject } = vpState
+    const [exportTab, setExportTab] = useState('pdf')
 
     const handleExportHTML = () => {
         if (currentProject) {
@@ -20,24 +21,41 @@ function ExportModal({ onClose }) {
         }
     }
 
+    const handleExportInteractive = () => {
+        if (currentProject) {
+            exportToHTML(currentProject)
+            onClose()
+        }
+    }
+
     return (
         <div className="modal-overlay active">
-            <div className="modal-box" style={{ maxWidth: '500px' }}>
+            <div className="modal-box">
                 <button className="modal-close" onClick={onClose}>✕</button>
                 <h2>Export Zine</h2>
-                <p style={{ color: 'var(--vp-text-dim)', marginBottom: '20px' }}>
-                    Choose a format to save your zine to your device.
-                </p>
-                <div className="export-options" style={{ display: 'grid', gap: '15px' }}>
-                    <div className="export-card" onClick={handleExportHTML} style={{ cursor: 'pointer', padding: '15px', border: '1px solid var(--vp-border)', borderRadius: '8px' }}>
-                        <h3>🌐 Web Reader (HTML)</h3>
-                        <p style={{ fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>A self-contained file with all interactions, music, and shaders. Best for sharing!</p>
-                    </div>
-                    <div className="export-card" onClick={handleExportPDF} style={{ cursor: 'pointer', padding: '15px', border: '1px solid var(--vp-border)', borderRadius: '8px' }}>
-                        <h3>📄 Document (PDF)</h3>
-                        <p style={{ fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Static snapshots of your pages. Good for printing.</p>
-                    </div>
+                <div className="export-tabs">
+                    <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Print)</button>
+                    <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
+                    <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                 </div>
+                {exportTab === 'pdf' && (
+                    <div className="export-content active">
+                        <p style={{ marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Export as print-ready PDF.</p>
+                        <button className="topnav-btn" onClick={handleExportPDF} style={{ marginTop: 12 }}>Generate PDF</button>
+                    </div>
+                )}
+                {exportTab === 'html' && (
+                    <div className="export-content">
+                        <p style={{ marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Export as standalone HTML with navigation.</p>
+                        <button className="topnav-btn" onClick={handleExportHTML} style={{ marginTop: 12 }}>Generate HTML</button>
+                    </div>
+                )}
+                {exportTab === 'interactive' && (
+                    <div className="export-content">
+                        <p style={{ marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Interactive flipbook with page-turn and interactions.</p>
+                        <button className="topnav-btn" onClick={handleExportInteractive} style={{ marginTop: 12 }}>Generate Interactive</button>
+                    </div>
+                )}
             </div>
         </div>
     )

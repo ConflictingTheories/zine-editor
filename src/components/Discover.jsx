@@ -31,7 +31,8 @@ function Discover() {
     const handleRead = async (id) => {
         try {
             const zineData = await api(`/zines/${id}`)
-            updateVpState({ currentProject: zineData, currentView: 'reader' })
+            const project = { ...zineData, pages: zineData.data || zineData.pages || [] }
+            updateVpState({ currentProject: project, currentView: 'reader', readerMode: 'read' })
         } catch (e) {
             alert('Failed to load zine')
         }
@@ -112,7 +113,7 @@ function Discover() {
                                     <div className="author">by {zine.author_name}</div>
                                     <div className="meta">
                                         <span>Published {new Date(zine.published_at).toLocaleDateString()}</span>
-                                        <span>👁 {zine.reads || 0} reads</span>
+                                        <span>👁 {zine.read_count ?? zine.reads ?? 0} reads</span>
                                     </div>
                                     <div className="discover-card-tags">
                                         {(zine.tags || '').split(',').map((tag, i) => (
