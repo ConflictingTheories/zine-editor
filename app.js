@@ -175,23 +175,38 @@ const VP = {
 
         let html = '<div class="zine-card create-card" onclick="VP.showThemePicker()"><div class="zine-card-cover"><div class="cover-icon">+</div></div><div class="zine-card-body"><h3>Create New Zine</h3><p>Start a new project</p></div></div>';
 
-        this.projects.forEach((p, i) => {
-            const isPub = p.serverId && this.published.find(x => x.id === p.serverId); // Only if sync worked
-            const badge = isPub ? '<span class="zine-card-badge badge-published">Published</span>' : '<span class="zine-card-badge badge-draft">Draft</span>';
-            const colors = this.ed.themes[p.theme || 'classic'];
-            const bg = colors ? `background:linear-gradient(135deg,${colors['--ed-black'] || '#1a1a1a'},${colors['--ed-gray'] || '#34495e'})` : '';
-            const statusIcon = p._dirty ? '☁️⃠' : '☁️';
-
-            html += `<div class="zine-card"><div class="zine-card-cover" style="${bg}">${badge}<div class="cover-icon" style="color:${colors?.['--ed-gold'] || '#d4af37'}">📖</div></div><div class="zine-card-body"><h3>${p.title || 'Untitled Zine'} <span style="font-size:12px">${statusIcon}</span></h3><p>${p.pages?.length || 0} pages · ${p.theme || 'classic'}</p><div class="zine-card-actions"><button onclick="event.stopPropagation();VP.openProject(${i})">Edit</button><button onclick="event.stopPropagation();VP.renameProject(${i})">Rename</button><button class="del" onclick="event.stopPropagation();VP.deleteProject(${i})">Delete</button></div></div></div>`;
-        });
+        if (this.projects.length === 0) {
+            html = `<div style="text-align:center;padding:60px;background:var(--vp-surface2);border:1px dashed var(--vp-border);border-radius:var(--radius-lg);grid-column:1/-1">
+                <p style="color:var(--vp-text-dim);margin-bottom:20px">No zines found in your library.</p>
+                <button class="topnav-btn" onclick="VP.resetDemo()">Load Tutorial Zine</button>
+            </div>`;
+        } else {
+            html = `<div class="zine-card create-card" onclick="VP.showThemePicker()">
+                <div class="zine-card-cover"><div class="cover-icon">+</div></div>
+                <div class="zine-card-body"><h3>Create New Zine</h3><p>Start a new project</p></div>
+            </div>`;
+            this.projects.forEach((p, i) => {
+                const isPub = p.serverId && this.published.find(x => x.id === p.serverId);
+                const badge = isPub ? '<span class="zine-card-badge badge-published">Published</span>' : '<span class="zine-card-badge badge-draft">Draft</span>';
+                const colors = this.ed.themes[p.theme || 'classic'];
+                const bg = colors ? `background:linear-gradient(135deg,${colors['--ed-black'] || '#1a1a1a'},${colors['--ed-gray'] || '#34495e'})` : '';
+                const statusIcon = p._dirty ? '☁️⃠' : '☁️';
+                html += `<div class="zine-card"><div class="zine-card-cover" style="${bg}">${badge}<div class="cover-icon" style="color:${colors?.['--ed-gold'] || '#d4af37'}">📖</div></div><div class="zine-card-body"><h3>${p.title || 'Untitled Zine'} <span style="font-size:12px">${statusIcon}</span></h3><p>${p.pages?.length || 0} pages · ${p.theme || 'classic'}</p><div class="zine-card-actions"><button onclick="event.stopPropagation();VP.openProject(${i})">Edit</button><button onclick="event.stopPropagation();VP.renameProject(${i})">Rename</button><button class="del" onclick="event.stopPropagation();VP.deleteProject(${i})">Delete</button></div></div></div>`;
+            });
+        }
         g.innerHTML = html;
-
-        // Show login prompt if no user
+        if (this.projects.length > 0) {
+            const wrap = document.createElement('div');
+            wrap.style.cssText = "grid-column:1/-1;text-align:right;margin-top:20px";
+            wrap.innerHTML = `<button class="ed-tool" style="opacity:.5" onclick="VP.resetDemo()">🔄 Reset Tutorial Zine</button>`;
+            g.appendChild(wrap);
+        } // Show login prompt if no user
         if (!this.user) {
             document.querySelector('.user-profile').innerHTML = '<button onclick="VP.showAuth()" class="btn-primary" style="padding:4px 12px;font-size:12px">Login</button>';
         } else {
             document.querySelector('.user-profile').innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div class="avatar">${this.user.username[0]}</div><button onclick="VP.logout()" style="background:none;border:none;color:#fff;cursor:pointer">Logout</button></div>`;
         }
+        g.innerHTML = html;
     },
 
     showThemePicker() {
@@ -257,6 +272,18 @@ const VP = {
                 this.api(`/zines/${p.serverId}`, 'DELETE').catch(console.error);
             }
         }
+    },
+
+    resetDemo() {
+        if (this.projects.some(p => p.id === 'tutorial_zine')) {
+            if (!confirm('The tutorial is already in your library. Reset it to original?')) return;
+            this.projects = this.projects.filter(p => p.id !== 'tutorial_zine');
+        }
+        const demo = window.getTutorialData();
+        this.projects.unshift(demo);
+        this.saveLocal();
+        this.renderDashboard();
+        this.toast('Tutorial Loaded!', 'success');
     },
 
     saveLocal() {
@@ -476,10 +503,29 @@ const VP = {
                     });
                 }
             }
+        } else if (action === 'vfx') {
+            this.doVFX(val);
         } else if (action === 'sfx') {
             this.am.playSFX(val);
         } else if (action === 'link') {
             window.open(val, '_blank');
+        }
+    },
+
+    doVFX(type) {
+        const b = document.getElementById('readerBook');
+        if (type === 'flash') {
+            const f = document.createElement('div'); f.style.cssText = "position:absolute;inset:0;background:#fff;z-index:9999;pointer-events:none";
+            b.appendChild(f);
+            f.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: 'ease-out' }).onfinish = () => f.remove();
+        } else if (type === 'lightning') {
+            const f = document.createElement('div'); f.style.cssText = "position:absolute;inset:0;background:#fff;z-index:9999;pointer-events:none";
+            b.appendChild(f);
+            f.animate([{ opacity: 0 }, { opacity: 1 }, { opacity: 0.2 }, { opacity: 1 }, { opacity: 0 }], { duration: 400 }).onfinish = () => f.remove();
+        } else if (type === 'shake') {
+            b.animate([{ transform: 'translateX(-10px)' }, { transform: 'translateX(10px)' }, { transform: 'translateX(-10px)' }, { transform: 'translateX(0)' }], { duration: 300 });
+        } else if (type === 'pulse') {
+            b.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.02)' }, { transform: 'scale(1)' }], { duration: 400 });
         }
     },
 
@@ -505,6 +551,10 @@ const VP = {
 
     // ── INIT ──
     init() {
+        if (this.projects.length === 0) {
+            this.projects.push(window.getTutorialData());
+            this.saveLocal();
+        }
         this.renderDashboard();
         this.ed.init();
 

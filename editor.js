@@ -2,7 +2,7 @@
 // VOID PRESS - Editor Engine
 // ═══════════════════════════════════════════
 VP.ed = {
-    pages: [], pageIdx: 0, sel: null, _zoom: 1, clipboard: null, idCtr: 0,
+    pages: [], pageIdx: 0, sel: null, _zoom: 1, clipboard: null,
     gridOn: false, snapOn: true, history: [], historyIdx: -1, maxHist: 50,
 
     themes: {
@@ -26,6 +26,16 @@ VP.ed = {
         this.pages = proj.pages || []; this.pageIdx = 0; this.sel = null; this.history = []; this.historyIdx = -1;
         if (!this.pages.length) this.pages.push({ id: Date.now(), elements: [], background: '#ffffff', texture: null });
         if (proj.theme) document.getElementById('themeSelect').value = proj.theme;
+
+        // Self-Healing: Ensure all IDs are unique across all pages/elements
+        const seen = new Set();
+        this.pages.forEach(p => {
+            (p.elements || []).forEach(el => {
+                if (!el.id || seen.has(el.id)) el.id = this.genId();
+                seen.add(el.id);
+            });
+        });
+
         this.render(); this.updateThumbs(); this.updateFooter();
     },
 
@@ -54,7 +64,10 @@ VP.ed = {
     },
     duplicatePage() {
         if (this.pages.length >= 32) { VP.toast('Max 32 pages', 'error'); return }
-        const d = JSON.parse(JSON.stringify(this.curPage())); d.id = Date.now();
+        const d = JSON.parse(JSON.stringify(this.curPage()));
+        d.id = Date.now();
+        // Give elements new IDs so they aren't "linked" to original page
+        if (d.elements) d.elements.forEach(e => e.id = this.genId());
         this.pages.splice(this.pageIdx + 1, 0, d); this.pageIdx++;
         this.pushHistory(); this.render(); this.updateThumbs(); this.updateFooter();
     },
@@ -72,7 +85,7 @@ VP.ed = {
     },
 
     // Elements
-    genId() { return 'el_' + (this.idCtr++) },
+    genId() { return 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) },
     addToPage(el) { this.curPage().elements.push(el); this.pushHistory(); this.render(); this.selectEl(el) },
 
     addText() {
@@ -385,6 +398,7 @@ VP.ed = {
             { id: 'unlock', name: 'Unlock Page' },
             { id: 'password', name: 'Password Prompt' },
             { id: 'toggle', name: 'Toggle Element' },
+            { id: 'vfx', name: 'Screen Effect' },
             { id: 'sfx', name: 'Play SFX' },
             { id: 'link', name: 'Open URL' }
         ];
@@ -398,6 +412,9 @@ VP.ed = {
             const options = (page.elements || []).filter(e => e.label && e !== el).map(e => `<option value="${e.label}"${el.actionVal === e.label ? ' selected' : ''}>${e.label} (${e.type})</option>`).join('');
             h += `<div class="prop-row"><label>Target Element</label><select onchange="VP.ed.updProp('actionVal',this.value)"><option value="">Select Element...</option>${options}</select></div>`;
             h += `<p style="font-size:10px;color:var(--vp-text-dim)">Only elements with a 'Label' appear here.</p>`;
+        } else if (el.action === 'vfx') {
+            const effects = ['flash', 'lightning', 'shake', 'pulse'];
+            h += `<div class="prop-row"><label>Effect</label><select onchange="VP.ed.updProp('actionVal',this.value)">${effects.map(e => `<option value="${e}"${el.actionVal === e ? ' selected' : ''}>${e}</option>`).join('')}</select></div>`;
         } else if (el.action === 'sfx') {
             h += `<div class="prop-row"><label>SFX URL</label><input type="text" value="${el.actionVal || ''}" onchange="VP.ed.updProp('actionVal',this.value)" placeholder="https://.../sound.mp3"></div>`;
             h += `<div class="prop-row-inline"><button class="prop-btn" style="font-size:10px" onclick="VP.am.playSFX('${el.actionVal || ''}')">Test Sound</button></div>`;
@@ -566,6 +583,20 @@ VP.ed = {
                     const target = Array.from(document.querySelectorAll('.reader-el-item')).find(x => x.dataset.label === v);
                     if(target) target.style.display = (target.style.display==='none') ? 'block' : 'none';
                 }
+                else if(a==='vfx'){
+                    const b=document.body;
+                    if(v==='flash'){
+                        const f=document.createElement('div'); f.style.cssText="position:fixed;inset:0;background:#fff;z-index:9999;pointer-events:none";
+                        b.appendChild(f); f.animate([{opacity:1},{opacity:0}],{duration:500,easing:'ease-out'}).onfinish=()=>f.remove();
+                    } else if(v==='lightning'){
+                        const f=document.createElement('div'); f.style.cssText="position:fixed;inset:0;background:#fff;z-index:9999;pointer-events:none";
+                        b.appendChild(f); f.animate([{opacity:0},{opacity:1},{opacity:0.2},{opacity:1},{opacity:0}],{duration:400}).onfinish=()=>f.remove();
+                    } else if(v==='shake'){
+                        document.querySelector('.page-wrap.active').animate([{transform:'translateX(-10px)'},{transform:'translateX(10px)'},{transform:'translateX(-10px)'},{transform:'translateX(0)'}],{duration:300});
+                    } else if(v==='pulse'){
+                        document.querySelector('.page-wrap.active').animate([{transform:'scale(1)'},{transform:'scale(1.02)'},{transform:'scale(1)'}],{duration:400});
+                    }
+                }
                 else if(a==='sfx'){ new Audio(v).play(); }
                 else if(a==='link'){ window.open(v,'_blank'); }
             }
@@ -658,6 +689,20 @@ VP.ed = {
                 else if(a==='toggle'){
                     const target = Array.from(document.querySelectorAll('.reader-el-item')).find(x => x.dataset.label === v);
                     if(target) target.style.display = (target.style.display==='none') ? 'block' : 'none';
+                }
+                else if(a==='vfx'){
+                    const b=document.body;
+                    if(v==='flash'){
+                        const f=document.createElement('div'); f.style.cssText="position:fixed;inset:0;background:#fff;z-index:9999;pointer-events:none";
+                        b.appendChild(f); f.animate([{opacity:1},{opacity:0}],{duration:500,easing:'ease-out'}).onfinish=()=>f.remove();
+                    } else if(v==='lightning'){
+                        const f=document.createElement('div'); f.style.cssText="position:fixed;inset:0;background:#fff;z-index:9999;pointer-events:none";
+                        b.appendChild(f); f.animate([{opacity:0},{opacity:1},{opacity:0.2},{opacity:1},{opacity:0}],{duration:400}).onfinish=()=>f.remove();
+                    } else if(v==='shake'){
+                        document.getElementById('bk').animate([{transform:'translateX(-10px)'},{transform:'translateX(10px)'},{transform:'translateX(-10px)'},{transform:'translateX(0)'}],{duration:300});
+                    } else if(v==='pulse'){
+                        document.getElementById('bk').animate([{transform:'scale(1)'},{transform:'scale(1.02)'},{transform:'scale(1)'}],{duration:400});
+                    }
                 }
                 else if(a==='sfx'){ new Audio(v).play(); }
                 else if(a==='link'){ window.open(v,'_blank'); }
