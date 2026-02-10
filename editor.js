@@ -103,6 +103,8 @@ VP.ed = {
         } else if (type === 'symbols') {
             const s = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', biohazard: '☣', radiation: '☢', compass: '🧭', rune: 'ᚱ', ankh: '☥', omega: 'Ω', infinity: '∞', trident: '🔱' };
             el = { ...base, type: 'text', content: s[assetId] || '✦', fontSize: 56, color: '#d4af37', width: 80, height: 80, fontFamily: 'sans-serif' };
+        } else if (type === 'shaders') {
+            el = { ...base, type: 'shader', shaderPreset: assetId, width: 220, height: 220, opacity: 1 };
         }
         this.addToPage(el);
     },
@@ -113,7 +115,8 @@ VP.ed = {
             shapes: [{ id: 'circle', preview: '<div style="width:50px;height:50px;border-radius:50%;background:#888"></div>' }, { id: 'square', preview: '<div style="width:50px;height:50px;background:#888"></div>' }, { id: 'triangle', preview: '<div style="width:0;height:0;border-left:25px solid transparent;border-right:25px solid transparent;border-bottom:50px solid #888"></div>' }, { id: 'diamond', preview: '<div style="width:40px;height:40px;background:#888;transform:rotate(45deg)"></div>' }, { id: 'hexagon', preview: '<div style="font-size:40px;color:#888">⬡</div>' }, { id: 'star_shape', preview: '<div style="font-size:36px">★</div>' }, { id: 'line_h', preview: '<div style="width:60px;height:3px;background:#888"></div>' }, { id: 'arrow', preview: '<div style="font-size:30px">➤</div>' }],
             balloons: [{ id: 'dialog', preview: '<div style="background:#fff;border:2px solid #333;border-radius:16px;padding:6px;font-size:9px;color:#000">Hello!</div>' }, { id: 'thought', preview: '<div style="background:#fff;border:2px solid #333;border-radius:50%;padding:8px;font-size:9px;color:#000">💭</div>' }, { id: 'shout', preview: '<div style="background:#fff;border:3px solid #333;padding:6px;font-size:9px;color:#000;font-weight:bold">BANG!</div>' }, { id: 'caption', preview: '<div style="background:#000;color:#fff;padding:6px;font-size:9px">CAPTION</div>' }, { id: 'whisper', preview: '<div style="background:#f8f8f8;border:1px dashed #999;border-radius:16px;padding:6px;font-size:8px;color:#666">psst...</div>' }, { id: 'narration', preview: '<div style="background:#ffe;border:1px solid #cc9;padding:6px;font-size:8px;color:#333">Meanwhile...</div>' }],
             sfx: [{ id: 'crash', preview: '<div style="font-family:Bangers;font-size:20px;color:#e44">CRASH!</div>' }, { id: 'boom', preview: '<div style="font-family:Bangers;font-size:20px;color:#f80">BOOM!</div>' }, { id: 'zap', preview: '<div style="font-family:Bangers;font-size:20px;color:#ff0">ZAP!</div>' }, { id: 'pow', preview: '<div style="font-family:Bangers;font-size:20px;color:#f44">POW!</div>' }, { id: 'whoosh', preview: '<div style="font-family:Bangers;font-size:20px;color:#4af">WHOOSH</div>' }, { id: 'splat', preview: '<div style="font-family:Bangers;font-size:20px;color:#4a4">SPLAT!</div>' }],
-            symbols: [{ id: 'pentagram', preview: '<div style="font-size:32px">⛤</div>' }, { id: 'skull', preview: '<div style="font-size:32px">☠</div>' }, { id: 'star_symbol', preview: '<div style="font-size:32px">✦</div>' }, { id: 'eye', preview: '<div style="font-size:32px">👁</div>' }, { id: 'biohazard', preview: '<div style="font-size:32px">☣</div>' }, { id: 'radiation', preview: '<div style="font-size:32px">☢</div>' }, { id: 'compass', preview: '<div style="font-size:32px">🧭</div>' }, { id: 'rune', preview: '<div style="font-size:32px">ᚱ</div>' }, { id: 'ankh', preview: '<div style="font-size:32px">☥</div>' }, { id: 'omega', preview: '<div style="font-size:32px">Ω</div>' }, { id: 'infinity', preview: '<div style="font-size:32px">∞</div>' }, { id: 'trident', preview: '<div style="font-size:32px">🔱</div>' }]
+            symbols: [{ id: 'pentagram', preview: '<div style="font-size:32px">⛤</div>' }, { id: 'skull', preview: '<div style="font-size:32px">☠</div>' }, { id: 'star_symbol', preview: '<div style="font-size:32px">✦</div>' }, { id: 'eye', preview: '<div style="font-size:32px">👁</div>' }, { id: 'biohazard', preview: '<div style="font-size:32px">☣</div>' }, { id: 'radiation', preview: '<div style="font-size:32px">☢</div>' }, { id: 'compass', preview: '<div style="font-size:32px">🧭</div>' }, { id: 'rune', preview: '<div style="font-size:32px">ᚱ</div>' }, { id: 'ankh', preview: '<div style="font-size:32px">☥</div>' }, { id: 'omega', preview: '<div style="font-size:32px">Ω</div>' }, { id: 'infinity', preview: '<div style="font-size:32px">∞</div>' }, { id: 'trident', preview: '<div style="font-size:32px">🔱</div>' }],
+            shaders: window.VPShader ? VPShader.getPresetList().map(p => ({ id: p.key, preview: `<div style="width:50px;height:50px;background:#222;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;text-align:center;padding:4px;border-radius:4px;border:1px solid #444">${p.name}</div>` })) : []
         };
         return a[type] || [];
     },
@@ -305,6 +308,15 @@ VP.ed = {
             d.style.background = el.fill || '#000';
             const clips = { hero1: 'polygon(50% 0%,100% 40%,100% 100%,0% 100%,0% 40%)', villain1: 'polygon(50% 0%,80% 30%,80% 100%,20% 100%,20% 30%)' };
             d.style.clipPath = clips[el.silhouetteId] || clips.hero1;
+        } else if (el.type === 'shader') {
+            const canvas = document.createElement('canvas');
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.display = 'block';
+            d.appendChild(canvas);
+            requestAnimationFrame(() => {
+                if (window.VPShader) VPShader.start(canvas, el.shaderPreset || 'plasma');
+            });
         }
 
         // Resize handles + rotation handle
@@ -352,7 +364,9 @@ VP.ed = {
             h += `<div class="prop-row"><label>Border Color</label><input type="color" value="${el.panelBorderColor || '#000'}" onchange="VP.ed.updProp('panelBorderColor',this.value)"></div>`;
             h += `<div class="prop-row"><label>Border Radius</label><input type="number" value="${el.panelRadius || 0}" onchange="VP.ed.updProp('panelRadius',+this.value)"></div>`;
         }
-
+        if (el.type === 'shader') {
+            h += `<div class="prop-row"><label>Preset</label><select onchange="VP.ed.updProp('shaderPreset',this.value)">${VPShader.getPresetList().map(p => `<option value="${p.key}"${el.shaderPreset === p.key ? ' selected' : ''}>${p.name}</option>`).join('')}</select></div>`;
+        }
         h += `<div class="prop-row"><label>Blend Mode</label><select onchange="VP.ed.updProp('blendMode',this.value)">${['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'hard-light', 'difference'].map(m => `<option value="${m}"${el.blendMode === m ? ' selected' : ''}>${m}</option>`).join('')}</select></div>`;
         h += `<div class="prop-row-inline"><button class="prop-btn" onclick="VP.ed.moveLayer('up')">▲ Forward</button><button class="prop-btn" onclick="VP.ed.moveLayer('down')">▼ Back</button></div>`;
         h += `<div class="prop-row"><button class="prop-btn danger" onclick="VP.ed.deleteSelected()">✕ Delete Element</button></div>`;
@@ -361,12 +375,16 @@ VP.ed = {
 
     showEffects(el) {
         const c = document.getElementById('effectsContent');
+        const anims = ['none', 'flash-in', 'lightning', 'shake', 'pulse', 'spin'];
         let h = '';
         h += `<div class="prop-row"><label>Drop Shadow</label><input type="text" value="${el.shadow || ''}" onchange="VP.ed.updProp('shadow',this.value)" placeholder="2px 2px 8px rgba(0,0,0,.5)"></div>`;
         h += `<div class="prop-row"><label>Blur ${el.blur || 0}px</label><input type="range" min="0" max="20" value="${el.blur || 0}" oninput="VP.ed.updProp('blur',+this.value)"></div>`;
         h += `<div class="prop-row"><label>Border Width</label><input type="number" value="${el.borderWidth || 0}" onchange="VP.ed.updProp('borderWidth',+this.value)"></div>`;
         h += `<div class="prop-row"><label>Border Color</label><input type="color" value="${el.borderColor || '#000000'}" onchange="VP.ed.updProp('borderColor',this.value)"></div>`;
         h += `<div class="prop-row"><label>Border Radius</label><input type="number" value="${el.borderRadius || 0}" onchange="VP.ed.updProp('borderRadius',+this.value)"></div>`;
+        h += `<div class="prop-row"><label>Animation</label><select onchange="VP.ed.updProp('animation',this.value)">${anims.map(a => `<option value="${a}"${(el.animation || 'none') === a ? ' selected' : ''}>${a}</option>`).join('')}</select></div>`;
+        h += `<div class="prop-row"><label>Anim Duration ${el.animDuration || 1}s</label><input type="range" min="0.1" max="5" step="0.1" value="${el.animDuration || 1}" oninput="VP.ed.updProp('animDuration',+this.value)"></div>`;
+        h += `<div class="prop-row"><label><input type="checkbox" ${el.animLoop ? 'checked' : ''} onchange="VP.ed.updProp('animLoop',this.checked)"> Loop Animation</label></div>`;
         if (el.type === 'text') {
             h += `<div class="prop-row"><label>Text Shadow</label><input type="text" value="${el.textShadow || ''}" onchange="VP.ed.updProp('textShadow',this.value)" placeholder="1px 1px 4px #000"></div>`;
             h += `<div class="prop-row"><label>Stroke Width</label><input type="number" value="${el.strokeWidth || 0}" onchange="VP.ed.updProp('strokeWidth',+this.value)"></div>`;
@@ -433,7 +451,13 @@ VP.ed = {
         if (el.type === 'image') content = `<img src="${el.src}" style="width:100%;height:100%;object-fit:${el.objectFit || 'cover'}">`;
         if (el.type === 'panel') s += `border:${el.panelBorderWidth || 0}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'};background:${el.fill || 'transparent'};border-radius:${el.panelRadius || 0}px;`;
         if (el.type === 'shape') { s += `background:${el.fill || '#000'};`; if (el.shape === 'circle') s += 'border-radius:50%;' }
+        if (el.type === 'shader') {
+            const code = VPShader.presets[el.shaderPreset]?.code || '';
+            const b64 = btoa(unescape(encodeURIComponent(code)));
+            content = `<canvas class="vp-shader-canvas" data-preset="${el.shaderPreset}" data-code="${b64}" style="width:100%;height:100%"></canvas>`;
+        }
         if (el.shadow) s += `box-shadow:${el.shadow};`;
+        if (el.animation && el.animation !== 'none') s += `animation:${el.animation} ${el.animDuration || 1}s ease ${el.animLoop ? 'infinite' : 'both'};`;
         return `<div style="${s}">${content}</div>`;
     },
 
@@ -464,7 +488,14 @@ VP.ed = {
                 html += `</div></div>`;
             });
             const sc = `let c=0,t=${this.pages.length};function show(n){for(let i=0;i<t;i++){const e=document.getElementById('p'+i);if(e)e.className='page-wrap'+(i===n?' active':'');}document.getElementById('pg').textContent=(n+1)+'/'+t;}function next(){if(c<t-1){c++;show(c)}}function prev(){if(c>0){c--;show(c)}}`;
-            html += `<div class="nav"><button class="btn" onclick="prev()">◀ Prev</button><span id="pg">1/${this.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div><` + `script>${sc}<` + `/script></body></html>`;
+            const msc = `import { mushu } from 'https://unpkg.com/mushu-flow@1.1.0/src/index.js';
+            document.querySelectorAll('.vp-shader-canvas').forEach(c => {
+                try { 
+                    const code = decodeURIComponent(escape(atob(c.dataset.code)));
+                    mushu(c).gl(code); 
+                } catch(e) { console.warn(e); }
+            });`;
+            html += `<div class="nav"><button class="btn" onclick="prev()">◀ Prev</button><span id="pg">1/${this.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div><` + `script>${sc}<` + `/script><script type="module">${msc}<` + `/script></body></html>`;
             const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-zine.html'; a.click();
             ld.classList.remove('active'); VP.closeModal('exportModal'); VP.toast('HTML exported!', 'success');
         }, 300);
@@ -481,7 +512,14 @@ VP.ed = {
                 html += `</div>`;
             });
             const sc = `let c=0,t=${this.pages.length};function next(){if(c<t-1){document.getElementById('pg'+c).classList.add('flip');c++}}function prev(){if(c>0){c--;document.getElementById('pg'+c).classList.remove('flip')}}document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')next();if(e.key==='ArrowLeft')prev()})`;
-            html += `</div><div class="ctrl"><button class="btn" onclick="prev()">◀ PREV</button><button class="btn" onclick="next()">NEXT ▶</button></div><` + `script>${sc}<` + `/script></body></html>`;
+            const msc = `import { mushu } from 'https://unpkg.com/mushu-flow@1.1.0/src/index.js';
+            document.querySelectorAll('.vp-shader-canvas').forEach(c => {
+                try { 
+                    const code = decodeURIComponent(escape(atob(c.dataset.code)));
+                    mushu(c).gl(code); 
+                } catch(e) { console.warn(e); }
+            });`;
+            html += `</div><div class="ctrl"><button class="btn" onclick="prev()">◀ PREV</button><button class="btn" onclick="next()">NEXT ▶</button></div><` + `script>${sc}<` + `/script><script type="module">${msc}<` + `/script></body></html>`;
             const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-interactive.html'; a.click();
             ld.classList.remove('active'); VP.closeModal('exportModal'); VP.toast('Interactive exported!', 'success');
         }, 500);

@@ -1599,6 +1599,76 @@
             background: var(--vp-border);
             margin: 4px 8px
         }
+
+        /* Animations */
+        @keyframes flash-in {
+            0% {
+                opacity: 0;
+                transform: scale(2)
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        @keyframes lightning {
+
+            0%,
+            100% {
+                filter: brightness(1)
+            }
+
+            5%,
+            95% {
+                filter: brightness(5)
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translate(0, 0)
+            }
+
+            25% {
+                transform: translate(-5px, 5px)
+            }
+
+            50% {
+                transform: translate(5px, -5px)
+            }
+
+            75% {
+                transform: translate(-5px, -5px)
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1)
+            }
+
+            50% {
+                transform: scale(1.1)
+            }
+
+            100% {
+                transform: scale(1)
+            }
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg)
+            }
+
+            100% {
+                transform: rotate(360deg)
+            }
+        }
     </style>
 </head>
 
@@ -1671,6 +1741,7 @@
                     <button class="ed-tool" onclick="VP.showModal('assetModal','balloons')">💬 Balloon</button>
                     <button class="ed-tool" onclick="VP.showModal('assetModal','sfx')">💥 SFX</button>
                     <button class="ed-tool" onclick="VP.showModal('assetModal','symbols')">✦ Symbol</button>
+                    <button class="ed-tool" onclick="VP.showModal('assetModal','shaders')">🎨 Shader</button>
                 </div>
                 <div class="ed-tool-group">
                     <button class="ed-tool" id="gridToggle" onclick="VP.ed.toggleGrid()">⊞ Grid</button>
@@ -2014,6 +2085,7 @@
     <!-- PART 2: JavaScript will be appended -->
     <script src="app.js"></script>
     <script src="editor.js"></script>
+    <script type="module" src="shader-bridge.js"></script>
     <script>window.addEventListener('load', () => VP.init());</script>
 </body>
 

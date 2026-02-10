@@ -277,7 +277,7 @@ const VP = {
 
     // ── ASSET MODAL ──
     renderAssetModal(type) {
-        const titles = { panels: 'Comic Panels', shapes: 'Shapes & Borders', balloons: 'Speech Balloons', sfx: 'Sound Effects', symbols: 'Symbols & Icons' };
+        const titles = { panels: 'Comic Panels', shapes: 'Shapes & Borders', balloons: 'Speech Balloons', sfx: 'Sound Effects', symbols: 'Symbols & Icons', shaders: 'Shader Blocks' };
         document.getElementById('assetModalTitle').textContent = titles[type] || 'Assets';
         const assets = this.ed.getAssets(type);
         let html = '<div class="asset-grid">';
