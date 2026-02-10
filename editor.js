@@ -170,7 +170,10 @@ VP.ed = {
     },
 
     // Selection
-    selectEl(el) { this.sel = el; this.render(); this.showProps(el); this.showEffects(el); this.updateLayers() },
+    selectEl(el) {
+        if (this.sel && this.sel.id === el.id) return;
+        this.sel = el; this.render(); this.showProps(el); this.showEffects(el); this.updateLayers();
+    },
     deselectAll() { this.sel = null; this.render(); this.showPageProps(); this.updateLayers(); document.getElementById('effectsContent').innerHTML = '<p style="font-size:.82em;color:var(--vp-text-dim);font-style:italic">Select an element for effects</p>' },
     deleteSelected() { if (this.sel) { const p = this.curPage(); const i = p.elements.findIndex(e => e.id === this.sel.id); if (i > -1) { p.elements.splice(i, 1); this.sel = null; this.pushHistory(); this.render(); this.updateLayers() } } },
 
@@ -179,7 +182,9 @@ VP.ed = {
         if (e.target.classList.contains('rh')) return;
         if (el.locked) return;
         if (e.target.isContentEditable) return;
-        e.preventDefault();
+
+        // Don't preventDefault on text elements so we can dblclick/focus them
+        if (el.type !== 'text' && el.type !== 'balloon') e.preventDefault();
         const canvas = document.getElementById('canvas');
         const rect = canvas.getBoundingClientRect();
         const offX = e.clientX / this._zoom - el.x - rect.left / this._zoom;
@@ -288,8 +293,32 @@ VP.ed = {
             if (el.lineHeight) d.style.lineHeight = el.lineHeight;
             if (el.letterSpacing) d.style.letterSpacing = el.letterSpacing + 'px';
             if (el.textShadow) d.style.textShadow = el.textShadow;
-            d.ondblclick = e => { if (!el.locked) { d.contentEditable = true; d.focus() } };
-            d.onblur = e => { d.contentEditable = false; if (d.textContent !== el.content) { el.content = d.textContent; this.pushHistory() } };
+
+            d.ondblclick = e => {
+                e.stopPropagation();
+                if (!el.locked) {
+                    d.contentEditable = true;
+                    d.focus();
+                    // Select all text on double click
+                    const range = document.createRange();
+                    range.selectNodeContents(d);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            };
+            d.onblur = e => {
+                d.contentEditable = false;
+                if (d.textContent !== el.content) {
+                    el.content = d.textContent;
+                    this.pushHistory();
+                }
+            };
+            d.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); d.blur(); }
+                if (e.key === 'Escape') { d.textContent = el.content; d.blur(); }
+                e.stopPropagation(); // Don't trigger shortcuts while editing
+            });
             d.addEventListener('input', e => { el.content = e.target.textContent });
         } else if (el.type === 'image') {
             d.className += ' el-img';
@@ -319,8 +348,31 @@ VP.ed = {
             if (bt === 'caption') { d.style.background = '#000'; d.style.color = '#fff' }
             if (bt === 'whisper') { d.style.background = '#f8f8f8'; d.style.border = '1px dashed #999'; d.style.borderRadius = '16px'; d.style.fontStyle = 'italic' }
             if (bt === 'narration') { d.style.background = '#ffe'; d.style.border = '1px solid #cc9'; d.style.fontStyle = 'italic' }
-            d.ondblclick = e => { if (!el.locked) { d.contentEditable = true; d.focus() } };
-            d.onblur = e => { d.contentEditable = false; if (d.textContent !== el.content) { el.content = d.textContent; this.pushHistory() } };
+
+            d.ondblclick = e => {
+                e.stopPropagation();
+                if (!el.locked) {
+                    d.contentEditable = true;
+                    d.focus();
+                    const range = document.createRange();
+                    range.selectNodeContents(d);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            };
+            d.onblur = e => {
+                d.contentEditable = false;
+                if (d.textContent !== el.content) {
+                    el.content = d.textContent;
+                    this.pushHistory();
+                }
+            };
+            d.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); d.blur(); }
+                if (e.key === 'Escape') { d.textContent = el.content; d.blur(); }
+                e.stopPropagation();
+            });
             d.addEventListener('input', e => { el.content = e.target.textContent });
         } else if (el.type === 'silhouette') {
             d.style.background = el.fill || '#000';
