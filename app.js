@@ -138,6 +138,9 @@ const VP = {
         document.querySelectorAll('.topnav-tab').forEach(t => t.classList.remove('active'));
         const el = document.getElementById('view-' + name);
         if (el) el.classList.add('active');
+
+        // Immersive toggle
+        document.body.classList.toggle('reader-active', name === 'reader');
         document.querySelectorAll('.topnav-tab').forEach(t => { if (t.dataset.view === name) t.classList.add('active') });
         if (name === 'dashboard') this.renderDashboard();
         if (name === 'discover') this.disc.render();
@@ -368,8 +371,8 @@ const VP = {
                 const themeIcons = { classic: '📜', fantasy: '⚔️', cyberpunk: '🌐', conspiracy: '🔍', worldbuilding: '🗺️', comics: '💥', arcane: '🔮' };
                 let html = '';
                 items.forEach((p, i) => {
-                    const bg = `background:linear-gradient(135deg,#1a1a1a,#34495e)`; // Cannot read theme from summary list easily w/o extra query, simulate for now
-                    html += `<div class="discover-card" onclick="VP.openReader(${p.id})"><div class="discover-card-cover" style="${bg}"><div class="cover-bg">${themeIcons[p.genre] || '📖'}</div></div><div class="discover-card-body"><h3>${p.title}</h3><div class="author">by ${p.author_name}</div><div class="meta"><span>Published ${new Date(p.published_at).toLocaleDateString()}</span><span>👁 ${p.read_count || 0} reads</span></div><div class="discover-card-tags">${(p.tags || '').split(',').map(t => `<span>${t}</span>`).join('')}</div></div></div>`;
+                    const bg = `background:linear-gradient(135deg,#1a1a1a,#34495e)`;
+                    html += `<div class="discover-card" onclick="window.open('?read=${p.id}', '_blank')"><div class="discover-card-cover" style="${bg}"><div class="cover-bg">${themeIcons[p.genre] || '📖'}</div></div><div class="discover-card-body"><h3>${p.title}</h3><div class="author">by ${p.author_name}</div><div class="meta"><span>Published ${new Date(p.published_at).toLocaleDateString()}</span><span>👁 ${p.read_count || 0} reads</span></div><div class="discover-card-tags">${(p.tags || '').split(',').map(t => `<span>${t}</span>`).join('')}</div></div></div>`;
                 });
                 grid.innerHTML = html;
             } catch (e) {
@@ -578,8 +581,14 @@ const VP = {
         this.updateCloudIcon(this.isOnline ? 'online' : 'offline');
 
         // Sync Cycle
-        setInterval(() => this.sync(), 60000); // 1 min sync
+        setInterval(() => this.sync(), 30000); // 30 sec sync
         setTimeout(() => this.sync(), 2000); // Initial sync
+
+        // Deep linking
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('read')) {
+            this.openReader(params.get('read'));
+        }
 
         document.addEventListener('click', () => document.getElementById('ctxMenu').classList.remove('active'));
         document.addEventListener('keydown', e => {

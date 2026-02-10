@@ -1157,6 +1157,26 @@
             backface-visibility: hidden;
         }
 
+        /* Immersive Reader */
+        body.reader-active .topnav {
+            display: none !important;
+        }
+
+        #view-reader {
+            background: #050507;
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #view-reader.active {
+            display: flex;
+        }
+
+
         .reader-page.flipped {
             transform: rotateY(-180deg)
         }
@@ -1168,36 +1188,68 @@
         }
 
         .reader-nav {
-            position: absolute;
-            bottom: 24px;
+            position: fixed;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 16px;
             align-items: center;
-            z-index: 10;
+            gap: 20px;
+            background: rgba(20, 20, 25, .85);
+            padding: 10px 24px;
+            border-radius: 40px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(212, 175, 55, .3);
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
         }
 
         .reader-nav button {
-            padding: 10px 24px;
-            background: rgba(212, 175, 55, .9);
+            background: none;
             border: none;
-            color: #000;
+            color: var(--vp-accent);
+            font-weight: bold;
             cursor: pointer;
-            border-radius: var(--radius);
-            font-weight: 600;
-            font-size: .85em;
+            padding: 5px 12px;
+            font-size: .9em;
             transition: all .2s;
         }
 
         .reader-nav button:hover {
-            transform: scale(1.05)
+            transform: scale(1.1);
+            color: #fff;
         }
 
         .reader-nav span {
             color: var(--vp-text-dim);
-            font-size: .85em
+            font-size: .9em;
+            font-family: var(--font-ui);
+            min-width: 60px;
+            text-align: center;
         }
+
+        .reader-close {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 100;
+            background: rgba(20, 20, 25, .8);
+            color: var(--vp-text-dim);
+            border: 1px solid var(--vp-border);
+            padding: 8px 18px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: .85em;
+            backdrop-filter: blur(10px);
+            transition: all .2s;
+        }
+
+        .reader-close:hover {
+            background: var(--vp-danger);
+            color: #fff;
+            border-color: transparent;
+        }
+
 
         /* ═══════════════════════════════════════════════════ */
         /* MODALS                                             */
