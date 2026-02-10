@@ -1,10 +1,8 @@
-const CACHE_NAME = 'void-press-v2';
+const CACHE_NAME = 'void-press-v3';
 const ASSETS_TO_CACHE = [
     '/',
-    '/zine_builder.html',
     '/app.js',
     '/editor.js',
-    '/style.css',
     '/manifest.json'
 ];
 

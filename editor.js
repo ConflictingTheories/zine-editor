@@ -34,7 +34,7 @@ VP.ed = {
         this.history.push(JSON.stringify(this.pages));
         if (this.history.length > this.maxHist) this.history.shift();
         this.historyIdx = this.history.length - 1;
-        if (VP.currentProject) { VP.currentProject.pages = this.pages; VP.saveAll() }
+        if (VP.currentProject) { VP.currentProject.pages = this.pages; VP.saveLocal(); if (VP.isOnline) VP.sync() }
     },
     undo() { if (this.historyIdx > 0) { this.historyIdx--; this.pages = JSON.parse(this.history[this.historyIdx]); this.sel = null; this.render(); this.updateThumbs(); VP.toast('Undo', 'info') } },
     redo() { if (this.historyIdx < this.history.length - 1) { this.historyIdx++; this.pages = JSON.parse(this.history[this.historyIdx]); this.sel = null; this.render(); this.updateThumbs(); VP.toast('Redo', 'info') } },
@@ -406,13 +406,13 @@ VP.ed = {
         const t = this.themes[key]; if (!t) return;
         if (VP.currentProject) VP.currentProject.theme = key;
         document.getElementById('statusText').textContent = 'REALITY: ' + t.status;
-        VP.saveAll(); VP.toast('Theme: ' + key, 'success');
+        VP.saveLocal(); if (VP.isOnline) VP.sync(); VP.toast('Theme: ' + key, 'success');
     },
 
     // Save/Load
     saveProject() {
         if (!VP.currentProject) { VP.toast('No project open', 'error'); return }
-        VP.currentProject.pages = this.pages; VP.saveAll(); VP.toast('Project saved!', 'success');
+        VP.currentProject.pages = this.pages; VP.saveLocal(); if (VP.isOnline) VP.sync(); VP.toast('Project saved!', 'success');
     },
 
     // Export helpers
