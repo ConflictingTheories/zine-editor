@@ -11,24 +11,25 @@ function ExportModal({ onClose }) {
     const { vpState } = useVP()
     const { currentProject } = vpState
     const [exportTab, setExportTab] = useState('pdf')
+    const [embedAssets, setEmbedAssets] = useState(true)
 
     const handleExportHTML = () => {
         if (currentProject) {
-            exportToHTML(currentProject)
+            exportToHTML(currentProject, embedAssets)
             onClose()
         }
     }
 
     const handleExportPDF = () => {
         if (currentProject) {
-            exportToPDF(currentProject)
+            exportToPDF(currentProject, embedAssets)
             onClose()
         }
     }
 
     const handleExportInteractive = () => {
         if (currentProject) {
-            exportToInteractive(currentProject)
+            exportToInteractive(currentProject, embedAssets)
             onClose()
         }
     }
@@ -43,6 +44,14 @@ function ExportModal({ onClose }) {
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
                     <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                 </div>
+
+                <div style={{ margin: '15px 0', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={embedAssets} onChange={e => setEmbedAssets(e.target.checked)} />
+                        <span><b>Compile all files (Offline Mode)</b><br /><small style={{ color: '#aaa' }}>Embeds libraries and assets. No internet required to view.</small></span>
+                    </label>
+                </div>
+
                 {exportTab === 'pdf' && (
                     <div className="export-content active">
                         <p style={styles.desc}>Export as print-ready PDF.</p>

@@ -1,6 +1,45 @@
 // Adapted from old version's editor.js export methods
 
-export const exportToHTML = (project) => {
+// Lightweight WebGL runner to replace external mushu-flow dependency for exports
+const MINI_MUSHU = `
+(function(){
+    window.mushu = function(c) {
+        return {
+            gl: function(fc) {
+                var gl = c.getContext('webgl');
+                if(!gl) return;
+                var p = gl.createProgram();
+                var vs = gl.createShader(gl.VERTEX_SHADER);
+                gl.shaderSource(vs, 'attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}');
+                gl.compileShader(vs);
+                var fs = gl.createShader(gl.FRAGMENT_SHADER);
+                var src = 'precision mediump float;uniform float time;uniform vec2 resolution;' + fc;
+                gl.shaderSource(fs, src);
+                gl.compileShader(fs);
+                if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(fs)); return; }
+                gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p); gl.useProgram(p);
+                var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+                var loc = gl.getAttribLocation(p, 'p'); gl.enableVertexAttribArray(loc);
+                gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+                var tLoc = gl.getUniformLocation(p, 'time');
+                var rLoc = gl.getUniformLocation(p, 'resolution');
+                var st = Date.now();
+                function loop() {
+                    if(!gl.canvas.offsetParent) return; 
+                    gl.viewport(0,0,c.width,c.height);
+                    gl.uniform1f(tLoc, (Date.now()-st)/1000);
+                    gl.uniform2f(rLoc, c.width, c.height);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    requestAnimationFrame(loop);
+                }
+                loop();
+            }
+        };
+    };
+})();`;
+
+export const exportToHTML = (project, embedAssets = false) => {
     const ld = document.createElement('div');
     ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
     ld.innerHTML = '<div>Loading...</div>';
@@ -155,36 +194,51 @@ export const exportToHTML = (project) => {
         }
         /* window.onload handled by startZine */`;
 
-        const msc = `import { mushu } from 'https://unpkg.com/mushu-flow@1.1.0/src/index.js';
+        const msc = `
         document.querySelectorAll('.vp-shader-canvas').forEach(c => {
             try {
                 const code = decodeURIComponent(escape(atob(c.dataset.code)));
-                mushu(c).gl(code);
+                window.mushu(c).gl(code);
             } catch(e) { console.warn(e); }
         });`;
 
         html += `<div class="nav"><button class="btn" onclick="prev()">◀ Prev</button><span id="pg">1/${project.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div>`;
         html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
-        html += `<script>${sc}</script><script type="module">${msc}</script></body></html>`;
+        html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
 
         const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-zine.html'; a.click();
         ld.remove();
     }, 300);
 }
 
-export const exportToInteractive = (project) => {
+export const exportToInteractive = async (project, embedAssets = false) => {
     const ld = document.createElement('div');
     ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
     ld.innerHTML = '<div>Building Interactive Zine...</div>';
     document.body.appendChild(ld);
 
+    // Fetch PageFlip if embedding is requested
+    let pageFlipScript = `<script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>`;
+    if (embedAssets) {
+        try {
+            ld.innerHTML = '<div>Fetching libraries...</div>';
+            const res = await fetch('https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js');
+            if (res.ok) {
+                const text = await res.text();
+                pageFlipScript = `<script>${text}</script>`;
+            }
+        } catch (e) {
+            console.warn('Failed to fetch page-flip for embedding, falling back to CDN');
+        }
+    }
+
     setTimeout(() => {
         let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
-        <script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+        ${pageFlipScript}
         <style>
             body{margin:0;padding:0;background:#111;font-family:Arial,sans-serif;overflow:hidden;height:100vh}
             .book-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-            .page{background-color:#fff;overflow:hidden;position:relative;display:none} /* PageFlip handles display */
+            .page{background-color:#fff;overflow:hidden;position:relative;display:none;box-shadow:inset 0 0 20px rgba(0,0,0,0.1)} 
             .page.-active{display:block}
             .el{position:absolute}
             #vp-overlay{position:fixed;inset:0;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s}
@@ -233,7 +287,7 @@ export const exportToInteractive = (project) => {
             const ov = document.getElementById('vp-overlay'); ov.style.opacity = 0;
             setTimeout(() => { ov.remove(); Gen.init();
                 const el = document.getElementById('book');
-                pf = new St.PageFlip(el, { width: 528, height: 816, size: 'stretch', minWidth: 300, maxWidth: 1000, minHeight: 400, maxHeight: 1400, maxShadowOpacity: 0.5, showCover: true, mobileScrollSupport: false });
+                pf = new St.PageFlip(el, { width: 528, height: 816, size: 'fixed', minWidth: 300, maxWidth: 1000, minHeight: 400, maxHeight: 1400, maxShadowOpacity: 0.5, showCover: true, mobileScrollSupport: false });
                 pf.loadFromHTML(document.querySelectorAll('.page'));
                 pf.on('flip', (e) => { const p = document.querySelectorAll('.page')[e.data]; if(p) P(p.dataset.bgm); });
                 const p0 = document.querySelectorAll('.page')[0]; if(p0) P(p0.dataset.bgm);
@@ -264,14 +318,14 @@ export const exportToInteractive = (project) => {
             const draw=()=>{ if(btn.dataset.playing!=='1')return; vizRaf=requestAnimationFrame(draw); ctx.clearRect(0,0,cvs.width,cvs.height); if(anl){ const len=anl.frequencyBinCount; const data=new Uint8Array(len); anl.getByteFrequencyData(data); const w=cvs.width/len; for(let i=0;i<len;i++){ const h=(data[i]/255)*cvs.height; ctx.fillStyle='#d4af37'; ctx.fillRect(i*w,cvs.height-h,w,h); } } }; if(anl) draw();
         };`;
 
-        const msc = `import { mushu } from 'https://unpkg.com/mushu-flow@1.1.0/src/index.js'; document.querySelectorAll('.vp-shader-canvas').forEach(c => { try { const code = decodeURIComponent(escape(atob(c.dataset.code))); mushu(c).gl(code); } catch(e) { console.warn(e); } });`;
-        html += `<script>${sc}</script><script type="module">${msc}</script></body></html>`;
+        const msc = `document.querySelectorAll('.vp-shader-canvas').forEach(c => { try { const code = decodeURIComponent(escape(atob(c.dataset.code))); window.mushu(c).gl(code); } catch(e) { console.warn(e); } });`;
+        html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
         const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-interactive.html'; a.click();
         ld.remove();
     }, 300);
 }
 
-export const exportToPDF = async (project) => {
+export const exportToPDF = async (project, embedAssets = false) => {
     const ld = document.createElement('div');
     ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
     ld.innerHTML = '<div>Initializing PDF Export...</div>';
