@@ -1,6 +1,10 @@
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+const styles = {
+    modalBox: { maxWidth: '600px' }
+}
+
 function AssetModal({ type, onClose }) {
     const { getAssets, addAsset } = useVP()
     const assets = getAssets(type)
@@ -16,7 +20,7 @@ function AssetModal({ type, onClose }) {
 
     return (
         <div className="modal-overlay active">
-            <div className="modal-box" style={{ maxWidth: '600px' }}>
+            <div className="modal-box" style={styles.modalBox}>
                 <button className="modal-close" onClick={onClose}>✕</button>
                 <h2>{titles[type] || 'Assets'}</h2>
                 <div className="asset-grid">

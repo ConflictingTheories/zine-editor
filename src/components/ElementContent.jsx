@@ -78,6 +78,19 @@ const styles = {
         width: '100%',
         height: '100%',
         pointerEvents: 'none'
+    },
+    video: {
+        width: '100%',
+        height: '100%',
+        background: '#000',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#fff'
+    },
+    audioLog: {
+        width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', border: '1px solid #d4af37', padding: 10, color: '#fff', display: 'flex', flexDirection: 'column',
+        boxSizing: 'border-box'
     }
 }
 
@@ -136,6 +149,20 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
                         width={el.width}
                         height={el.height}
                     />
+                </div>
+            )
+        case 'video':
+            return (
+                <div style={styles.video}>VIDEO: {el.src || 'No Source'}</div>
+            )
+        case 'audio-log':
+            return (
+                <div style={styles.audioLog}>
+                    <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▶</div>
+                        <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
+                    </div>
+                    <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[VISUALIZER: {el.vizTheme}]</div>
                 </div>
             )
         default:

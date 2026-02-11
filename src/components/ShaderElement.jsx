@@ -1,5 +1,9 @@
 import React, { useRef, useEffect } from 'react'
 
+const styles = {
+    canvas: { width: '100%', height: '100%', display: 'block' }
+}
+
 function ShaderElement({ preset = 'plasma', customCode, width = 220, height = 220 }) {
     const canvasRef = useRef(null)
 
@@ -35,7 +39,7 @@ function ShaderElement({ preset = 'plasma', customCode, width = 220, height = 22
             ref={canvasRef}
             width={w}
             height={h}
-            style={{ width: '100%', height: '100%', display: 'block' }}
+            style={styles.canvas}
         />
     )
 }

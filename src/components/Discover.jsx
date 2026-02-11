@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+const styles = {
+    loading: { gridColumn: '1/-1', textAlign: 'center' },
+    empty: { color: 'var(--vp-text-dim)', gridColumn: '1/-1', textAlign: 'center', padding: '60px 0', fontSize: '1.1em' }
+}
+
 function Discover() {
     const { vpState, api, showView, updateVpState } = useVP()
     const [searchQuery, setSearchQuery] = useState('')
@@ -97,16 +102,16 @@ function Discover() {
                 </button>
             </div>
             <div className="discover-grid" id="discoverGrid">
-                {loading ? <p style={{ gridColumn: '1/-1', textAlign: 'center' }}>Loading...</p> :
+                {loading ? <p style={styles.loading}>Loading...</p> :
                     zines.length === 0 ? (
-                        <p style={{ color: 'var(--vp-text-dim)', gridColumn: '1/-1', textAlign: 'center', padding: '60px 0', fontSize: '1.1em' }}>
+                        <p style={styles.empty}>
                             No zines found. Be the first to publish!
                         </p>
                     ) : (
                         zines.map((zine) => (
                             <div key={zine.id} className="discover-card" onClick={() => handleRead(zine.id)}>
                                 <div className="discover-card-cover">
-                                    <div className="cover-bg">{themeIcons[zine.genre] || '📖'}</div>
+                                    <div className="cover-bg" style={{ fontSize: '3em' }}>{themeIcons[zine.genre] || '📖'}</div>
                                 </div>
                                 <div className="discover-card-body">
                                     <h3>{zine.title}</h3>

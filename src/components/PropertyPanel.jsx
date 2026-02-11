@@ -21,6 +21,14 @@ const styles = {
     }
 }
 
+const normalizeColor = (color) => {
+    if (!color) return '#000000'
+    if (color.length === 4 && color.startsWith('#')) {
+        return '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3]
+    }
+    return color
+}
+
 function PropertyPanel({ activeTab = 'props' }) {
     const { vpState, updateElement, updateVpState, playSFX } = useVP()
     const { selection, currentProject } = vpState
@@ -51,7 +59,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                 <div className="prop-section">
                     <div className="form-row">
                         <label>Background</label>
-                        <input type="color" value={page.background || '#ffffff'} onChange={(e) => updatePage('background', e.target.value)} />
+                        <input type="color" value={normalizeColor(page.background || '#ffffff')} onChange={(e) => updatePage('background', e.target.value)} />
                     </div>
                     <div className="form-row">
                         <label>Texture</label>
@@ -64,6 +72,16 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <div className="form-row">
                         <label>Page BGM (URL)</label>
                         <input type="text" value={page.bgm || ''} onChange={(e) => updatePage('bgm', e.target.value)} placeholder="https://.../mood.mp3" />
+                    </div>
+                    <div className="form-row">
+                        <label>Ambient Mood</label>
+                        <select value={page.bgm?.startsWith('gen:') ? page.bgm : ''} onChange={(e) => updatePage('bgm', e.target.value)}>
+                            <option value="">Select Mood...</option>
+                            <option value="gen:drone">Drone (Deep)</option>
+                            <option value="gen:horror">Horror (Tense)</option>
+                            <option value="gen:cyber">Cyber (Digital)</option>
+                            <option value="gen:nature">Nature (Wind/Noise)</option>
+                        </select>
                     </div>
                     <div className="form-row-checkbox">
                         <label><input type="checkbox" checked={!!page.isLocked} onChange={(e) => updatePage('isLocked', e.target.checked)} /> Locked (skip in flow)</label>
@@ -107,7 +125,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                     </div>
                     <div className="prop-row">
                         <label>Border Color</label>
-                        <input type="color" value={element.borderColor || '#000000'} onChange={(e) => handleChange('borderColor', e.target.value)} />
+                        <input type="color" value={normalizeColor(element.borderColor || '#000000')} onChange={(e) => handleChange('borderColor', e.target.value)} />
                     </div>
                     <div className="prop-row">
                         <label>Border Radius</label>
@@ -157,7 +175,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                             </div>
                             <div className="prop-row">
                                 <label>Stroke Color</label>
-                                <input type="color" value={element.strokeColor || '#ffffff'} onChange={(e) => handleChange('strokeColor', e.target.value)} />
+                                <input type="color" value={normalizeColor(element.strokeColor || '#ffffff')} onChange={(e) => handleChange('strokeColor', e.target.value)} />
                             </div>
                         </>
                     )}
@@ -306,7 +324,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label>Size & Color</label>
                         <div className="input-group">
                             <input type="number" value={element.fontSize || 16} onChange={(e) => handleChange('fontSize', parseInt(e.target.value))} />
-                            <input type="color" value={element.color || '#000000'} onChange={(e) => handleChange('color', e.target.value)} />
+                            <input type="color" value={normalizeColor(element.color || '#000000')} onChange={(e) => handleChange('color', e.target.value)} />
                         </div>
                     </div>
                     <div className="form-row">
@@ -340,6 +358,27 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label>Radius</label>
                         <input type="number" value={element.imgRadius || 0} onChange={(e) => handleChange('imgRadius', parseInt(e.target.value))} />
                     </div>
+                </div>
+            )}
+
+            {(element.type === 'video' || element.type === 'audio-log') && (
+                <div className="prop-section">
+                    <h4>Media Source</h4>
+                    <div className="form-row">
+                        <label>Source URL</label>
+                        <input type="text" value={element.src || ''} onChange={(e) => handleChange('src', e.target.value)} placeholder="https://..." />
+                    </div>
+                    {element.type === 'audio-log' && (
+                        <>
+                            <div className="form-row">
+                                <label>Visualizer Theme</label>
+                                <select value={element.vizTheme || 'bars'} onChange={(e) => handleChange('vizTheme', e.target.value)}>
+                                    <option value="bars">Bars</option>
+                                    <option value="circle">Circle</option>
+                                </select>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 

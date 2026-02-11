@@ -5,6 +5,12 @@ import ShaderElement from './ShaderElement.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import CanvasElement from './CanvasElement.jsx'
 
+const styles = {
+    canvas: (page) => ({
+        background: page.background || '#fff', width: 528, height: 816
+    })
+}
+
 function Canvas({ page, pageIdx, snapOn = true, gridOn = false }) {
     const { vpState, updateVpState } = useVP()
     const { selection } = vpState
@@ -32,7 +38,7 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false }) {
         <>
             <div
                 className={`ed-canvas ${page.orientation || 'portrait'} ${gridOn ? 'show-grid' : ''}`}
-                style={{ background: page.background || '#fff', width: 528, height: 816 }}
+                style={styles.canvas(page)}
                 onClick={handleCanvasClick}
                 onContextMenu={e => handleContextMenu(e, null)}
                 ref={canvasRef}

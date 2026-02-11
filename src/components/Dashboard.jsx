@@ -1,6 +1,10 @@
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+const styles = {
+    statusIcon: { fontSize: '12px' }
+}
+
 function Dashboard() {
     const { vpState, updateVpState, showView, showModal, createProject, openProject, saveLocal } = useVP()
 
@@ -82,7 +86,7 @@ function Dashboard() {
                                 <div className="cover-icon">📖</div>
                             </div>
                             <div className="zine-card-body">
-                                <h3>{project.title || 'Untitled Zine'} <span style={{ fontSize: '12px' }}>{statusIcon}</span></h3>
+                                <h3>{project.title || 'Untitled Zine'} <span style={styles.statusIcon}>{statusIcon}</span></h3>
                                 <p>{project.pages?.length || 0} pages · {project.theme || 'classic'}</p>
                                 <div className="zine-card-actions">
                                     <button onClick={() => handleOpenProject(index)}>Edit</button>

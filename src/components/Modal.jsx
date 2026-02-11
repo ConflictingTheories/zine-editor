@@ -13,6 +13,22 @@ const THEME_OPTIONS = [
     { key: 'arcane', name: 'Arcane Lore', desc: 'Sigils, runes & the unknowable', colors: ['#6a040f', '#ff9e00', '#3c096c', '#70e000'] }
 ]
 
+const styles = {
+    authBox: { maxWidth: '400px' },
+    centerText: { textAlign: 'center' },
+    authBtnGroup: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px' },
+    fullWidth: { width: '100%' },
+    publishBtn: { marginTop: '12px', width: '100%' },
+    themeBox: { maxWidth: '700px' },
+    themeDesc: { color: 'var(--vp-text-dim)', marginBottom: '12px' },
+    createBtn: { width: '100%', marginTop: '20px' },
+    helpBox: { maxWidth: '800px' },
+    premiumBox: { maxWidth: '700px' },
+    premiumDesc: { color: 'var(--vp-text-dim)', marginBottom: '20px' },
+    priceSuffix: { fontSize: '0.4em', color: 'var(--vp-text-dim)' },
+    upgradeBtn: { width: '100%', marginTop: '16px' }
+}
+
 function Modal() {
     const { vpState, updateVpState, closeModal, login, register, createProject, publishZine } = useVP()
     const [authMode, setAuthMode] = useState('login')
@@ -46,9 +62,9 @@ function Modal() {
 
     const renderAuthModal = () => (
         <div className="modal-overlay active" id="authModal">
-            <div className="modal-box" style={{ maxWidth: '400px' }}>
+            <div className="modal-box" style={styles.authBox}>
                 <button className="modal-close" onClick={() => closeModal('authModal')}>✕</button>
-                <h2 style={{ textAlign: 'center' }}>{authMode === 'login' ? 'Login' : 'Register'}</h2>
+                <h2 style={styles.centerText}>{authMode === 'login' ? 'Login' : 'Register'}</h2>
                 <form onSubmit={handleAuthSubmit}>
                     {authMode === 'register' && (
                         <div className="form-row" id="authUserGroup">
@@ -85,15 +101,15 @@ function Modal() {
                             required
                         />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px' }}>
-                        <button className="btn-primary topnav-btn" type="submit" style={{ width: '100%' }}>
+                    <div style={styles.authBtnGroup}>
+                        <button className="btn-primary topnav-btn" type="submit" style={styles.fullWidth}>
                             {authMode === 'login' ? 'Login' : 'Register'}
                         </button>
                         <button
                             className="btn-secondary topnav-btn secondary"
                             type="button"
                             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-                            style={{ width: '100%' }}
+                            style={styles.fullWidth}
                         >
                             {authMode === 'login' ? 'Need an account?' : 'Have an account?'}
                         </button>
@@ -176,7 +192,7 @@ function Modal() {
                             <input type="checkbox" id="pubGuidelines" required /> I acknowledge the community guidelines
                         </label>
                     </div>
-                    <button className="topnav-btn" type="submit" style={{ marginTop: '12px', width: '100%' }}>
+                    <button className="topnav-btn" type="submit" style={styles.publishBtn}>
                         🚀 Publish to Void Press
                     </button>
                 </form>
@@ -186,10 +202,10 @@ function Modal() {
 
     const renderThemePickerModal = () => (
         <div className="modal-overlay active" id="themePickerModal">
-            <div className="modal-box" style={{ maxWidth: '700px' }}>
+            <div className="modal-box" style={styles.themeBox}>
                 <button className="modal-close" onClick={() => closeModal('themePicker')}>✕</button>
                 <h2>Choose Your Theme</h2>
-                <p style={{ color: 'var(--vp-text-dim)', marginBottom: '12px' }}>
+                <p style={styles.themeDesc}>
                     Select an aesthetic for your new zine, then click Create Zine.
                 </p>
                 <div className="theme-grid">
@@ -209,7 +225,7 @@ function Modal() {
                         </div>
                     ))}
                 </div>
-                <button className="topnav-btn" onClick={() => createProject(vpState.selectedTheme)} style={{ width: '100%', marginTop: '20px' }}>
+                <button className="topnav-btn" onClick={() => createProject(vpState.selectedTheme)} style={styles.createBtn}>
                     Create Zine
                 </button>
             </div>
@@ -218,7 +234,7 @@ function Modal() {
 
     const renderHelpModal = () => (
         <div className="modal-overlay active" id="helpModal">
-            <div className="modal-box" style={{ maxWidth: '800px' }}>
+            <div className="modal-box" style={styles.helpBox}>
                 <button className="modal-close" onClick={() => closeModal('helpModal')}>✕</button>
                 <h2>Voyagers&apos; Reference Guide</h2>
                 <div className="help-layout">
@@ -280,10 +296,10 @@ function Modal() {
 
     const renderPremiumModal = () => (
         <div className="modal-overlay active" id="premiumModal">
-            <div className="modal-box" style={{ maxWidth: '700px' }}>
+            <div className="modal-box" style={styles.premiumBox}>
                 <button className="modal-close" onClick={() => closeModal('premiumModal')}>✕</button>
                 <h2>Upgrade to Premium</h2>
-                <p style={{ color: 'var(--vp-text-dim)', marginBottom: '20px' }}>Unlock the full power of Void Press.</p>
+                <p style={styles.premiumDesc}>Unlock the full power of Void Press.</p>
                 <div className="premium-features">
                     <div className="premium-col">
                         <h3>Free</h3>
@@ -297,7 +313,7 @@ function Modal() {
                     </div>
                     <div className="premium-col highlight">
                         <h3>Premium</h3>
-                        <div className="price">$5<span style={{ fontSize: '0.4em', color: 'var(--vp-text-dim)' }}>/mo</span></div>
+                        <div className="price">$5<span style={styles.priceSuffix}>/mo</span></div>
                         <ul>
                             <li>Unlimited publishing</li>
                             <li>Priority in discovery</li>
@@ -306,7 +322,7 @@ function Modal() {
                             <li>Premium badge</li>
                             <li>All export formats</li>
                         </ul>
-                        <button className="topnav-btn" onClick={() => { updateVpState({ user: { ...vpState.user, is_premium: true } }); closeModal('premiumModal'); }} style={{ width: '100%', marginTop: '16px' }}>Upgrade Now</button>
+                        <button className="topnav-btn" onClick={() => { updateVpState({ user: { ...vpState.user, is_premium: true } }); closeModal('premiumModal'); }} style={styles.upgradeBtn}>Upgrade Now</button>
                     </div>
                 </div>
             </div>

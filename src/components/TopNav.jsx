@@ -1,6 +1,11 @@
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+const styles = {
+    userProfile: { display: 'flex', alignItems: 'center', gap: '8px' },
+    loginBtn: { padding: '4px 12px', fontSize: '12px' }
+}
+
 function TopNav() {
     const { vpState, updateVpState, showView, showModal } = useVP()
 
@@ -56,14 +61,14 @@ function TopNav() {
                 <button className="topnav-btn secondary" onClick={handlePremium}>Upgrade</button>
                 <div className="user-profile">
                     {vpState.user ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={styles.userProfile}>
                             <div className="topnav-avatar">{vpState.user.username[0]}</div>
                             <button onClick={() => updateVpState({ user: null, token: null })}>
                                 Logout
                             </button>
                         </div>
                     ) : (
-                        <button onClick={handleAuth} className="btn-primary" style={{ padding: '4px 12px', fontSize: '12px' }}>
+                        <button onClick={handleAuth} className="btn-primary" style={styles.loginBtn}>
                             Login
                         </button>
                     )}

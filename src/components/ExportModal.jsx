@@ -2,6 +2,11 @@ import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { exportToHTML, exportToPDF } from '../utils/exportSystem'
 
+const styles = {
+    desc: { marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' },
+    btn: { marginTop: 12 }
+}
+
 function ExportModal({ onClose }) {
     const { vpState } = useVP()
     const { currentProject } = vpState
@@ -40,20 +45,20 @@ function ExportModal({ onClose }) {
                 </div>
                 {exportTab === 'pdf' && (
                     <div className="export-content active">
-                        <p style={{ marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Export as print-ready PDF.</p>
-                        <button className="topnav-btn" onClick={handleExportPDF} style={{ marginTop: 12 }}>Generate PDF</button>
+                        <p style={styles.desc}>Export as print-ready PDF.</p>
+                        <button className="topnav-btn" onClick={handleExportPDF} style={styles.btn}>Generate PDF</button>
                     </div>
                 )}
                 {exportTab === 'html' && (
                     <div className="export-content">
-                        <p style={{ marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Export as standalone HTML with navigation.</p>
-                        <button className="topnav-btn" onClick={handleExportHTML} style={{ marginTop: 12 }}>Generate HTML</button>
+                        <p style={styles.desc}>Export as standalone HTML with navigation.</p>
+                        <button className="topnav-btn" onClick={handleExportHTML} style={styles.btn}>Generate HTML</button>
                     </div>
                 )}
                 {exportTab === 'interactive' && (
                     <div className="export-content">
-                        <p style={{ marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' }}>Interactive flipbook with page-turn and interactions.</p>
-                        <button className="topnav-btn" onClick={handleExportInteractive} style={{ marginTop: 12 }}>Generate Interactive</button>
+                        <p style={styles.desc}>Interactive flipbook with page-turn and interactions.</p>
+                        <button className="topnav-btn" onClick={handleExportInteractive} style={styles.btn}>Generate Interactive</button>
                     </div>
                 )}
             </div>

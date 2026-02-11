@@ -2,6 +2,52 @@ import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 
+const styles = {
+    toolbarSpacer: { flex: 1 },
+    page: (page) => ({
+        background: page.background || '#fff',
+        position: 'relative'
+    }),
+    texture: (page) => ({
+        position: 'absolute', inset: 0,
+        backgroundImage: `url(${page.texture})`,
+        backgroundSize: 'cover', opacity: 0.2,
+        pointerEvents: 'none'
+    }),
+    element: (el, hidden) => ({
+        position: 'absolute',
+        left: el.x, top: el.y, width: el.width, height: el.height,
+        transform: `rotate(${el.rotation || 0}deg)`,
+        zIndex: el.zIndex,
+        opacity: el.opacity ?? 1,
+        mixBlendMode: el.blendMode || 'normal',
+        cursor: el.action ? 'pointer' : 'default',
+        display: hidden ? 'none' : undefined
+    }),
+    text: (el) => ({
+        fontSize: el.fontSize, color: el.color, fontFamily: el.fontFamily,
+        textAlign: el.align, fontWeight: el.bold ? 'bold' : 'normal',
+        fontStyle: el.italic ? 'italic' : 'normal'
+    }),
+    image: (el) => ({
+        width: '100%', height: '100%', objectFit: el.objectFit || 'contain'
+    }),
+    panel: (el) => ({
+        width: '100%', height: '100%',
+        border: `${el.panelBorderWidth}px ${el.panelBorderStyle} ${el.panelBorderColor}`,
+        borderRadius: el.panelRadius, background: el.fill
+    }),
+    shape: (el) => ({
+        width: '100%', height: '100%',
+        background: el.shape === 'triangle' ? 'transparent' : el.fill,
+        borderRadius: el.shape === 'circle' ? '50%' : 0,
+        clipPath: el.shape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none'
+    }),
+    modalControls: {
+        display: 'flex', gap: '10px', marginTop: '15px'
+    }
+}
+
 function Reader() {
     const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx } = useVP()
     const { currentProject, readerMode } = vpState
@@ -113,68 +159,41 @@ function Reader() {
                     if (readerMode === 'preview') showView('editor')
                     else showView('discover')
                 }}>✕ Close</button>
-                <div style={{ flex: 1 }}></div>
+                <div style={styles.toolbarSpacer}></div>
                 <span>{pageIdx + 1} / {project.pages.length}</span>
             </div>
 
             <div className="reader-canvas-wrap">
-                <div className="reader-page" style={{ background: page.background || '#fff', position: 'relative' }}>
+                <div className="reader-page" style={styles.page(page)}>
                     {page.texture && (
-                        <div style={{
-                            position: 'absolute', inset: 0,
-                            backgroundImage: `url(${page.texture})`,
-                            backgroundSize: 'cover', opacity: 0.2,
-                            pointerEvents: 'none'
-                        }} />
+                        <div style={styles.texture(page)} />
                     )}
                     {page.elements.filter(e => !e.hidden).map(el => {
                         const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
                         return (
-                        <div
-                            key={el.id}
-                            className="reader-el reader-el-item"
-                            data-label={el.label || ''}
-                            style={{
-                                position: 'absolute',
-                                left: el.x, top: el.y, width: el.width, height: el.height,
-                                transform: `rotate(${el.rotation || 0}deg)`,
-                                zIndex: el.zIndex,
-                                opacity: el.opacity ?? 1,
-                                mixBlendMode: el.blendMode || 'normal',
-                                cursor: el.action ? 'pointer' : 'default',
-                                display: hiddenByToggle ? 'none' : undefined
-                            }}
-                            onClick={() => handleInteraction(el)}
-                        >
-                            {el.type === 'text' && (
-                                <div style={{
-                                    fontSize: el.fontSize, color: el.color, fontFamily: el.fontFamily,
-                                    textAlign: el.align, fontWeight: el.bold ? 'bold' : 'normal',
-                                    fontStyle: el.italic ? 'italic' : 'normal'
-                                }}>{el.content}</div>
-                            )}
-                            {el.type === 'image' && (
-                                <img src={el.src} style={{ width: '100%', height: '100%', objectFit: el.objectFit || 'contain' }} alt="" />
-                            )}
-                            {el.type === 'panel' && (
-                                <div style={{
-                                    width: '100%', height: '100%',
-                                    border: `${el.panelBorderWidth}px ${el.panelBorderStyle} ${el.panelBorderColor}`,
-                                    borderRadius: el.panelRadius, background: el.fill
-                                }} />
-                            )}
-                            {el.type === 'shape' && (
-                                <div style={{
-                                    width: '100%', height: '100%',
-                                    background: el.shape === 'triangle' ? 'transparent' : el.fill,
-                                    borderRadius: el.shape === 'circle' ? '50%' : 0,
-                                    clipPath: el.shape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none'
-                                }} />
-                            )}
-                            {el.type === 'shader' && (
-                                <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
-                            )}
-                        </div>
+                            <div
+                                key={el.id}
+                                className="reader-el reader-el-item"
+                                data-label={el.label || ''}
+                                style={styles.element(el, hiddenByToggle)}
+                                onClick={() => handleInteraction(el)}
+                            >
+                                {el.type === 'text' && (
+                                    <div style={styles.text(el)}>{el.content}</div>
+                                )}
+                                {el.type === 'image' && (
+                                    <img src={el.src} style={styles.image(el)} alt="" />
+                                )}
+                                {el.type === 'panel' && (
+                                    <div style={styles.panel(el)} />
+                                )}
+                                {el.type === 'shape' && (
+                                    <div style={styles.shape(el)} />
+                                )}
+                                {el.type === 'shader' && (
+                                    <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
+                                )}
+                            </div>
                         )
                     })}
                 </div>
@@ -198,7 +217,7 @@ function Reader() {
                             onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
                             autoFocus
                         />
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                        <div style={styles.modalControls}>
                             <button className="btn-primary" onClick={handlePasswordSubmit}>Unlock</button>
                             <button className="btn-secondary" onClick={() => setPasswordModal({ active: false, targetIdx: -1, value: '' })}>Cancel</button>
                         </div>
