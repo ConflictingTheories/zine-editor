@@ -49,9 +49,8 @@ const PRESETS = {
         float n = noise2D(uv * 8.0 + time * 3.0);
         float bolt = smoothstep(0.02, 0.0, abs(uv.x - 0.5 + n * 0.3) - 0.005 / (d + 0.1));
         float glow = exp(-d * 4.0) * 0.3;
-        float flash = pow(max(0.0, sin(time * 8.0)), 20.0) * 0.5;
-        vec3 col = vec3(0.4, 0.6, 1.0) * (bolt + glow + flash);
-        O = vec4(col, max(bolt, glow + flash) > 0.05 ? 1.0 : 0.0);
+        vec3 col = vec3(0.4, 0.6, 1.0) * (bolt + glow);
+        O = vec4(col, max(bolt, glow) > 0.05 ? 1.0 : 0.0);
       }
     `
     },

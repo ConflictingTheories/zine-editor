@@ -96,7 +96,7 @@ const VPProvider = ({ children }) => {
         setVpState(prev => {
             try {
                 localStorage.setItem('vp_projects', JSON.stringify(prev.projects))
-            } catch (e) {}
+            } catch (e) { }
             return prev
         })
     }
@@ -113,7 +113,7 @@ const VPProvider = ({ children }) => {
         if (vpState.projects?.length > 0) {
             try {
                 localStorage.setItem('vp_projects', JSON.stringify(vpState.projects))
-            } catch (e) {}
+            } catch (e) { }
         }
     }, [vpState.projects])
 
@@ -344,7 +344,7 @@ const VPProvider = ({ children }) => {
         const a = new Audio(url)
         a.loop = true
         a.volume = 0.5
-        a.play().catch(() => {})
+        a.play().catch(() => { })
         bgmRef.current = a
     }
 
@@ -359,7 +359,7 @@ const VPProvider = ({ children }) => {
         if (!url) return
         const a = new Audio(url)
         a.volume = 0.7
-        a.play().catch(() => {})
+        a.play().catch(() => { })
     }
 
     const triggerVfx = (type) => {
@@ -403,7 +403,13 @@ const VPProvider = ({ children }) => {
             { id: 'skull', preview: '<span style="font-size:32px">☠</span>', name: 'Skull' },
             { id: 'star_symbol', preview: '<span style="font-size:32px">✦</span>', name: 'Star' },
             { id: 'eye', preview: '<span style="font-size:32px">👁</span>', name: 'Eye' },
+            { id: 'biohazard', preview: '<span style="font-size:32px">☣</span>', name: 'Biohazard' },
+            { id: 'radiation', preview: '<span style="font-size:32px">☢</span>', name: 'Radiation' },
+            { id: 'compass', preview: '<span style="font-size:32px">🧭</span>', name: 'Compass' },
+            { id: 'rune', preview: '<span style="font-size:32px">ᚱ</span>', name: 'Rune' },
+            { id: 'ankh', preview: '<span style="font-size:32px">☥</span>', name: 'Ankh' },
             { id: 'omega', preview: '<span style="font-size:32px">Ω</span>', name: 'Omega' },
+            { id: 'infinity', preview: '<span style="font-size:32px">∞</span>', name: 'Infinity' },
             { id: 'trident', preview: '<span style="font-size:32px">🔱</span>', name: 'Trident' }
         ]
         const shaderList = typeof window !== 'undefined' && window.VPShader?.getPresetList

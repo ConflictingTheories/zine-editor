@@ -8,12 +8,25 @@ const VFX_OPTIONS = [
     { id: 'pulse', name: 'Pulse' }
 ]
 
+const styles = {
+    emptyMsg: {
+        padding: '20px',
+        fontStyle: 'italic',
+        color: 'var(--vp-text-dim)'
+    },
+    header: {
+        fontSize: '0.75em',
+        color: 'var(--vp-accent)',
+        marginBottom: 10
+    }
+}
+
 function PropertyPanel({ activeTab = 'props' }) {
     const { vpState, updateElement, updateVpState, playSFX } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
-        return <p className="empty-msg" style={{ padding: '20px', fontStyle: 'italic', color: 'var(--vp-text-dim)' }}>Select an element or the canvas to edit</p>
+        return <p className="empty-msg" style={styles.emptyMsg}>Select an element or the canvas to edit</p>
     }
 
     const pageIdx = selection?.pageIdx ?? 0
@@ -22,10 +35,10 @@ function PropertyPanel({ activeTab = 'props' }) {
 
     if (selection.type === 'page' || !selection.id) {
         if (activeTab === 'effects') {
-            return <p className="empty-msg" style={{ padding: '20px', fontStyle: 'italic', color: 'var(--vp-text-dim)' }}>Select an element to edit effects</p>
+            return <p className="empty-msg" style={styles.emptyMsg}>Select an element to edit effects</p>
         }
         if (activeTab === 'logic') {
-            return <p className="empty-msg" style={{ padding: '20px', fontStyle: 'italic', color: 'var(--vp-text-dim)' }}>Select an element to set interactions</p>
+            return <p className="empty-msg" style={styles.emptyMsg}>Select an element to set interactions</p>
         }
         const updatePage = (key, val) => {
             const project = JSON.parse(JSON.stringify(currentProject))
@@ -34,7 +47,7 @@ function PropertyPanel({ activeTab = 'props' }) {
         }
         return (
             <div className="property-panel">
-                <h4 style={{ fontSize: '0.75em', color: 'var(--vp-accent)', marginBottom: 10 }}>PAGE PROPERTIES</h4>
+                <h4 style={styles.header}>PAGE PROPERTIES</h4>
                 <div className="prop-section">
                     <div className="form-row">
                         <label>Background</label>
@@ -99,6 +112,20 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <div className="prop-row">
                         <label>Border Radius</label>
                         <input type="number" value={element.borderRadius || 0} onChange={(e) => handleChange('borderRadius', parseInt(e.target.value) || 0)} />
+                    </div>
+                    <div className="prop-row">
+                        <label>Blend Mode</label>
+                        <select value={element.blendMode || 'normal'} onChange={(e) => handleChange('blendMode', e.target.value)}>
+                            <option value="normal">Normal</option>
+                            <option value="multiply">Multiply</option>
+                            <option value="screen">Screen</option>
+                            <option value="overlay">Overlay</option>
+                            <option value="darken">Darken</option>
+                            <option value="lighten">Lighten</option>
+                            <option value="color-dodge">Color Dodge</option>
+                            <option value="hard-light">Hard Light</option>
+                            <option value="difference">Difference</option>
+                        </select>
                     </div>
                     <div className="prop-row">
                         <label>Animation</label>

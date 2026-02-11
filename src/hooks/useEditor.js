@@ -1,8 +1,8 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
 export function useEditor() {
-    const { vpState, updateElement, updateVpState } = useVP()
+    const { vpState, updateElement, updateVpState, moveLayer } = useVP()
     const [isDragging, setIsDragging] = useState(false)
     const [isResizing, setIsResizing] = useState(false)
     const [isRotating, setIsRotating] = useState(false)
@@ -97,6 +97,35 @@ export function useEditor() {
         window.addEventListener('mousemove', onMouseMove)
         window.addEventListener('mouseup', onMouseUp)
     }, [updateElement])
+
+    // Hotkeys for layer movement
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (!vpState.selection || vpState.selection.type !== 'element') return
+
+            const isCtrl = e.ctrlKey || e.metaKey
+            if (!isCtrl) return
+
+            if (e.key === '[') {
+                e.preventDefault()
+                if (e.shiftKey) {
+                    moveLayer('bottom') // Ctrl+Shift+[ : Move to back
+                } else {
+                    moveLayer('down') // Ctrl+[ : Move back
+                }
+            } else if (e.key === ']') {
+                e.preventDefault()
+                if (e.shiftKey) {
+                    moveLayer('top') // Ctrl+Shift+] : Move to front
+                } else {
+                    moveLayer('up') // Ctrl+] : Move forward
+                }
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [vpState.selection, moveLayer])
 
     return {
         startDrag,

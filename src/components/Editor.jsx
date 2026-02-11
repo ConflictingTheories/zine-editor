@@ -3,6 +3,29 @@ import { useVP } from '../context/VPContext.jsx'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 
+const styles = {
+    themeSelect: {
+        padding: '5px 8px',
+        background: 'var(--vp-surface2)',
+        border: '1px solid var(--vp-border)',
+        color: 'var(--vp-text)',
+        borderRadius: '4px',
+        fontSize: '0.78em'
+    },
+    publishBtn: {
+        background: 'var(--vp-accent)',
+        color: '#000'
+    },
+    orientationSelect: {
+        padding: '4px 10px',
+        background: 'var(--vp-surface2)',
+        border: '1px solid var(--vp-border)',
+        color: 'var(--vp-text)',
+        fontSize: '0.78em',
+        borderRadius: '3px'
+    }
+}
+
 function Editor() {
     const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
@@ -112,7 +135,7 @@ function Editor() {
                     <select
                         value={project.theme || 'classic'}
                         onChange={(e) => applyTheme(e.target.value)}
-                        style={{ padding: '5px 8px', background: 'var(--vp-surface2)', border: '1px solid var(--vp-border)', color: 'var(--vp-text)', borderRadius: '4px', fontSize: '0.78em' }}
+                        style={styles.themeSelect}
                     >
                         <option value="classic">Classic Literature</option>
                         <option value="fantasy">Medieval Fantasy</option>
@@ -129,7 +152,7 @@ function Editor() {
                     <button className="ed-tool" onClick={saveProject}>💾 Save</button>
                     <button className="ed-tool" onClick={() => previewProject()}>👁 Preview</button>
                     <button className="ed-tool" onClick={() => showModal('exportModal')}>📤 Export</button>
-                    <button className="ed-tool" onClick={() => showModal('publishModal')} style={{ background: 'var(--vp-accent)', color: '#000' }}>Publish</button>
+                    <button className="ed-tool" onClick={() => showModal('publishModal')} style={styles.publishBtn}>Publish</button>
                 </div>
             </div>
 
@@ -193,10 +216,10 @@ function Editor() {
                             value={currentPage?.orientation || 'portrait'}
                             onChange={(e) => {
                                 const o = e.target.value
-                                updateVpState({}) 
+                                updateVpState({})
                                 // Orientation could be stored on page: updateElement(pageIdx, ...) - for now leave as portrait
                             }}
-                            style={{ padding: '4px 10px', background: 'var(--vp-surface2)', border: '1px solid var(--vp-border)', color: 'var(--vp-text)', fontSize: '0.78em', borderRadius: '3px' }}
+                            style={styles.orientationSelect}
                         >
                             <option value="portrait">Portrait</option>
                             <option value="landscape">Landscape</option>
