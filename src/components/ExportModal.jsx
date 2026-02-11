@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
-import { exportToHTML, exportToPDF } from '../utils/exportSystem'
+import { exportToHTML, exportToPDF, exportToInteractive } from '../utils/exportSystem'
 
 const styles = {
     desc: { marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' },
@@ -28,7 +28,7 @@ function ExportModal({ onClose }) {
 
     const handleExportInteractive = () => {
         if (currentProject) {
-            exportToHTML(currentProject)
+            exportToInteractive(currentProject)
             onClose()
         }
     }
@@ -50,13 +50,13 @@ function ExportModal({ onClose }) {
                     </div>
                 )}
                 {exportTab === 'html' && (
-                    <div className="export-content">
+                    <div className="export-content active">
                         <p style={styles.desc}>Export as standalone HTML with navigation.</p>
                         <button className="topnav-btn" onClick={handleExportHTML} style={styles.btn}>Generate HTML</button>
                     </div>
                 )}
                 {exportTab === 'interactive' && (
-                    <div className="export-content">
+                    <div className="export-content active">
                         <p style={styles.desc}>Interactive flipbook with page-turn and interactions.</p>
                         <button className="topnav-btn" onClick={handleExportInteractive} style={styles.btn}>Generate Interactive</button>
                     </div>

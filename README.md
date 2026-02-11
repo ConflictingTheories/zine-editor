@@ -28,6 +28,7 @@ Void Press is an all-in-one platform for creating, reading, and publishing inter
 - **Frontend**: Vanilla JavaScript (ES6+), HTML5, CSS3.
 - **Rendering**: CSS Flexbox/Grid for layout, WebGL (via Mushu-flow) for shaders.
 - **Backend**: Express.js (Node.js) with SQLite3.
+- **MCP Interface**: Server-side API interface exposing all editor functionalities, authentication, and detailed zine manipulation capabilities for automation and AI integrations.
 - **Offline**: PWA Service Workers + LocalStorage.
 - **Export**: jsPDF for print, custom templates for Interactive HTML.
 
