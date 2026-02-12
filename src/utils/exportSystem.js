@@ -1,4 +1,28 @@
 // Adapted from old version's editor.js export methods
+import MCPClient from './mcpClient.js'
+
+// Server-side export using MCP (for automation)
+export const exportToHTMLServer = async (project) => {
+    const mcp = new MCPClient()
+    try {
+        const result = await mcp.exportHTML(project)
+        return result.html
+    } catch (error) {
+        console.error('Server HTML export failed:', error)
+        throw error
+    }
+}
+
+export const exportToPDFServer = async (project) => {
+    const mcp = new MCPClient()
+    try {
+        const result = await mcp.exportPDF(project)
+        return result
+    } catch (error) {
+        console.error('Server PDF export failed:', error)
+        throw error
+    }
+}
 
 // Lightweight WebGL runner to replace external mushu-flow dependency for exports
 const MINI_MUSHU = `
@@ -26,11 +50,13 @@ const MINI_MUSHU = `
                 var rLoc = gl.getUniformLocation(p, 'resolution');
                 var st = Date.now();
                 function loop() {
-                    if(!gl.canvas.offsetParent) return; 
-                    gl.viewport(0,0,c.width,c.height);
-                    gl.uniform1f(tLoc, (Date.now()-st)/1000);
-                    gl.uniform2f(rLoc, c.width, c.height);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    // Only draw if visible, but keep loop alive for navigation
+                    if(gl.canvas.offsetParent) {
+                        gl.viewport(0,0,c.width,c.height);
+                        gl.uniform1f(tLoc, (Date.now()-st)/1000);
+                        gl.uniform2f(rLoc, c.width, c.height);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
                     requestAnimationFrame(loop);
                 }
                 loop();
@@ -48,16 +74,27 @@ export const exportToHTML = (project, embedAssets = false) => {
     setTimeout(() => {
         let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
         <style>
-            body{margin:0;padding:20px;background:#111;font-family:Arial,sans-serif}
-            .page-wrap{max-width:528px;margin:0 auto;display:none}.page-wrap.active{display:block}
-            .page{position:relative;width:100%;aspect-ratio:5.5/8.5;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.5);margin-bottom:20px;overflow:hidden}.el{position:absolute}
-            .nav{text-align:center;padding:20px}.btn{padding:10px 24px;background:#d4af37;color:#000;border:none;cursor:pointer;font-weight:600;margin:0 8px;border-radius:6px}
+            body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+            .reader-header{padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
+            .reader-title{font-weight:700;letter-spacing:1px;color:#d4af37;font-size:1.1em}
+            .reader-main{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
+            .page-wrap{width:528px;height:816px;background:#fff;box-shadow:0 0 50px rgba(0,0,0,0.6);position:relative;display:none;transform-origin:center;overflow:hidden}
+            .page-wrap.active{display:block;animation:fadeIn 0.4s cubic-bezier(0.25, 1, 0.5, 1)}
+            @keyframes fadeIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+            .reader-controls{padding:20px;background:#1a1a1a;border-top:1px solid #333;display:flex;justify-content:center;gap:20px;align-items:center;z-index:10}
+            .btn{background:transparent;border:1px solid #444;color:#aaa;padding:8px 20px;border-radius:4px;cursor:pointer;transition:all 0.2s;font-size:0.9em;text-transform:uppercase;letter-spacing:0.5px}
+            .btn:hover{border-color:#d4af37;color:#d4af37;background:rgba(212,175,55,0.05)}
+            .btn:active{transform:translateY(1px)}
+            #pg{color:#666;font-variant-numeric:tabular-nums;font-size:0.9em;min-width:60px;text-align:center}
+            
             #vp-overlay{position:fixed;inset:0;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s}
-            #vp-mute{position:fixed;top:20px;right:20px;z-index:10000;background:rgba(0,0,0,0.8);border:1px solid #d4af37;color:#d4af37;border-radius:50%;width:40px;height:40px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-family:sans-serif}
-            #vp-mute:hover{background:#d4af37;color:#000}
-            .start-btn{padding:15px 40px;font-size:20px;background:#d4af37;color:#000;border:none;cursor:pointer;border-radius:30px;font-weight:bold;margin-top:20px;font-family:sans-serif;text-transform:uppercase;letter-spacing:1px}
+            .start-btn{padding:15px 40px;font-size:18px;background:transparent;color:#d4af37;border:2px solid #d4af37;cursor:pointer;border-radius:4px;font-weight:bold;margin-top:30px;font-family:sans-serif;text-transform:uppercase;letter-spacing:2px;transition:all 0.3s}
             .start-btn:hover{transform:scale(1.05)}
-            #pg{color:#aaa;margin:0 16px}
+            
+            .mute-btn{width:32px;height:32px;border:1px solid #444;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#666;transition:all 0.2s}
+            .mute-btn:hover{border-color:#d4af37;color:#d4af37}
+            .mute-btn.active{background:#d4af37;color:#000;border-color:#d4af37}
+
             .modal{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:1000}
             .modal.active{display:flex}
             .modal-content{background:#1a1a1f;padding:30px;border:1px solid #d4af37;border-radius:8px;color:#fff;max-width:300px;text-align:center}
@@ -67,8 +104,14 @@ export const exportToHTML = (project, embedAssets = false) => {
             .btn-audio:hover{background:#d4af37;color:#000}
         </style></head><body>`;
 
-        html += `<div id="vp-overlay"><h1 style="color:#d4af37;font-size:3rem;margin-bottom:1rem;font-family:sans-serif">VOID PRESS</h1><button class="start-btn" onclick="startZine()">ENTER ZINE</button></div>`;
-        html += `<button id="vp-mute" onclick="toggleMute()">ON</button>`;
+        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">VOID PRESS</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
+
+        html += `<div class="reader-header">
+            <div class="reader-title">${project.title || 'UNTITLED ZINE'}</div>
+            <button id="vp-mute" class="mute-btn" onclick="toggleMute()" title="Toggle Audio">♪</button>
+        </div>`;
+
+        html += `<div class="reader-main">`;
 
         project.pages.forEach((p, i) => {
             html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-bgm="${p.bgm || ''}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${p.password || ''}" style="background:${p.background}">`;
@@ -76,6 +119,8 @@ export const exportToHTML = (project, embedAssets = false) => {
             p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
             html += `</div></div>`;
         });
+
+        html += `</div>`; // End reader-main
 
         const sc = `
         let c=0,t=${project.pages.length},au=null,up=new Set(),pp=-1,genCtx,genNodes=[],muted=false,curMood=null;
@@ -106,9 +151,7 @@ export const exportToHTML = (project, embedAssets = false) => {
         window.toggleMute = () => {
             muted = !muted;
             const btn = document.getElementById('vp-mute');
-            btn.innerHTML = muted ? 'OFF' : 'ON';
-            btn.style.borderColor = muted ? '#666' : '#d4af37';
-            btn.style.color = muted ? '#666' : '#d4af37';
+            if(!muted) btn.classList.add('active'); else btn.classList.remove('active');
             if(muted) { Gen.stop(); if(au) au.pause(); }
             else { if(curMood) Gen.play(curMood); if(au) au.play(); }
         };
@@ -202,7 +245,7 @@ export const exportToHTML = (project, embedAssets = false) => {
             } catch(e) { console.warn(e); }
         });`;
 
-        html += `<div class="nav"><button class="btn" onclick="prev()">◀ Prev</button><span id="pg">1/${project.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div>`;
+        html += `<div class="reader-controls"><button class="btn" onclick="prev()">◀ Previous</button><span id="pg">1/${project.pages.length}</span><button class="btn" onclick="next()">Next ▶</button></div>`;
         html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
         html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
 
@@ -236,22 +279,30 @@ export const exportToInteractive = async (project, embedAssets = false) => {
         let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
         ${pageFlipScript}
         <style>
-            body{margin:0;padding:0;background:#111;font-family:Arial,sans-serif;overflow:hidden;height:100vh}
-            .book-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+            body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+            .reader-header{padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
+            .reader-title{font-weight:700;letter-spacing:1px;color:#d4af37;font-size:1.1em}
+            .book-stage{flex:1;width:100%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
             .page{background-color:#fff;overflow:hidden;position:relative;display:none;box-shadow:inset 0 0 20px rgba(0,0,0,0.1)} 
             .page.-active{display:block}
             .el{position:absolute}
+            .mute-btn{width:32px;height:32px;border:1px solid #444;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#666;transition:all 0.2s}
+            .mute-btn:hover{border-color:#d4af37;color:#d4af37}
+            .mute-btn.active{background:#d4af37;color:#000;border-color:#d4af37}
+            
             #vp-overlay{position:fixed;inset:0;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s}
-            #vp-mute{position:fixed;top:20px;right:20px;z-index:10000;background:rgba(0,0,0,0.8);border:1px solid #d4af37;color:#d4af37;border-radius:50%;width:40px;height:40px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-family:sans-serif}
-            #vp-mute:hover{background:#d4af37;color:#000}
-            .start-btn{padding:15px 40px;font-size:20px;background:#d4af37;color:#000;border:none;cursor:pointer;border-radius:30px;font-weight:bold;margin-top:20px;font-family:sans-serif;text-transform:uppercase;letter-spacing:1px}
+            .start-btn{padding:15px 40px;font-size:18px;background:transparent;color:#d4af37;border:2px solid #d4af37;cursor:pointer;border-radius:4px;font-weight:bold;margin-top:30px;font-family:sans-serif;text-transform:uppercase;letter-spacing:2px;transition:all 0.3s}
             .start-btn:hover{transform:scale(1.05)}
             .btn-audio{width:32px;height:32px;border-radius:50%;border:1px solid #d4af37;background:transparent;color:#d4af37;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .2s}
             .btn-audio:hover{background:#d4af37;color:#000}
         </style></head><body>`;
 
-        html += `<div id="vp-overlay"><h1 style="color:#d4af37;font-size:3rem;margin-bottom:1rem;font-family:sans-serif">VOID PRESS</h1><button class="start-btn" onclick="startZine()">ENTER ZINE</button></div>`;
-        html += `<button id="vp-mute" onclick="toggleMute()">ON</button>`;
+        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">VOID PRESS</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
+
+        html += `<div class="reader-header">
+            <div class="reader-title">${project.title || 'UNTITLED ZINE'}</div>
+            <button id="vp-mute" class="mute-btn" onclick="toggleMute()" title="Toggle Audio">♪</button>
+        </div>`;
 
         html += `<div class="book-stage"><div id="book">`;
         project.pages.forEach((p, i) => {
@@ -280,7 +331,7 @@ export const exportToInteractive = async (project, embedAssets = false) => {
         };
         window.toggleMute = () => {
             muted = !muted; const btn = document.getElementById('vp-mute');
-            btn.innerHTML = muted ? 'OFF' : 'ON'; btn.style.borderColor = muted ? '#666' : '#d4af37'; btn.style.color = muted ? '#666' : '#d4af37';
+            if(!muted) btn.classList.add('active'); else btn.classList.remove('active');
             if(muted) { Gen.stop(); if(au) au.pause(); } else { if(curMood) Gen.play(curMood); if(au) au.play(); }
         };
         window.startZine = () => {
