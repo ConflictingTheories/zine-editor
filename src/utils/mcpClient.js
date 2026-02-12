@@ -49,6 +49,10 @@ class MCPClient {
         return this.request(`/zines/${zineId}/pages/${pageIdx}`, 'DELETE')
     }
 
+    async duplicatePage(zineId, pageIdx) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}/duplicate`, 'POST')
+    }
+
     // Element operations
     async addElement(zineId, pageIdx, element) {
         return this.request(`/zines/${zineId}/pages/${pageIdx}/elements`, 'POST', { element })
@@ -131,6 +135,76 @@ class MCPClient {
             width: options.width || 200,
             height: options.height || 80,
             fontSize: options.fontSize || 14,
+            ...options
+        }
+        return this.addElement(zineId, pageIdx, element)
+    }
+
+    async createShapeElement(zineId, pageIdx, shape, x = 80, y = 80, options = {}) {
+        const shapes = { circle: { width: 100, height: 100 }, square: { width: 100, height: 100 }, triangle: { width: 100, height: 100 }, diamond: { width: 80, height: 100 }, line_h: { width: 200, height: 4 }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } }
+        const shapeConfig = shapes[shape] || shapes.circle
+        const element = {
+            type: shapeConfig.type || 'shape',
+            shape,
+            x,
+            y,
+            width: options.width || shapeConfig.width,
+            height: options.height || shapeConfig.height,
+            fill: options.fill || '#0a0a0a',
+            ...options
+        }
+        if (shapeConfig.content) element.content = shapeConfig.content
+        if (shapeConfig.fontSize) element.fontSize = shapeConfig.fontSize
+        if (shapeConfig.color) element.color = shapeConfig.color
+        if (shapeConfig.fontFamily) element.fontFamily = shapeConfig.fontFamily
+        return this.addElement(zineId, pageIdx, element)
+    }
+
+    async createSFXElement(zineId, pageIdx, sfxType, x = 80, y = 80, options = {}) {
+        const sfx = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', pow: 'POW!', whoosh: 'WHOOSH!', splat: 'SPLAT!' }
+        const element = {
+            type: 'text',
+            content: sfx[sfxType] || 'BAM!',
+            x,
+            y,
+            fontSize: 52,
+            fontFamily: 'Bangers',
+            color: '#0a0a0a',
+            width: 180,
+            height: 70,
+            strokeWidth: 2,
+            strokeColor: '#ffffff',
+            ...options
+        }
+        return this.addElement(zineId, pageIdx, element)
+    }
+
+    async createSymbolElement(zineId, pageIdx, symbol, x = 80, y = 80, options = {}) {
+        const symbols = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', biohazard: '☣', radiation: '☢', compass: '🧭', rune: 'ᚱ', ankh: '☥', omega: 'Ω', infinity: '∞', trident: '🔱' }
+        const element = {
+            type: 'text',
+            content: symbols[symbol] || '✦',
+            x,
+            y,
+            fontSize: 56,
+            color: '#d4af37',
+            width: 80,
+            height: 80,
+            fontFamily: 'sans-serif',
+            ...options
+        }
+        return this.addElement(zineId, pageIdx, element)
+    }
+
+    async createShaderElement(zineId, pageIdx, shaderPreset, x = 80, y = 80, options = {}) {
+        const element = {
+            type: 'shader',
+            shaderPreset,
+            x,
+            y,
+            width: options.width || 220,
+            height: options.height || 220,
+            opacity: 1,
             ...options
         }
         return this.addElement(zineId, pageIdx, element)
@@ -245,6 +319,38 @@ class MCPClient {
         }
 
         return { status: 'template applied' }
+    }
+
+    // MCP Resources
+    async listResources() {
+        return this.request('/resources/list', 'POST')
+    }
+
+    async readResource(uri) {
+        return this.request('/resources/read', 'POST', { uri })
+    }
+
+    // MCP Prompts
+    async listPrompts() {
+        return this.request('/prompts/list', 'POST')
+    }
+
+    async getPrompt(name, args = {}) {
+        return this.request('/prompts/get', 'POST', { name, arguments: args })
+    }
+
+    // Batch operations for efficiency
+    async batchUpdateElements(zineId, updates) {
+        const results = []
+        for (const update of updates) {
+            try {
+                const result = await this.updateElement(zineId, update.pageIdx, update.elementId, update.updates)
+                results.push({ success: true, ...result })
+            } catch (error) {
+                results.push({ success: false, error: error.message })
+            }
+        }
+        return results
     }
 }
 

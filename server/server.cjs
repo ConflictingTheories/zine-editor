@@ -337,13 +337,209 @@ app.post('/mcp/initialize', (req, res) => {
     res.json({
         protocolVersion: '2024-11-05',
         capabilities: {
-            tools: {}
+            tools: {},
+            resources: {},
+            prompts: {}
         },
         serverInfo: {
             name: 'zine-builder-mcp',
             version: '1.0.0'
         }
     });
+});
+
+// MCP Resources List
+app.post('/mcp/resources/list', (req, res) => {
+    res.json({
+        resources: [
+            {
+                uri: 'zine://themes',
+                name: 'Available Themes',
+                description: 'List of available zine themes with their properties',
+                mimeType: 'application/json'
+            },
+            {
+                uri: 'zine://templates',
+                name: 'Page Templates',
+                description: 'Available page templates for different zine layouts',
+                mimeType: 'application/json'
+            },
+            {
+                uri: 'zine://assets',
+                name: 'Asset Library',
+                description: 'Available assets including shapes, symbols, SFX, and shaders',
+                mimeType: 'application/json'
+            }
+        ]
+    });
+});
+
+// MCP Resources Read
+app.post('/mcp/resources/read', (req, res) => {
+    const { uri } = req.body;
+    let resourceData;
+
+    switch (uri) {
+        case 'zine://themes':
+            resourceData = {
+                themes: {
+                    classic: { name: 'Classic Literature', colors: { background: '#fdfaf1', text: '#1a1a1a', accent: '#d4af37' }, fonts: { display: 'Playfair Display', body: 'Crimson Text', accent: 'Crimson Text' }, status: 'STABLE' },
+                    fantasy: { name: 'Medieval Fantasy', colors: { background: '#f5f5dc', text: '#0a0a0a', accent: '#ffd700' }, fonts: { display: 'Cinzel', body: 'Crimson Text', accent: 'MedievalSharp' }, status: 'LEGENDARY' },
+                    cyberpunk: { name: 'Cyberpunk', colors: { background: '#f0f0f0', text: '#050505', accent: '#ff003c' }, fonts: { display: 'Orbitron', body: 'Roboto Mono', accent: 'Bebas Neue' }, status: 'CONNECTED' },
+                    conspiracy: { name: 'Dark Conspiracies', colors: { background: '#e8e4d9', text: '#000000', accent: '#c5b358' }, fonts: { display: 'Special Elite', body: 'Courier Prime', accent: 'Roboto Mono' }, status: 'CLASSIFIED' },
+                    worldbuilding: { name: 'World Building', colors: { background: '#ecf0f1', text: '#2c3e50', accent: '#f1c40f' }, fonts: { display: 'Montserrat', body: 'Assistant', accent: 'Crimson Text' }, status: 'CHARTED' },
+                    comics: { name: 'Comics', colors: { background: '#ffffff', text: '#000000', accent: '#ffd700' }, fonts: { display: 'Bangers', body: 'Comic Neue', accent: 'Bebas Neue' }, status: 'DYNAMIC' },
+                    arcane: { name: 'Arcane Lore', colors: { background: '#f8f1ff', text: '#0f041b', accent: '#ff9e00' }, fonts: { display: 'Cinzel Decorative', body: 'Crimson Text', accent: 'Cinzel' }, status: 'MANIFESTED' }
+                }
+            };
+            break;
+        case 'zine://templates':
+            resourceData = {
+                templates: {
+                    cover: { name: 'Cover Page', description: 'Title page with decorative elements', elements: ['title_text', 'subtitle_text', 'decorative_panel'] },
+                    content: { name: 'Content Page', description: 'Standard content page layout', elements: ['chapter_title', 'body_text'] },
+                    back: { name: 'Back Cover', description: 'Back cover with final elements', elements: ['end_text'] }
+                }
+            };
+            break;
+        case 'zine://assets':
+            resourceData = {
+                assets: {
+                    shapes: ['circle', 'square', 'triangle', 'diamond', 'line_h', 'arrow'],
+                    balloons: ['dialog', 'thought', 'shout', 'caption', 'whisper', 'narration'],
+                    sfx: ['crash', 'boom', 'zap', 'pow', 'whoosh', 'splat'],
+                    symbols: ['pentagram', 'skull', 'star_symbol', 'eye', 'biohazard', 'radiation', 'compass', 'rune', 'ankh', 'omega', 'infinity', 'trident'],
+                    shaders: ['plasma', 'fire', 'water', 'lightning', 'voidNoise', 'galaxy']
+                }
+            };
+            break;
+        default:
+            return res.status(404).json({ error: 'Resource not found' });
+    }
+
+    res.json({
+        contents: [{
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(resourceData, null, 2)
+        }]
+    });
+});
+
+// MCP Prompts List
+app.post('/mcp/prompts/list', (req, res) => {
+    res.json({
+        prompts: [
+            {
+                name: 'create_story_zine',
+                description: 'Generate a complete story zine with multiple pages',
+                arguments: [
+                    {
+                        name: 'theme',
+                        description: 'Theme for the zine',
+                        required: true
+                    },
+                    {
+                        name: 'genre',
+                        description: 'Story genre',
+                        required: true
+                    },
+                    {
+                        name: 'title',
+                        description: 'Zine title',
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'generate_comic_page',
+                description: 'Create a comic-style page with panels and dialogue',
+                arguments: [
+                    {
+                        name: 'zineId',
+                        description: 'Existing zine ID to add page to',
+                        required: true
+                    },
+                    {
+                        name: 'pageDescription',
+                        description: 'Description of the comic page content',
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'apply_theme_consistently',
+                description: 'Apply a theme to an entire zine with consistent styling',
+                arguments: [
+                    {
+                        name: 'zineId',
+                        description: 'Zine ID to apply theme to',
+                        required: true
+                    },
+                    {
+                        name: 'theme',
+                        description: 'Theme to apply',
+                        required: true
+                    }
+                ]
+            }
+        ]
+    });
+});
+
+// MCP Prompts Get
+app.post('/mcp/prompts/get', (req, res) => {
+    const { name, arguments: args } = req.body;
+    let prompt;
+
+    switch (name) {
+        case 'create_story_zine':
+            prompt = {
+                description: `Create a complete ${args.genre} story zine titled "${args.title}" using the ${args.theme} theme. Include cover page, multiple content pages with story elements, and back cover.`,
+                messages: [
+                    {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: `Create a ${args.genre} story zine with the title "${args.title}" using the ${args.theme} theme. Generate engaging content with appropriate visual elements for the theme.`
+                        }
+                    }
+                ]
+            };
+            break;
+        case 'generate_comic_page':
+            prompt = {
+                description: `Generate a comic page with panels and dialogue based on: ${args.pageDescription}`,
+                messages: [
+                    {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: `Create a comic page for zine ${args.zineId} with the following description: ${args.pageDescription}. Include appropriate panels, dialogue balloons, and visual elements.`
+                        }
+                    }
+                ]
+            };
+            break;
+        case 'apply_theme_consistently':
+            prompt = {
+                description: `Apply the ${args.theme} theme consistently across all pages and elements in zine ${args.zineId}`,
+                messages: [
+                    {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: `Apply the ${args.theme} theme to zine ${args.zineId}, ensuring all text colors, backgrounds, and visual elements match the theme consistently.`
+                        }
+                    }
+                ]
+            };
+            break;
+        default:
+            return res.status(404).json({ error: 'Prompt not found' });
+    }
+
+    res.json(prompt);
 });
 
 // MCP Tools List
@@ -384,6 +580,30 @@ app.post('/mcp/tools/list', (req, res) => {
                         texture: { type: 'string', description: 'Page texture URL (optional)' }
                     },
                     required: ['zineId']
+                }
+            },
+            {
+                name: 'delete_page',
+                description: 'Delete a page from a zine',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index to delete' }
+                    },
+                    required: ['zineId', 'pageIdx']
+                }
+            },
+            {
+                name: 'duplicate_page',
+                description: 'Duplicate a page in a zine',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index to duplicate' }
+                    },
+                    required: ['zineId', 'pageIdx']
                 }
             },
             {
@@ -437,6 +657,24 @@ app.post('/mcp/tools/list', (req, res) => {
                 }
             },
             {
+                name: 'add_shape_element',
+                description: 'Add a shape element to a page',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        shape: { type: 'string', description: 'Shape type', enum: ['circle', 'square', 'triangle', 'diamond', 'line_h', 'arrow'], default: 'circle' },
+                        x: { type: 'number', description: 'X position', default: 80 },
+                        y: { type: 'number', description: 'Y position', default: 80 },
+                        width: { type: 'number', description: 'Width', default: 100 },
+                        height: { type: 'number', description: 'Height', default: 100 },
+                        fill: { type: 'string', description: 'Fill color', default: '#0a0a0a' }
+                    },
+                    required: ['zineId', 'pageIdx']
+                }
+            },
+            {
                 name: 'add_balloon_element',
                 description: 'Add a speech balloon to a page',
                 inputSchema: {
@@ -453,6 +691,53 @@ app.post('/mcp/tools/list', (req, res) => {
                 }
             },
             {
+                name: 'add_sfx_element',
+                description: 'Add an SFX element to a page',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        sfxType: { type: 'string', description: 'SFX type', enum: ['crash', 'boom', 'zap', 'pow', 'whoosh', 'splat'], default: 'boom' },
+                        x: { type: 'number', description: 'X position', default: 80 },
+                        y: { type: 'number', description: 'Y position', default: 80 }
+                    },
+                    required: ['zineId', 'pageIdx']
+                }
+            },
+            {
+                name: 'add_symbol_element',
+                description: 'Add a symbol element to a page',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        symbol: { type: 'string', description: 'Symbol type', enum: ['pentagram', 'skull', 'star_symbol', 'eye', 'biohazard', 'radiation', 'compass', 'rune', 'ankh', 'omega', 'infinity', 'trident'], default: 'star_symbol' },
+                        x: { type: 'number', description: 'X position', default: 80 },
+                        y: { type: 'number', description: 'Y position', default: 80 }
+                    },
+                    required: ['zineId', 'pageIdx']
+                }
+            },
+            {
+                name: 'add_shader_element',
+                description: 'Add a shader element to a page',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        shaderPreset: { type: 'string', description: 'Shader preset', enum: ['plasma', 'fire', 'water', 'lightning', 'voidNoise', 'galaxy'], default: 'plasma' },
+                        x: { type: 'number', description: 'X position', default: 80 },
+                        y: { type: 'number', description: 'Y position', default: 80 },
+                        width: { type: 'number', description: 'Width', default: 220 },
+                        height: { type: 'number', description: 'Height', default: 220 }
+                    },
+                    required: ['zineId', 'pageIdx']
+                }
+            },
+            {
                 name: 'update_element',
                 description: 'Update an element\'s properties',
                 inputSchema: {
@@ -464,6 +749,46 @@ app.post('/mcp/tools/list', (req, res) => {
                         updates: { type: 'object', description: 'Properties to update' }
                     },
                     required: ['zineId', 'pageIdx', 'elementId', 'updates']
+                }
+            },
+            {
+                name: 'delete_element',
+                description: 'Delete an element from a page',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        elementId: { type: 'string', description: 'Element ID to delete' }
+                    },
+                    required: ['zineId', 'pageIdx', 'elementId']
+                }
+            },
+            {
+                name: 'duplicate_element',
+                description: 'Duplicate an element on a page',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        elementId: { type: 'string', description: 'Element ID to duplicate' }
+                    },
+                    required: ['zineId', 'pageIdx', 'elementId']
+                }
+            },
+            {
+                name: 'move_layer',
+                description: 'Move an element up or down in the layer stack',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        zineId: { type: 'integer', description: 'Zine ID' },
+                        pageIdx: { type: 'integer', description: 'Page index' },
+                        elementId: { type: 'string', description: 'Element ID' },
+                        direction: { type: 'string', description: 'Move direction', enum: ['up', 'down', 'top', 'bottom'] }
+                    },
+                    required: ['zineId', 'pageIdx', 'elementId', 'direction']
                 }
             },
             {
@@ -537,6 +862,12 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
             case 'add_page':
                 result = await handleAddPage(req.user.id, args);
                 break;
+            case 'delete_page':
+                result = await handleDeletePage(req.user.id, args);
+                break;
+            case 'duplicate_page':
+                result = await handleDuplicatePage(req.user.id, args);
+                break;
             case 'add_text_element':
                 result = await handleAddTextElement(req.user.id, args);
                 break;
@@ -546,11 +877,32 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
             case 'add_panel_element':
                 result = await handleAddPanelElement(req.user.id, args);
                 break;
+            case 'add_shape_element':
+                result = await handleAddShapeElement(req.user.id, args);
+                break;
             case 'add_balloon_element':
                 result = await handleAddBalloonElement(req.user.id, args);
                 break;
+            case 'add_sfx_element':
+                result = await handleAddSFXElement(req.user.id, args);
+                break;
+            case 'add_symbol_element':
+                result = await handleAddSymbolElement(req.user.id, args);
+                break;
+            case 'add_shader_element':
+                result = await handleAddShaderElement(req.user.id, args);
+                break;
             case 'update_element':
                 result = await handleUpdateElement(req.user.id, args);
+                break;
+            case 'delete_element':
+                result = await handleDeleteElement(req.user.id, args);
+                break;
+            case 'duplicate_element':
+                result = await handleDuplicateElement(req.user.id, args);
+                break;
+            case 'move_layer':
+                result = await handleMoveLayer(req.user.id, args);
                 break;
             case 'apply_theme':
                 result = await handleApplyTheme(req.user.id, args);
@@ -858,6 +1210,248 @@ async function handlePublishZine(userId, args) {
                 resolve({ status: 'published' });
             }
         );
+    });
+}
+
+async function handleDeletePage(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            const pageIdx = parseInt(args.pageIdx);
+            if (data.pages.length <= 1) return reject(new Error('Cannot delete last page'));
+            if (!data.pages[pageIdx]) return reject(new Error('Page not found'));
+            data.pages.splice(pageIdx, 1);
+            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), args.zineId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve({ status: 'deleted' });
+                }
+            );
+        });
+    });
+}
+
+async function handleDuplicatePage(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            const pageIdx = parseInt(args.pageIdx);
+            if (!data.pages[pageIdx]) return reject(new Error('Page not found'));
+            const newPage = JSON.parse(JSON.stringify(data.pages[pageIdx]));
+            newPage.id = Date.now();
+            if (newPage.elements) newPage.elements.forEach(e => { e.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) });
+            data.pages.splice(pageIdx + 1, 0, newPage);
+            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), args.zineId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve({ pageId: newPage.id, pageIdx: pageIdx + 1 });
+                }
+            );
+        });
+    });
+}
+
+async function handleAddShapeElement(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
+            const shapes = { circle: { shape: 'circle', width: 100, height: 100 }, square: { shape: 'rect', width: 100, height: 100 }, triangle: { shape: 'triangle', width: 100, height: 100 }, diamond: { shape: 'diamond', width: 80, height: 100 }, line_h: { shape: 'line_h', width: 200, height: 4 }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } };
+            const shapeConfig = shapes[args.shape] || shapes.circle;
+            const element = {
+                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                type: shapeConfig.type || 'shape',
+                shape: shapeConfig.shape,
+                x: args.x || 80,
+                y: args.y || 80,
+                width: args.width || shapeConfig.width,
+                height: args.height || shapeConfig.height,
+                fill: args.fill || '#0a0a0a',
+                zIndex: data.pages[args.pageIdx].elements.length
+            };
+            if (shapeConfig.content) element.content = shapeConfig.content;
+            if (shapeConfig.fontSize) element.fontSize = shapeConfig.fontSize;
+            if (shapeConfig.color) element.color = shapeConfig.color;
+            if (shapeConfig.fontFamily) element.fontFamily = shapeConfig.fontFamily;
+            data.pages[args.pageIdx].elements.push(element);
+            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
+                if (err) return reject(err);
+                resolve({ elementId: element.id });
+            });
+        });
+    });
+}
+
+async function handleAddSFXElement(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
+            const sfx = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', pow: 'POW!', whoosh: 'WHOOSH!', splat: 'SPLAT!' };
+            const element = {
+                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                type: 'text',
+                content: sfx[args.sfxType] || 'BAM!',
+                x: args.x || 80,
+                y: args.y || 80,
+                fontSize: 52,
+                fontFamily: 'Bangers',
+                color: '#0a0a0a',
+                width: 180,
+                height: 70,
+                strokeWidth: 2,
+                strokeColor: '#ffffff',
+                zIndex: data.pages[args.pageIdx].elements.length
+            };
+            data.pages[args.pageIdx].elements.push(element);
+            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
+                if (err) return reject(err);
+                resolve({ elementId: element.id });
+            });
+        });
+    });
+}
+
+async function handleAddSymbolElement(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
+            const symbols = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', biohazard: '☣', radiation: '☢', compass: '🧭', rune: 'ᚱ', ankh: '☥', omega: 'Ω', infinity: '∞', trident: '🔱' };
+            const element = {
+                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                type: 'text',
+                content: symbols[args.symbol] || '✦',
+                x: args.x || 80,
+                y: args.y || 80,
+                fontSize: 56,
+                color: '#d4af37',
+                width: 80,
+                height: 80,
+                fontFamily: 'sans-serif',
+                zIndex: data.pages[args.pageIdx].elements.length
+            };
+            data.pages[args.pageIdx].elements.push(element);
+            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
+                if (err) return reject(err);
+                resolve({ elementId: element.id });
+            });
+        });
+    });
+}
+
+async function handleAddShaderElement(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
+            const element = {
+                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                type: 'shader',
+                shaderPreset: args.shaderPreset || 'plasma',
+                x: args.x || 80,
+                y: args.y || 80,
+                width: args.width || 220,
+                height: args.height || 220,
+                opacity: 1,
+                zIndex: data.pages[args.pageIdx].elements.length
+            };
+            data.pages[args.pageIdx].elements.push(element);
+            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
+                if (err) return reject(err);
+                resolve({ elementId: element.id });
+            });
+        });
+    });
+}
+
+async function handleDeleteElement(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            const pageIdx = parseInt(args.pageIdx);
+            const elements = data.pages[pageIdx]?.elements;
+            if (!elements) return reject(new Error('Page not found'));
+            const idx = elements.findIndex(e => e.id === args.elementId);
+            if (idx === -1) return reject(new Error('Element not found'));
+            elements.splice(idx, 1);
+            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), args.zineId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve({ status: 'deleted' });
+                }
+            );
+        });
+    });
+}
+
+async function handleDuplicateElement(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            const pageIdx = parseInt(args.pageIdx);
+            const el = data.pages[pageIdx]?.elements.find(e => e.id === args.elementId);
+            if (!el) return reject(new Error('Element not found'));
+            const newEl = JSON.parse(JSON.stringify(el));
+            newEl.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            newEl.x += 20;
+            newEl.y += 20;
+            data.pages[pageIdx].elements.push(newEl);
+            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), args.zineId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve({ elementId: newEl.id });
+                }
+            );
+        });
+    });
+}
+
+async function handleMoveLayer(userId, args) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
+            if (err || !zine) return reject(new Error('Zine not found'));
+            const data = JSON.parse(zine.data);
+            const pageIdx = parseInt(args.pageIdx);
+            const elements = data.pages[pageIdx]?.elements;
+            if (!elements) return reject(new Error('Page not found'));
+            const idx = elements.findIndex(e => e.id === args.elementId);
+            if (idx === -1) return reject(new Error('Element not found'));
+
+            if (args.direction === 'up' && idx < elements.length - 1) {
+                [elements[idx], elements[idx + 1]] = [elements[idx + 1], elements[idx]];
+            } else if (args.direction === 'down' && idx > 0) {
+                [elements[idx], elements[idx - 1]] = [elements[idx - 1], elements[idx]];
+            } else if (args.direction === 'top') {
+                const el = elements.splice(idx, 1)[0];
+                elements.push(el);
+            } else if (args.direction === 'bottom') {
+                const el = elements.splice(idx, 1)[0];
+                elements.unshift(el);
+            }
+
+            // Update all zIndex
+            elements.forEach((e, i) => e.zIndex = i);
+            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), args.zineId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve({ status: 'moved' });
+                }
+            );
+        });
     });
 }
 
