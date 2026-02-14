@@ -1,5 +1,5 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const xrpService = require('./server/xrpService.cjs');
+const xrpService = require('./xrpService.cjs');
 
 // Rate: 1 USD = 100 VPC (Void Press Credits)
 const CREDITS_PER_USD = 100;

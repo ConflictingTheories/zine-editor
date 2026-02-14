@@ -14,8 +14,8 @@ const fs = require('fs');
 const CONFIG = require('./config.cjs');
 
 // Import economy service for Stripe and XRP integration
-const economyService = require('../economyService');
-const xrpService = require('../xrpService');
+const economyService = require('./economyService.cjs');
+const xrpService = require('./xrpService.cjs');
 
 const app = express();
 
@@ -1858,6 +1858,55 @@ app.post('/api/tokens/:id/buy', authenticateToken, (req, res) => {
                     res.status(500).json({ error: 'Payment failed: ' + err.message });
                 }
                 );
+        });
+    });
+});
+
+// Purchase Zine with Tokens (Instant Unlock)
+app.post('/api/zines/:id/purchase', authenticateToken, (req, res) => {
+    const zineId = req.params.id;
+
+    db.get(`SELECT z.*, t.token_code, t.xrp_currency_code, w.xrp_address as creator_address 
+            FROM zines z 
+            LEFT JOIN tokens t ON z.token_price > 0 AND t.creator_id = z.user_id 
+            LEFT JOIN wallets w ON z.user_id = w.user_id
+            WHERE z.id = ?`, [zineId], async (err, zine) => {
+
+        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+        if (!zine.is_token_gated || zine.token_price <= 0) return res.status(400).json({ error: 'Zine is free' });
+        if (!zine.xrp_currency_code) return res.status(400).json({ error: 'Creator has no active token' });
+
+        // Get User Wallet
+        db.get(`SELECT xrp_secret_encrypted FROM wallets WHERE user_id = ?`, [req.user.id], async (err, wallet) => {
+            if (err || !wallet) return res.status(404).json({ error: 'User wallet not found' });
+
+            try {
+                // Execute XRPL Payment: User -> Creator
+                // Amount: zine.token_price
+                // Currency: zine.xrp_currency_code
+                // Issuer: zine.creator_address
+
+                const txHash = await xrpService.sendPayment(
+                    wallet.xrp_secret_encrypted,
+                    zine.creator_address,
+                    zine.token_price,
+                    zine.xrp_currency_code,
+                    zine.creator_address
+                );
+
+                if (!txHash) throw new Error('Payment failed on ledger');
+
+                // Record as accepted bid to grant access
+                db.run(`INSERT INTO bids (bidder_id, zine_id, amount, message, status) VALUES (?, ?, ?, ?, 'accepted')`,
+                    [req.user.id, zineId, zine.token_price, 'Instant Purchase via Token', 'accepted'],
+                    function (err) {
+                        if (err) return res.status(500).json({ error: err.message });
+                        res.json({ success: true, txHash, message: 'Zine purchased successfully' });
+                    }
+                );
+            } catch (error) {
+                res.status(500).json({ error: 'Purchase failed: ' + error.message });
+            }
         });
     });
 });
