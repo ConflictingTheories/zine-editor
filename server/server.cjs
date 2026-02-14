@@ -13,6 +13,10 @@ const fs = require('fs');
 // Load configuration from config.cjs
 const CONFIG = require('./config.cjs');
 
+// Import economy service for Stripe and XRP integration
+const economyService = require('../economyService');
+const xrpService = require('../xrpService');
+
 const app = express();
 
 // ═══════════════════════════════════════════════════
@@ -1681,38 +1685,45 @@ app.get('/api/credits/balance', authenticateToken, (req, res) => {
 
 // ---- Wallet API ----
 
+// Helper to get or create wallet
+const getOrCreateWallet = async (userId, providedAddress, providedPayId) => {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT * FROM wallets WHERE user_id = ?`, [userId], async (err, existing) => {
+            if (err) return reject(err);
+
+            if (existing) {
+                return resolve(existing);
+            }
+
+            // Create new wallet if not exists
+            try {
+                // If address provided, use it (non-custodial view), else generate (custodial)
+                const walletData = providedAddress ? { address: providedAddress, seed: null } : await xrpService.createWallet();
+
+                db.run(`INSERT INTO wallets (user_id, xrp_address, xrp_secret_encrypted, payid, is_verified) VALUES (?, ?, ?, ?, ?)`,
+                    [userId, walletData.address, walletData.seed, providedPayId || null, 1],
+                    function (err) {
+                        if (err) return reject(err);
+                        resolve({ xrp_address: walletData.address, xrp_secret_encrypted: walletData.seed });
+                    }
+                );
+            } catch (e) { reject(e); }
+        });
+    });
+};
+
 // Create new XRP wallet for user
 app.post('/api/wallet/create', authenticateToken, (req, res) => {
     const { xrpAddress, payid } = req.body;
 
     if (!xrpAddress) {
-        return res.status(400).json({ error: 'XRP address required' });
+        // If no address provided, generate one (Custodial)
+        // Proceed to creation logic below
     }
 
-    // Check if wallet already exists
-    db.get(`SELECT * FROM wallets WHERE user_id = ?`, [req.user.id], (err, existing) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        if (existing) {
-            // Update existing wallet
-            db.run(`UPDATE wallets SET xrp_address = ?, payid = ?, is_verified = 1 WHERE user_id = ?`,
-                [xrpAddress, payid || null, req.user.id],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ success: true, xrpAddress, payid: payid || null });
-                }
-            );
-        } else {
-            // Insert new wallet
-            db.run(`INSERT INTO wallets (user_id, xrp_address, payid, is_verified) VALUES (?, ?, ?, ?)`,
-                [req.user.id, xrpAddress, payid || null, 1],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ success: true, xrpAddress, payid: payid || null });
-                }
-            );
-        }
-    });
+    getOrCreateWallet(req.user.id, xrpAddress, payid)
+        .then(wallet => res.json({ success: true, xrpAddress: wallet.xrp_address, payid: wallet.payid }))
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
 // Get user's wallet info
@@ -1805,29 +1816,48 @@ app.post('/api/tokens/:id/buy', authenticateToken, (req, res) => {
                 return res.status(400).json({ error: 'Insufficient credits', required: totalCost, available: currentBalance });
             }
 
-            // Deduct credits and record transaction
-            db.run(`UPDATE credits SET balance = balance - ? WHERE user_id = ?`,
-                [totalCost, req.user.id],
-                (err) => {
-                    if (err) return res.status(500).json({ error: err.message });
+            // EXECUTE XRP TRANSACTIONS
+            // 1. User sends VPC (Credits) to Creator
+            // 2. Creator sends Token to User
 
-                    // Update token supply
-                    db.run(`UPDATE tokens SET current_supply = current_supply - ? WHERE id = ?`,
-                        [amount, tokenId],
-                        (err) => {
-                            if (err) return res.status(500).json({ error: err.message });
+            // Note: In a production environment, this should be an atomic multi-payment transaction or escrow.
+            // For this implementation, we execute sequentially.
 
-                            // Record transaction
-                            db.run(`INSERT INTO transactions (from_user_id, to_user_id, token_id, amount, type, description) VALUES (?, ?, ?, ?, ?, ?)`,
-                                [req.user.id, token.creator_id, tokenId, amount, 'token_purchase', `Bought ${amount} ${token.token_name} for ${totalCost} credits`],
-                                (err) => { if (err) console.error('Transaction log error:', err); }
-                            );
-
-                            res.json({ success: true, amount, totalCost, tokenName: token.token_name });
+            economyService.transferCredits(req.user.id, token.creator_id, totalCost, db)
+                .then(vpcTx => {
+                    // VPC Transfer successful, now issue token
+                    // Get User's XRP address
+                    db.get(`SELECT xrp_address FROM wallets WHERE user_id = ?`, [req.user.id], (err, wallet) => {
+                        if (err || !wallet) {
+                            // Critical failure: Money moved but can't find destination for goods. 
+                            // In real app: Refund or manual intervention queue.
+                            return res.status(500).json({ error: 'Wallet error after payment' });
                         }
-                    );
+
+                        economyService.issueCreatorTokenToBuyer(token.creator_id, wallet.xrp_address, token.token_code, amount, db)
+                            .then(tokenTx => {
+                                // Both successful - Update DB state
+                                db.run(`UPDATE credits SET balance = balance - ? WHERE user_id = ?`, [totalCost, req.user.id]);
+                                db.run(`UPDATE credits SET balance = balance + ? WHERE user_id = ?`, [totalCost, token.creator_id]); // Creator gets credits
+                                db.run(`UPDATE tokens SET current_supply = current_supply - ? WHERE id = ?`, [amount, tokenId]);
+
+                                db.run(`INSERT INTO transactions (from_user_id, to_user_id, token_id, amount, type, description, xrp_tx_hash) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                    [req.user.id, token.creator_id, tokenId, amount, 'token_purchase', `Bought ${amount} ${token.token_name}`, tokenTx.txHash]
+                                );
+
+                                res.json({ success: true, amount, totalCost, tokenName: token.token_name, txHash: tokenTx.txHash });
+                            })
+                            .catch(err => {
+                                console.error('Token issuance failed:', err);
+                                res.status(500).json({ error: 'Payment succeeded but token issuance failed. Contact support.' });
+                            });
+                    });
+                })
+                .catch(err => {
+                    console.error('VPC Transfer failed:', err);
+                    res.status(500).json({ error: 'Payment failed: ' + err.message });
                 }
-            );
+                );
         });
     });
 });
@@ -1852,13 +1882,31 @@ app.post('/api/trustlines', authenticateToken, (req, res) => {
                 return res.status(400).json({ error: 'Trust line already exists' });
             }
 
-            db.run(`INSERT INTO trust_lines (user_id, token_id, trust_line_limit) VALUES (?, ?, ?)`,
-                [req.user.id, tokenId, limit || 1000000],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ success: true, trustLineId: this.lastID });
-                }
-            );
+            // Get Token Info for Currency Code and Issuer
+            db.get(`SELECT t.xrp_currency_code, w.xrp_address as issuer_address 
+                    FROM tokens t 
+                    JOIN wallets w ON t.creator_id = w.user_id 
+                    WHERE t.id = ?`, [tokenId],
+                (err, tokenInfo) => {
+                    if (err || !tokenInfo) return res.status(404).json({ error: 'Token info not found' });
+
+                    // Get User Wallet for Seed
+                    db.get(`SELECT xrp_secret_encrypted FROM wallets WHERE user_id = ?`, [req.user.id], async (err, wallet) => {
+                        if (err || !wallet) return res.status(404).json({ error: 'User wallet not found' });
+
+                        const result = await economyService.establishTrustLine(wallet.xrp_secret_encrypted, tokenInfo.issuer_address, tokenInfo.xrp_currency_code, limit);
+
+                        if (!result.success) return res.status(500).json({ error: 'XRPL TrustSet failed: ' + result.error });
+
+                        db.run(`INSERT INTO trust_lines (user_id, token_id, trust_line_limit, xrpl_trustline_hash) VALUES (?, ?, ?, ?)`,
+                            [req.user.id, tokenId, limit || 1000000, 'confirmed_on_ledger'],
+                            function (err) {
+                                if (err) return res.status(500).json({ error: err.message });
+                                res.json({ success: true, trustLineId: this.lastID });
+                            }
+                        );
+                    });
+                });
         }
     );
 });
@@ -2321,75 +2369,45 @@ app.use(express.static(__dirname));
 
 // PAYMENT ENDPOINTS (SIMULATED WITH REAL DATABASE UPDATES)
 // ═══════════════════════════════════════════════════
-app.post('/api/payment/initiate', authenticateToken, (req, res) => {
-    const { credits, cardLast4, billingEmail } = req.body;
-    if (!credits || credits <= 0) {
-        return res.status(400).json({ error: 'Invalid credit amount' });
+
+// Stripe Checkout Session
+app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
+    const { amountUSD } = req.body;
+
+    try {
+        const session = await economyService.createCheckoutSession(req.user.id, amountUSD, req.user.email);
+        res.json(session);
+    } catch (error) {
+        console.error('Stripe error:', error);
+        res.status(500).json({ error: error.message });
     }
-
-    // Create a simulated payment session
-    const sessionId = 'pay_' + Math.random().toString(36).substr(2, 9);
-    const amount = credits * 100; // $1 per credit
-
-    res.json({
-        sessionId,
-        amount,
-        credits,
-        status: 'pending',
-        paymentUrl: `http://localhost:5174?pay_id=${sessionId}`
-    });
 });
 
-app.post('/api/payment/confirm', authenticateToken, (req, res) => {
-    const { sessionId, credits } = req.body;
-    if (!sessionId || !credits || credits <= 0) {
-        return res.status(400).json({ error: 'Invalid payment data' });
+// Stripe Webhook
+app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+
+    try {
+        const result = await economyService.handleStripeWebhook(sig, req.body, db);
+        res.json(result);
+    } catch (err) {
+        res.status(400).send(`Webhook Error: ${err.message}`);
     }
+});
 
-    const intCredits = parseInt(credits);
-
-    // Add credits to user account
-    db.get(`SELECT * FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        if (creditRow) {
-            db.run(
-                `UPDATE credits SET balance = balance + ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
-                [intCredits, intCredits, req.user.id],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-
-                    // Record transaction
-                    db.run(
-                        `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
-                        [req.user.id, null, intCredits, 'payment_purchase', `Purchased ${intCredits} credits via payment gateway (${sessionId})`],
-                        (err) => {
-                            if (err) console.error('Transaction log error:', err);
-                            res.json({ success: true, newBalance: creditRow.balance + intCredits, credits: intCredits });
-                        }
-                    );
-                }
-            );
-        } else {
-            db.run(
-                `INSERT INTO credits (user_id, balance, total_spent) VALUES (?, ?, ?)`,
-                [req.user.id, intCredits, intCredits],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-
-                    // Record transaction
-                    db.run(
-                        `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
-                        [req.user.id, null, intCredits, 'payment_purchase', `Purchased ${intCredits} credits via payment gateway (${sessionId})`],
-                        (err) => {
-                            if (err) console.error('Transaction log error:', err);
-                            res.json({ success: true, newBalance: intCredits, credits: intCredits });
-                        }
-                    );
-                }
-            );
-        }
-    });
+// Legacy/Simulated endpoint for dev (mapped to Stripe flow)
+app.post('/api/payment/initiate', authenticateToken, async (req, res) => {
+    // Redirect to Stripe logic
+    const { credits } = req.body;
+    const amountUSD = credits / 100; // 100 credits = $1
+    try {
+        const session = await economyService.createCheckoutSession(req.user.id, amountUSD, req.user.email);
+        res.json({
+            sessionId: session.sessionId,
+            paymentUrl: session.url,
+            simulated: session.simulated
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Serve index.html (zine_builder.html) for unknown routes (SPA)

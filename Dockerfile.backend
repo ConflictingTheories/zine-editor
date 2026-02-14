@@ -1,33 +1,28 @@
-# ═══════════════════════════════════════════════════
-# Backend Dockerfile - Express + SQLite
-# ═══════════════════════════════════════════════════
-
-FROM node:20-alpine
+# Use LTS Alpine version for small footprint
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apk add --no-cache python3 make g++ sqlite
-
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy package files first to leverage Docker cache
+COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --omit=dev
+# Using npm ci for reliable builds (requires package-lock.json)
+# If package-lock.json is missing, fallback to npm install
+RUN npm ci || npm install
 
-# Copy server code
-COPY server ./server
-COPY .env ./.env
+# Copy source code
+COPY . .
 
-# Create data directory
-RUN mkdir -p /app/data
+# Create data directory for SQLite persistence
+RUN mkdir -p data
 
-# Expose port
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV DB_PATH=/app/data/database.sqlite
+
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
-# Start server
-CMD ["node", "server/server.cjs"]
+# Start the server
+CMD ["npm", "run", "server"]

@@ -1,84 +1,55 @@
-# ═══════════════════════════════════════════════════
-# Docker Compose - Full Stack Application
-# Void Press Zine Publishing Platform
-# ═══════════════════════════════════════════════════
-
-version: '3.9'
+version: '3.8'
 
 services:
-  # ─── Backend API ───────────────────────────────
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     container_name: void-press-backend
+    restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - backend_data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-unsafe_default_secret_please_change}
       - DB_PATH=/app/data/database.sqlite
-      - JWT_SECRET=${JWT_SECRET:-dev_secret_key_unsafe_for_production_only}
-      - JWT_EXPIRY=7d
+      - CORS_ORIGIN=*
+      # Economy Configuration
+      - XRPL_NODE_URL=wss://s.altnet.rippletest.net:51233
+      - PLATFORM_WALLET_SEED=${PLATFORM_WALLET_SEED}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - CORS_ORIGIN=http://localhost:5174,http://localhost:3000,http://frontend:5174
-      - XRP_NETWORK=testnet
-      - XRP_API_ENDPOINT=https://s.altnet.rippletest.net:51234
-    volumes:
-      - backend_data:/app/data
     networks:
       - void-net
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
-      timeout: 3s
+      timeout: 10s
       retries: 3
-      start_period: 5s
 
-  # ─── Frontend App ──────────────────────────────
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        # If using the Nginx proxy (recommended), this can be just /api
+        # If accessing backend directly from browser, use http://localhost:3000
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
     container_name: void-press-frontend
+    restart: unless-stopped
     ports:
-      - "5174:5174"
-    environment:
-      - VITE_API_BASE_URL=http://backend:3000
-      - VITE_APP_NAME=Void Press
-      - VITE_APP_VERSION=1.0.0
+      - "5173:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - void-net
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5174/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
 
-  # ─── Optional: Adminer for Database Management ─
-  adminer:
-    image: adminer:latest
-    container_name: void-press-adminer
-    ports:
-      - "8080:8080"
-    networks:
-      - void-net
-    restart: unless-stopped
-
-# ─── Volumes ───────────────────────────────────
 volumes:
   backend_data:
-    driver: local
 
-# ─── Networks ───────────────────────────────────
 networks:
   void-net:
     driver: bridge
