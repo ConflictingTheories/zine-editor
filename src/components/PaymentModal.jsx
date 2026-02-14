@@ -19,7 +19,6 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
         try {
             if (!token) throw new Error('Not authenticated')
 
-            // Initiate payment
             const initiateRes = await fetch('/api/payment/initiate', {
                 method: 'POST',
                 headers: {
@@ -36,10 +35,8 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
             const initiateData = await initiateRes.json()
             if (!initiateRes.ok) throw new Error(initiateData.error)
 
-            // Simulate card validation delay
             await new Promise(r => setTimeout(r, 1500))
 
-            // Confirm payment
             const confirmRes = await fetch('/api/stripe/confirm-payment', {
                 method: 'POST',
                 headers: {
@@ -63,29 +60,25 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
     }
 
     return (
-        <div className="payment-modal-overlay">
-            <div className="payment-modal">
-                <button className="modal-close" onClick={onCancel}>✕</button>
+        <div className="premium-modal-overlay active">
+            <div className="premium-modal-box" style={{ maxWidth: '450px' }}>
+                <button className="premium-modal-close" onClick={onCancel}>✕</button>
 
-                <h2>💳 Enter Payment Details</h2>
+                <h2 className="premium-modal-h2">💳 Payment Details</h2>
 
-                <div className="payment-summary">
-                    <div className="summary-row">
-                        <span>Credits:</span>
-                        <span className="amount">{credits}</span>
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--vp-border)', borderRadius: '12px', padding: '1.25rem', marginBottom: '2rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{ color: 'var(--vp-text-dim)' }}>Credits:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--vp-accent)' }}>{credits} VPC</span>
                     </div>
-                    <div className="summary-row">
-                        <span>Price:</span>
-                        <span className="amount">${credits}.00 USD</span>
-                    </div>
-                    <div className="summary-row">
-                        <span>Rate:</span>
-                        <span>$1 = 1 credit</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--vp-text-dim)' }}>Price:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--vp-accent)' }}>${credits}.00 USD</span>
                     </div>
                 </div>
 
                 <form onSubmit={handlePayment}>
-                    <div className="form-group">
+                    <div className="form-row">
                         <label>Email Address</label>
                         <input
                             type="email"
@@ -96,7 +89,7 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
                         />
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-row">
                         <label>Card Number</label>
                         <input
                             type="text"
@@ -106,11 +99,11 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
                             maxLength="16"
                             required
                         />
-                        <small>Test: 4242 4242 4242 4242</small>
+                        <small style={{ display: 'block', marginTop: '4px', fontSize: '0.7rem', color: 'var(--vp-text-dim)' }}>Test: 4242 4242 4242 4242</small>
                     </div>
 
-                    <div className="form-row">
-                        <div className="form-group">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="form-row">
                             <label>Expiry Date</label>
                             <input
                                 type="text"
@@ -121,7 +114,7 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
                                 required
                             />
                         </div>
-                        <div className="form-group">
+                        <div className="form-row">
                             <label>CVC</label>
                             <input
                                 type="text"
@@ -134,153 +127,21 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
                         </div>
                     </div>
 
-                    {error && <div className="error-message">{error}</div>}
+                    {error && (
+                        <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                            {error}
+                        </div>
+                    )}
 
-                    <div className="form-actions">
-                        <button type="button" onClick={onCancel} className="btn-cancel">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1rem', marginTop: '2rem' }}>
+                        <button type="button" onClick={onCancel} className="filter-tag" style={{ background: 'transparent', border: '1px solid var(--vp-border)' }}>
                             Cancel
                         </button>
-                        <button type="submit" disabled={isProcessing} className="btn-pay">
+                        <button type="submit" disabled={isProcessing} className="btn-premium">
                             {isProcessing ? 'Processing...' : `Pay $${credits}.00`}
                         </button>
                     </div>
                 </form>
-
-                <style>{`
-                    .payment-modal-overlay {
-                        position: fixed;
-                        inset: 0;
-                        background: rgba(0, 0, 0, 0.7);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        z-index: 1000;
-                    }
-                    .payment-modal {
-                        background: var(--vp-surface);
-                        border: 1px solid var(--vp-border);
-                        border-radius: 12px;
-                        padding: 32px;
-                        max-width: 450px;
-                        width: 90%;
-                        position: relative;
-                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-                    }
-                    .modal-close {
-                        position: absolute;
-                        top: 16px;
-                        right: 16px;
-                        background: none;
-                        border: none;
-                        font-size: 24px;
-                        cursor: pointer;
-                        color: var(--vp-text-dim);
-                    }
-                    .payment-modal h2 {
-                        color: var(--vp-accent);
-                        margin-bottom: 24px;
-                        font-size: 1.6em;
-                    }
-                    .payment-summary {
-                        background: var(--vp-surface2);
-                        border: 1px solid var(--vp-border);
-                        border-radius: 8px;
-                        padding: 16px;
-                        margin-bottom: 24px;
-                    }
-                    .summary-row {
-                        display: flex;
-                        justify-content: space-between;
-                        margin-bottom: 8px;
-                        font-size: 0.95em;
-                    }
-                    .summary-row:last-child {
-                        margin-bottom: 0;
-                    }
-                    .summary-row .amount {
-                        font-weight: 700;
-                        color: var(--vp-accent);
-                    }
-                    .form-group {
-                        margin-bottom: 16px;
-                    }
-                    .form-group label {
-                        display: block;
-                        margin-bottom: 6px;
-                        font-size: 0.9em;
-                        font-weight: 600;
-                        color: var(--vp-text);
-                    }
-                    .form-group input {
-                        width: 100%;
-                        padding: 10px 12px;
-                        border: 1px solid var(--vp-border);
-                        border-radius: 6px;
-                        background: var(--vp-surface2);
-                        color: var(--vp-text);
-                        font-size: 0.95em;
-                    }
-                    .form-group input:focus {
-                        outline: none;
-                        border-color: var(--vp-accent);
-                        box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
-                    }
-                    .form-group small {
-                        display: block;
-                        margin-top: 4px;
-                        font-size: 0.8em;
-                        color: var(--vp-text-dim);
-                    }
-                    .form-row {
-                        display: grid;
-                        grid-template-columns: 1fr 1fr;
-                        gap: 12px;
-                    }
-                    .error-message {
-                        background: rgba(239, 68, 68, 0.1);
-                        border: 1px solid #ef4444;
-                        color: #ef4444;
-                        padding: 12px;
-                        border-radius: 6px;
-                        margin-bottom: 16px;
-                        font-size: 0.9em;
-                    }
-                    .form-actions {
-                        display: grid;
-                        grid-template-columns: 1fr 1fr;
-                        gap: 12px;
-                        margin-top: 24px;
-                    }
-                    .btn-cancel, .btn-pay {
-                        padding: 12px 16px;
-                        border: none;
-                        border-radius: 6px;
-                        font-size: 0.95em;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: all 0.2s;
-                    }
-                    .btn-cancel {
-                        background: var(--vp-surface2);
-                        border: 1px solid var(--vp-border);
-                        color: var(--vp-text);
-                    }
-                    .btn-cancel:hover {
-                        border-color: var(--vp-accent);
-                    }
-                    .btn-pay {
-                        background: linear-gradient(135deg, var(--vp-accent), var(--vp-accent2));
-                        color: #000;
-                    }
-                    .btn-pay:hover:not(:disabled) {
-                        transform: translateY(-1px);
-                        box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
-                    }
-                    .btn-pay:disabled {
-                        opacity: 0.6;
-                        cursor: not-allowed;
-                    }
-                `}</style>
             </div>
         </div>
     )

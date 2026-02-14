@@ -593,10 +593,23 @@ const VPProvider = ({ children }) => {
             const b = { dialog: { balloonType: 'dialog', width: 200, height: 80, content: 'Dialog text...', fontSize: 14 }, thought: { balloonType: 'thought', width: 160, height: 120, content: 'Thinking...', fontSize: 13 }, shout: { balloonType: 'shout', width: 170, height: 80, content: 'SHOUT!', fontSize: 18 }, caption: { balloonType: 'caption', width: 220, height: 50, content: 'Caption text', fontSize: 13 }, whisper: { balloonType: 'whisper', width: 180, height: 70, content: 'whisper...', fontSize: 12 }, narration: { balloonType: 'narration', width: 240, height: 60, content: 'Meanwhile...', fontSize: 14 } }
             el = { ...base, type: 'balloon', ...(b[assetId] || b.dialog) }
         } else if (type === 'sfx') {
-            const t = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', whoosh: 'WHOOSH!', pow: 'POW!', splat: 'SPLAT!' }
+            const t = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', whoosh: 'WHOOSH!', pow: 'POW!', splat: 'SPLAT!', splash: 'SPLASH!' }
             el = { ...base, type: 'text', content: t[assetId] || 'BAM!', fontSize: 52, fontFamily: 'Bangers', color: '#0a0a0a', width: 180, height: 70, strokeWidth: 2, strokeColor: '#ffffff' }
         } else if (type === 'symbols') {
-            const s = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', omega: 'Ω', trident: '🔱' }
+            const s = {
+                pentagram: '⛤',
+                skull: '☠',
+                star_symbol: '✦',
+                eye: '👁',
+                biohazard: '☣',
+                radiation: '☢',
+                compass: '🧭',
+                rune: 'ᚱ',
+                ankh: '☥',
+                omega: 'Ω',
+                infinity: '∞',
+                trident: '🔱'
+            }
             el = { ...base, type: 'text', content: s[assetId] || '✦', fontSize: 56, color: '#d4af37', width: 80, height: 80, fontFamily: 'sans-serif' }
         } else if (type === 'shaders') {
             el = { ...base, type: 'shader', shaderPreset: assetId || 'plasma', width: 220, height: 220, opacity: 1 }

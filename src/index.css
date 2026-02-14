@@ -1,16 +1,180 @@
 :root {
-    --vp-text-dim: #888;
-    --vp-gold: #d4af37;
+    /* Premium Design Tokens */
+    --vp-bg-raw: 0, 0%, 7%;
+    --vp-bg: hsl(var(--vp-bg-raw));
+    --vp-surface-raw: 0, 0%, 12%;
+    --vp-surface: hsl(var(--vp-surface-raw));
+    --vp-surface-elevated: hsl(0, 0%, 15%);
+
+    --vp-accent-raw: 45, 65%, 53%;
+    /* Gold #d4af37 */
+    --vp-accent: hsl(var(--vp-accent-raw));
+    --vp-accent-glow: hsla(var(--vp-accent-raw), 0.3);
+
+    --vp-primary-raw: 280, 40%, 40%;
+    --vp-primary: hsl(var(--vp-primary-raw));
+
+    --vp-text: #ffffff;
+    --vp-text-dim: #999999;
+    --vp-border: hsla(0, 0%, 100%, 0.1);
+
+    --vp-glass-bg: hsla(var(--vp-surface-raw), 0.85);
+    --vp-glass-border: hsla(var(--vp-accent-raw), 0.2);
+
+    --vp-shadow-premium: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 15px var(--vp-accent-glow);
+    --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
     margin: 0;
-    background: #111;
-    color: #fff;
-    font-family: sans-serif;
+    background: var(--vp-bg);
+    color: var(--vp-text);
+    font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
 }
 
-/* Discover Component Styles */
+/* Premium Modal System */
+.premium-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.3s var(--transition-smooth);
+}
+
+.premium-modal-box {
+    background: var(--vp-glass-bg);
+    border: 1px solid var(--vp-glass-border);
+    border-radius: 20px;
+    padding: 2.5rem;
+    max-width: 500px;
+    width: 90%;
+    position: relative;
+    box-shadow: var(--vp-shadow-premium);
+    animation: popIn 0.4s var(--transition-smooth);
+    color: var(--vp-text);
+}
+
+.premium-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    color: var(--vp-text-dim);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s;
+    line-height: 1;
+}
+
+.premium-modal-close:hover {
+    color: var(--vp-accent);
+}
+
+.premium-modal-h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    background: linear-gradient(135deg, #fff, var(--vp-accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.02em;
+}
+
+/* Form Elements */
+.form-row {
+    margin-bottom: 1.25rem;
+}
+
+.form-row label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--vp-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    background: hsla(0, 0%, 100%, 0.03);
+    border: 1px solid var(--vp-border);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 1rem;
+    transition: all 0.2s var(--transition-smooth);
+    box-sizing: border-box;
+}
+
+.form-row input:focus {
+    outline: none;
+    border-color: var(--vp-accent);
+    background: hsla(0, 0%, 100%, 0.06);
+    box-shadow: 0 0 0 4px var(--vp-accent-glow);
+}
+
+/* Buttons */
+.btn-premium {
+    background: linear-gradient(135deg, var(--vp-accent), #b8962e);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    padding: 0.85rem 1.5rem;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s var(--transition-smooth);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+}
+
+.btn-premium:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(212, 175, 55, 0.4);
+    filter: brightness(1.1);
+}
+
+.btn-premium:active {
+    transform: translateY(0);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes popIn {
+    from {
+        transform: scale(0.95) translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Legacy Support / Discover / etc. */
 .discover {
     padding: 20px;
     max-width: 1200px;
@@ -51,7 +215,7 @@ body {
 
 .filter-tag.active,
 .filter-tag:hover {
-    background: var(--vp-gold);
+    background: var(--vp-accent);
     color: #000;
 }
 
@@ -72,7 +236,7 @@ body {
 
 .discover-card:hover {
     transform: translateY(-5px);
-    border-color: var(--vp-gold);
+    border-color: var(--vp-accent);
 }
 
 .discover-card-cover {

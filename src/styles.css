@@ -1029,6 +1029,7 @@ textarea {
 
 .form-row input[type=number] {
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .form-row input[type=number]::-webkit-outer-spin-button,
@@ -1458,39 +1459,94 @@ body.reader-active .topnav {
 }
 
 .modal-overlay.active {
-    display: flex
+    display: flex;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modalSlideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .modal-box {
-    background: var(--vp-surface);
-    border: 1px solid var(--vp-border);
-    border-radius: var(--radius-lg);
+    background: rgba(19, 19, 26, 0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
     padding: 32px;
-    max-width: 640px;
-    width: 90%;
+    max-width: 800px;
+    width: 95%;
     max-height: 85vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.modal-box::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.5), transparent);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
 }
 
 .modal-box h2 {
     font-family: var(--font-display);
     color: var(--vp-accent);
-    margin-bottom: 20px;
-    font-size: 1.5em
+    margin-bottom: 0;
+    font-size: 1.8em;
+    letter-spacing: 1px;
+    text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
 }
 
-.modal-box .modal-close {
-    float: right;
-    background: none;
-    border: none;
+.modal-close {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--vp-text-dim);
-    font-size: 1.5em;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1em;
 }
 
-.modal-box .modal-close:hover {
-    color: var(--vp-danger)
+.modal-close:hover {
+    background: var(--vp-danger);
+    color: #fff;
+    transform: rotate(90deg);
 }
 
 .modal-box .form-row {
@@ -1524,29 +1580,161 @@ body.reader-active .topnav {
 }
 
 /* Asset modal grid */
+/* Asset modal layouts */
+.asset-modal-content {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    height: 60vh;
+    overflow: hidden;
+}
+
+.asset-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding-right: 16px;
+}
+
+.asset-sidebar-btn {
+    padding: 12px 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--vp-text-dim);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.asset-sidebar-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--vp-text);
+}
+
+.asset-sidebar-btn.active {
+    background: rgba(212, 175, 55, 0.1);
+    border-color: rgba(212, 175, 55, 0.3);
+    color: var(--vp-accent);
+}
+
+.asset-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow: hidden;
+}
+
+.asset-search {
+    position: relative;
+    width: 100%;
+}
+
+.asset-search input {
+    width: 100%;
+    padding: 12px 16px 12px 40px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: var(--vp-text);
+    font-size: 0.9em;
+}
+
+.asset-search::before {
+    content: '🔍';
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9em;
+    opacity: 0.5;
+}
+
 .asset-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-    gap: 8px;
-    margin-top: 12px
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+    overflow-y: auto;
+    padding-right: 8px;
+    padding-bottom: 20px;
+}
+
+/* Custom Scrollbar for Asset Grid */
+.asset-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.asset-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.asset-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.asset-grid::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .asset-item {
     aspect-ratio: 1;
-    background: var(--vp-surface2);
-    border: 2px solid var(--vp-border);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     cursor: pointer;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
-    transition: all .2s;
+    border-radius: 14px;
+    gap: 8px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
     overflow: hidden;
 }
 
+.asset-item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(60% 60% at 50% 50%, rgba(212, 175, 55, 0.1) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
 .asset-item:hover {
-    border-color: var(--vp-accent);
-    transform: scale(1.05)
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(212, 175, 55, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+.asset-item:hover::before {
+    opacity: 1;
+}
+
+.asset-preview {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.asset-name {
+    font-size: 0.7em;
+    color: var(--vp-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    z-index: 1;
+}
+
+.asset-item:hover .asset-name {
+    color: var(--vp-accent);
 }
 
 /* Theme picker grid */
@@ -1877,33 +2065,84 @@ body.reader-active .topnav {
 
 /* Element-level animations (used in Reader/Preview) */
 @keyframes reader-flash-in {
-    0% { opacity: 0; }
-    50% { opacity: 1; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 @keyframes reader-el-lightning {
-    0%, 100% { opacity: 0.3; filter: brightness(1); }
-    20%, 80% { opacity: 1; filter: brightness(2); }
-    40% { opacity: 0.5; filter: brightness(1); }
-    60% { opacity: 1; filter: brightness(1.8); }
+
+    0%,
+    100% {
+        opacity: 0.3;
+        filter: brightness(1);
+    }
+
+    20%,
+    80% {
+        opacity: 1;
+        filter: brightness(2);
+    }
+
+    40% {
+        opacity: 0.5;
+        filter: brightness(1);
+    }
+
+    60% {
+        opacity: 1;
+        filter: brightness(1.8);
+    }
 }
 
 @keyframes reader-el-shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-4px); }
-    50% { transform: translateX(4px); }
-    75% { transform: translateX(-2px); }
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-4px);
+    }
+
+    50% {
+        transform: translateX(4px);
+    }
+
+    75% {
+        transform: translateX(-2px);
+    }
 }
 
 @keyframes reader-el-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
 }
 
 @keyframes reader-el-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Context menu */

@@ -7,16 +7,14 @@ const CreditPurchase = () => {
     const { xrState } = useXRPayID()
     const { vpState } = useVP()
     const token = vpState.token
-    const [amount, setAmount] = useState(10) // amount in USD
+    const [amount, setAmount] = useState(10)
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState(null)
     const [stripePromise, setStripePromise] = useState(null)
     const [stripeEnabled, setStripeEnabled] = useState(false)
-
     const [isConfigLoading, setIsConfigLoading] = useState(true)
 
     useEffect(() => {
-        // Load publishable key from server
         setIsConfigLoading(true)
         fetch('/api/stripe/config')
             .then(r => r.json())
@@ -42,7 +40,6 @@ const CreditPurchase = () => {
         try {
             if (!token) throw new Error('Not authenticated')
 
-            // Create Stripe session on backend (amount in USD)
             const sessionRes = await fetch('/api/stripe/create-checkout-session', {
                 method: 'POST',
                 headers: {
@@ -55,23 +52,19 @@ const CreditPurchase = () => {
             const sessionData = await sessionRes.json()
             if (!sessionRes.ok) throw new Error(sessionData.error)
 
-            // If Stripe is enabled, redirect to Stripe Checkout
             if (stripePromise && !sessionData.simulated) {
                 const stripe = await stripePromise
                 const { error } = await stripe.redirectToCheckout({ sessionId: sessionData.sessionId })
                 if (error) setMessage({ type: 'error', text: error.message })
-                // Stripe will redirect back to /dashboard with session_id
                 return
             }
 
-            // Fallback (mock): immediately confirm payment with backend
             await fetch('/api/stripe/confirm-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ sessionId: sessionData.sessionId })
             })
 
-            // Refresh XR data
             window.location.reload()
         } catch (err) {
             setMessage({ type: 'error', text: err.message })
@@ -83,28 +76,29 @@ const CreditPurchase = () => {
     const presetAmounts = [5, 10, 25, 50, 100]
 
     return (
-        <div className="credit-purchase">
-            <h3>💰 Purchase Credits</h3>
+        <div style={{ background: 'var(--vp-surface)', border: '1px solid var(--vp-border)', borderRadius: '16px', padding: '2rem', maxWidth: '500px' }}>
+            <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.4rem' }}>💰 Purchase Credits</h3>
 
-            <div className="balance-display">
-                <span className="label">Current Balance:</span>
-                <span className="value">{xrState.credits.toLocaleString()} VPC</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--vp-primary)', color: 'white', borderRadius: '10px', marginBottom: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                <span style={{ fontWeight: 600 }}>Current Balance</span>
+                <span style={{ fontWeight: 800, color: 'var(--vp-accent)' }}>{xrState.credits.toLocaleString()} VPC</span>
             </div>
 
-            <div className="preset-amounts">
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                 {presetAmounts.map(preset => (
                     <button
                         key={preset}
-                        className={`preset-btn ${amount === preset ? 'active' : ''}`}
+                        className={`filter-tag ${amount === preset ? 'active' : ''}`}
                         onClick={() => setAmount(preset)}
+                        style={{ padding: '8px 16px', fontWeight: 700 }}
                     >
                         ${preset}
                     </button>
                 ))}
             </div>
 
-            <div className="custom-amount">
-                <label>Custom USD Amount:</label>
+            <div className="form-row">
+                <label>Custom USD Amount</label>
                 <input
                     type="number"
                     value={amount}
@@ -113,16 +107,17 @@ const CreditPurchase = () => {
                 />
             </div>
 
-            <div className="price-display">
-                <strong>Price: ${amount}.00 USD</strong>
-                <small>$1 = 100 VPC (Void Press Credits)</small>
-                <div style={{ marginTop: 6 }}><em>You'll receive {amount * 100} VPC after payment</em></div>
+            <div style={{ padding: '1.25rem', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--vp-accent-glow)', borderRadius: '10px', marginBottom: '2rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--vp-accent)', marginBottom: '0.25rem' }}>Price: ${amount}.00 USD</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--vp-text-dim)' }}>$1 = 100 VPC (Void Press Credits)</div>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', fontWeight: 600 }}>You'll receive {amount * 100} VPC</div>
             </div>
 
             <button
-                className="purchase-btn"
+                className="btn-premium"
                 onClick={handlePurchase}
                 disabled={isLoading || amount <= 0 || isConfigLoading || !stripeEnabled}
+                style={{ width: '100%' }}
             >
                 {isConfigLoading ? 'Loading payment system...' :
                     isLoading ? 'Redirecting to Stripe...' :
@@ -131,110 +126,10 @@ const CreditPurchase = () => {
             </button>
 
             {message && (
-                <div className={`message ${message.type}`}>
+                <div style={{ marginTop: '1.5rem', padding: '1rem', borderRadius: '8px', textAlign: 'center', background: message.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(40, 167, 69, 0.1)', color: message.type === 'error' ? '#ef4444' : '#28a745', border: `1px solid ${message.type === 'error' ? '#ef4444' : '#28a745'}` }}>
                     {message.text}
                 </div>
             )}
-
-            <style>{`
-                .credit-purchase {
-                    padding: 20px;
-                    background: var(--ed-white, #fdfaf1);
-                    border-radius: 8px;
-                    max-width: 500px;
-                }
-                .credit-purchase h3 {
-                    margin-top: 0;
-                    color: var(--ed-black, #1a1a1a);
-                    margin-bottom: 20px;
-                }
-                .balance-display {
-                    display: flex;
-                    justify-content: space-between;
-                    padding: 12px;
-                    background: var(--ed-purple, #4b2c5e);
-                    color: white;
-                    border-radius: 6px;
-                    margin-bottom: 20px;
-                }
-                .preset-amounts {
-                    display: flex;
-                    gap: 8px;
-                    flex-wrap: wrap;
-                    margin-bottom: 16px;
-                }
-                .preset-btn {
-                    padding: 8px 16px;
-                    border: 2px solid var(--ed-crimson, #5c0a0a);
-                    background: transparent;
-                    color: var(--ed-crimson, #5c0a0a);
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-weight: bold;
-                }
-                .preset-btn.active, .preset-btn:hover {
-                    background: var(--ed-crimson, #5c0a0a);
-                    color: white;
-                }
-                .custom-amount {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    margin-bottom: 16px;
-                }
-                .custom-amount input {
-                    padding: 8px;
-                    border: 2px solid var(--ed-gray, #34495e);
-                    border-radius: 4px;
-                    width: 100px;
-                    font-size: 16px;
-                }
-                .price-display {
-                    padding: 12px;
-                    background: rgba(212, 175, 55, 0.15);
-                    border-radius: 4px;
-                    margin-bottom: 16px;
-                    text-align: center;
-                }
-                .price-display strong {
-                    display: block;
-                    font-size: 1.2em;
-                    color: var(--ed-gold, #d4af37);
-                    margin-bottom: 4px;
-                }
-                .price-display small {
-                    color: var(--ed-gray, #34495e);
-                }
-                .purchase-btn {
-                    width: 100%;
-                    padding: 14px;
-                    background: linear-gradient(135deg, var(--ed-gold, #d4af37), var(--ed-crimson, #5c0a0a));
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    font-size: 16px;
-                    font-weight: bold;
-                    cursor: pointer;
-                }
-                .purchase-btn:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                }
-                .message {
-                    margin-top: 12px;
-                    padding: 10px;
-                    border-radius: 4px;
-                    text-align: center;
-                }
-                .message.success {
-                    background: #d4edda;
-                    color: #155724;
-                }
-                .message.error {
-                    background: #f8d7da;
-                    color: #721c24;
-                }
-            `}</style>
         </div>
     )
 }

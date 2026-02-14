@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const express = require('express');
 const knex = require('knex');
-const knexConfig = require('../knexfile.cjs');
+const knexConfig = require('./knexfile.cjs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
