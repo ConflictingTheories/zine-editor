@@ -1,6 +1,9 @@
 import React, { useState } from 'react'
+import { useVP } from '../context/VPContext.jsx'
 
 const PaymentModal = ({ credits, onSuccess, onCancel }) => {
+    const { vpState } = useVP()
+    const token = vpState.token
     const [cardNumber, setCardNumber] = useState('4242424242424242')
     const [cardExpiry, setCardExpiry] = useState('12/25')
     const [cardCvc, setCardCvc] = useState('123')
@@ -14,7 +17,6 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
         setIsProcessing(true)
 
         try {
-            const token = localStorage.getItem('vp_token')
             if (!token) throw new Error('Not authenticated')
 
             // Initiate payment
@@ -38,15 +40,14 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
             await new Promise(r => setTimeout(r, 1500))
 
             // Confirm payment
-            const confirmRes = await fetch('/api/payment/confirm', {
+            const confirmRes = await fetch('/api/stripe/confirm-payment', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    sessionId: initiateData.sessionId,
-                    credits
+                    sessionId: initiateData.sessionId
                 })
             })
 

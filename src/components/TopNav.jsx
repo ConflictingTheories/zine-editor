@@ -7,7 +7,7 @@ const styles = {
 }
 
 function TopNav() {
-    const { vpState, updateVpState, showView, showModal } = useVP()
+    const { vpState, updateVpState, showView, showModal, logout } = useVP()
 
     const handleViewChange = (view) => {
         showView(view)
@@ -75,7 +75,7 @@ function TopNav() {
                     {vpState.user ? (
                         <div style={styles.userProfile}>
                             <div className="topnav-avatar">{vpState.user.username[0]}</div>
-                            <button onClick={() => updateVpState({ user: null, token: null })}>
+                            <button onClick={logout}>
                                 Logout
                             </button>
                         </div>

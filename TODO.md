@@ -1,53 +1,89 @@
-# TODO: Fix XRP Economy System
+# Marketplace Fix Plan
 
-## Task Overview
-Fix the conceptual mismatch between the code and the intended vision:
-- Users buy credits via Stripe → Credits issued as XRP
-- Credits serve as currency between creators
-- Creators can issue their own XRP tokens via trust lines
-- Users can accept other creators' tokens
+## Phase 1: Critical Backend Fixes
 
-## Issues Identified
+### 1.1 Fix economyService.cjs - Missing xrpl import
+- [ ] Add xrpl import to economyService.cjs
+- [ ] Fix PLATFORM_SEED reference
 
-### 1. economyService.js
-- [ ] Not integrated with server (functions not called)
-- [ ] Uses mock XRP addresses
-- [ ] No webhook endpoint
+### 1.2 Create .env.example file
+- [ ] Document all required environment variables
+- [ ] Add XRP testnet credentials guidance
 
-### 2. xrpService.js
-- [ ] Missing trust line checking function
-- [ ] Missing account info retrieval
-- [ ] No creator token issuance integration
+### 1.3 Fix XRP Service Issues
+- [ ] Add proper error handling
+- [ ] Add fallback for missing credentials
 
-### 3. server.cjs  
-- [ ] Missing `/api/stripe/checkout-session` endpoint
-- [ ] Credit purchases are simulated, not real Stripe
-- [ ] Token creation doesn't issue real XRP tokens
-- [ ] Trust lines aren't established on XRPL
+## Phase 2: Frontend Integration
 
-### 4. Frontend
-- [ ] CreditPurchase.jsx calls non-existent endpoint
+### 2.1 Fix CreditPurchase.jsx
+- [ ] Remove hardcoded Stripe key
+- [ ] Load from environment/config
+- [ ] Add proper loading states
+- [ ] Fix error handling
 
-## Implementation Plan
+### 2.2 Fix WalletModal.jsx
+- [ ] Implement proper wallet connection flow
+- [ ] Add XRP wallet generation/connection
+- [ ] Add proper UI states
 
-### Step 1: Update xrpService.js
-- Add `checkTrustLine()` function
-- Add `getAccountInfo()` function  
-- Add `issueCreatorToken()` function that creates real XRP tokens
+### 2.3 Fix PaymentModal.jsx
+- [ ] Implement proper payment flow
+- [ ] Add Stripe integration
+- [ ] Add XRP payment option
 
-### Step 2: Update economyService.js
-- Fix to use real database
-- Add proper Stripe webhook handling
-- Connect to xrpService for real XRP issuance
+### 2.4 Fix TokenMarketplace.jsx
+- [ ] Add loading states
+- [ ] Add better error handling
+- [ ] Show token-gated indicator
 
-### Step 3: Update server.cjs
-- Add `/api/stripe/checkout-session` endpoint
-- Add `/api/stripe/webhook` endpoint
-- Integrate xrpService for real operations
-- Fix credit purchase to actually work
+### 2.5 Fix TokenIssuance.jsx
+- [ ] Add loading states
+- [ ] Show created tokens properly
 
-### Step 4: Update CreditPurchase.jsx
-- Fix to use correct API endpoints
-- Add proper error handling
+## Phase 3: Authentication & Security
 
-## Status: In Progress
+### 3.1 Fix Protected Routes
+- [ ] Ensure monetization dashboard requires login
+- [ ] Ensure dashboard features require login
+- [ ] Add proper auth guards
+
+### 3.2 Improve VPContext
+- [ ] Add proper auth state handling
+- [ ] Add redirect logic for protected routes
+
+## Phase 4: UI/UX Improvements
+
+### 4.1 Enhance Dashboard
+- [ ] Show monetization features when logged in
+- [ ] Add wallet/credits quick view
+- [ ] Add quick actions
+
+### 4.2 Enhance Discover
+- [ ] Show token-gated content indicators
+- [ ] Add purchase prompts for gated content
+
+### 4.3 Enhance MonetizationDashboard
+- [ ] Add comprehensive stats
+- [ ] Add proper tab navigation
+- [ ] Show all relevant information
+
+## Phase 5: Testing & Verification
+
+### 5.1 Test Credit Purchase Flow
+- [ ] Test Stripe checkout
+- [ ] Verify credit balance update
+
+### 5.2 Test Token Flow
+- [ ] Test token creation
+- [ ] Test token purchase
+- [ ] Test trust line creation
+
+### 5.3 Test XRP Integration
+- [ ] Test wallet creation
+- [ ] Test payment flow
+
+## Dependencies to Install
+- [ ] dotenv (for environment variables)
+- [ ] stripe (already installed)
+- [ ] xrpl (already installed)

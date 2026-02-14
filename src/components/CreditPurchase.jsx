@@ -1,15 +1,36 @@
-
 import React, { useState, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { useXRPayID } from '../context/XRPayIDContext'
-
-const stripePromise = loadStripe('pk_test_51234567890987654321234567890') // Test key
+import { useVP } from '../context/VPContext'
 
 const CreditPurchase = () => {
     const { xrState } = useXRPayID()
-    const [amount, setAmount] = useState(100)
+    const [amount, setAmount] = useState(10) // amount in USD
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState(null)
+    const [stripePromise, setStripePromise] = useState(null)
+    const [stripeEnabled, setStripeEnabled] = useState(false)
+
+    const [isConfigLoading, setIsConfigLoading] = useState(true)
+
+    useEffect(() => {
+        // Load publishable key from server
+        setIsConfigLoading(true)
+        fetch('/api/stripe/config')
+            .then(r => r.json())
+            .then(cfg => {
+                if (cfg && cfg.publishableKey) {
+                    setStripePromise(loadStripe(cfg.publishableKey))
+                }
+                setStripeEnabled(!!cfg?.enabled)
+            })
+            .catch((err) => {
+                console.error('Failed to load Stripe config:', err)
+                setStripeEnabled(false)
+                setMessage({ type: 'error', text: 'Failed to load payment configuration' })
+            })
+            .finally(() => setIsConfigLoading(false))
+    }, [])
 
     const handlePurchase = async () => {
         if (amount <= 0) return
@@ -20,28 +41,37 @@ const CreditPurchase = () => {
             const token = localStorage.getItem('vp_token')
             if (!token) throw new Error('Not authenticated')
 
-            // Get checkout session from backend
-            const sessionRes = await fetch('/api/stripe/checkout-session', {
+            // Create Stripe session on backend (amount in USD)
+            const sessionRes = await fetch('/api/stripe/create-checkout-session', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ credits: amount })
+                body: JSON.stringify({ amountUSD: amount })
             })
 
             const sessionData = await sessionRes.json()
             if (!sessionRes.ok) throw new Error(sessionData.error)
 
-            // Redirect to Stripe checkout
-            const stripe = await stripePromise
-            const { error } = await stripe.redirectToCheckout({
-                sessionId: sessionData.sessionId
+            // If Stripe is enabled, redirect to Stripe Checkout
+            if (stripePromise && !sessionData.simulated) {
+                const stripe = await stripePromise
+                const { error } = await stripe.redirectToCheckout({ sessionId: sessionData.sessionId })
+                if (error) setMessage({ type: 'error', text: error.message })
+                // Stripe will redirect back to /dashboard with session_id
+                return
+            }
+
+            // Fallback (mock): immediately confirm payment with backend
+            await fetch('/api/stripe/confirm-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ sessionId: sessionData.sessionId })
             })
 
-            if (error) {
-                setMessage({ type: 'error', text: error.message })
-            }
+            // Refresh XR data
+            window.location.reload()
         } catch (err) {
             setMessage({ type: 'error', text: err.message })
         }
@@ -49,7 +79,7 @@ const CreditPurchase = () => {
         setIsLoading(false)
     }
 
-    const presetAmounts = [10, 50, 100, 500, 1000]
+    const presetAmounts = [5, 10, 25, 50, 100]
 
     return (
         <div className="credit-purchase">
@@ -57,7 +87,7 @@ const CreditPurchase = () => {
 
             <div className="balance-display">
                 <span className="label">Current Balance:</span>
-                <span className="value">{xrState.credits.toFixed(2)} credits</span>
+                <span className="value">{xrState.credits.toLocaleString()} VPC</span>
             </div>
 
             <div className="preset-amounts">
@@ -67,13 +97,13 @@ const CreditPurchase = () => {
                         className={`preset-btn ${amount === preset ? 'active' : ''}`}
                         onClick={() => setAmount(preset)}
                     >
-                        {preset}
+                        ${preset}
                     </button>
                 ))}
             </div>
 
             <div className="custom-amount">
-                <label>Custom Amount:</label>
+                <label>Custom USD Amount:</label>
                 <input
                     type="number"
                     value={amount}
@@ -84,15 +114,19 @@ const CreditPurchase = () => {
 
             <div className="price-display">
                 <strong>Price: ${amount}.00 USD</strong>
-                <small>$1 = 1 credit</small>
+                <small>$1 = 100 VPC (Void Press Credits)</small>
+                <div style={{ marginTop: 6 }}><em>You'll receive {amount * 100} VPC after payment</em></div>
             </div>
 
             <button
                 className="purchase-btn"
                 onClick={handlePurchase}
-                disabled={isLoading || amount <= 0}
+                disabled={isLoading || amount <= 0 || isConfigLoading || !stripeEnabled}
             >
-                {isLoading ? 'Redirecting to Stripe...' : `Pay $${amount}.00 with Stripe`}
+                {isConfigLoading ? 'Loading payment system...' :
+                    isLoading ? 'Redirecting to Stripe...' :
+                        !stripeEnabled ? 'Payment System Unavailable' :
+                            `Pay $${amount}.00 with Stripe`}
             </button>
 
             {message && (

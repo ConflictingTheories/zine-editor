@@ -1875,6 +1875,37 @@ body.reader-active .topnav {
     }
 }
 
+/* Element-level animations (used in Reader/Preview) */
+@keyframes reader-flash-in {
+    0% { opacity: 0; }
+    50% { opacity: 1; }
+    100% { opacity: 1; }
+}
+
+@keyframes reader-el-lightning {
+    0%, 100% { opacity: 0.3; filter: brightness(1); }
+    20%, 80% { opacity: 1; filter: brightness(2); }
+    40% { opacity: 0.5; filter: brightness(1); }
+    60% { opacity: 1; filter: brightness(1.8); }
+}
+
+@keyframes reader-el-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    50% { transform: translateX(4px); }
+    75% { transform: translateX(-2px); }
+}
+
+@keyframes reader-el-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@keyframes reader-el-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* Context menu */
 .ctx-menu {
     display: none;

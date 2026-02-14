@@ -2,6 +2,23 @@ import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 
+const ANIMATION_MAP = {
+    'flash-in': 'reader-flash-in',
+    'lightning': 'reader-el-lightning',
+    'shake': 'reader-el-shake',
+    'pulse': 'reader-el-pulse',
+    'spin': 'reader-el-spin'
+}
+
+const BALLOON_PROPS = {
+    dialog: { background: '#fff', border: '2px solid #000', borderRadius: '20px' },
+    thought: { background: '#fff', border: '2px solid #000', borderRadius: '50%' },
+    shout: { background: '#fff', border: '4px solid #000', fontWeight: 'bold' },
+    caption: { background: '#000', color: '#fff' },
+    whisper: { background: '#f8f8f8', border: '1px dashed #999', borderRadius: '16px', fontStyle: 'italic' },
+    narration: { background: '#ffe', border: '1px solid #cc9', fontStyle: 'italic' }
+}
+
 const styles = {
     toolbarSpacer: { flex: 1 },
     page: (page) => ({
@@ -14,35 +31,77 @@ const styles = {
         backgroundSize: 'cover', opacity: 0.2,
         pointerEvents: 'none'
     }),
-    element: (el, hidden) => ({
-        position: 'absolute',
-        left: el.x, top: el.y, width: el.width, height: el.height,
-        transform: `rotate(${el.rotation || 0}deg)`,
-        zIndex: el.zIndex,
-        opacity: el.opacity ?? 1,
-        mixBlendMode: el.blendMode || 'normal',
-        cursor: el.action ? 'pointer' : 'default',
-        display: hidden ? 'none' : undefined
-    }),
+    element: (el, hidden) => {
+        const animName = ANIMATION_MAP[el.animation] || null
+        const animDuration = el.animDuration ?? 1
+        const animIter = el.animLoop ? 'infinite' : '1'
+        return {
+            position: 'absolute',
+            left: el.x, top: el.y, width: el.width, height: el.height,
+            transform: `rotate(${el.rotation || 0}deg)`,
+            zIndex: el.zIndex,
+            opacity: el.opacity ?? 1,
+            mixBlendMode: el.blendMode || 'normal',
+            cursor: el.action ? 'pointer' : 'default',
+            display: hidden ? 'none' : undefined,
+            // Visual effects (were missing)
+            boxShadow: el.shadow || 'none',
+            filter: el.blur ? `blur(${el.blur}px)` : el.filter || 'none',
+            border: el.borderWidth ? `${el.borderWidth}px solid ${el.borderColor || '#000'}` : 'none',
+            borderRadius: el.borderRadius ? `${el.borderRadius}px` : '0',
+            // CSS animation
+            animation: animName ? `${animName} ${animDuration}s ease ${animIter}` : 'none'
+        }
+    },
     text: (el) => ({
         fontSize: el.fontSize, color: el.color, fontFamily: el.fontFamily,
         textAlign: el.align, fontWeight: el.bold ? 'bold' : 'normal',
-        fontStyle: el.italic ? 'italic' : 'normal'
+        fontStyle: el.italic ? 'italic' : 'normal',
+        lineHeight: el.lineHeight || 'normal',
+        letterSpacing: el.letterSpacing ? `${el.letterSpacing}px` : 'normal',
+        textShadow: el.textShadow || 'none',
+        WebkitTextStroke: el.strokeWidth ? `${el.strokeWidth}px ${el.strokeColor || '#fff'}` : 'none'
     }),
     image: (el) => ({
-        width: '100%', height: '100%', objectFit: el.objectFit || 'contain'
+        width: '100%', height: '100%',
+        objectFit: el.objectFit || 'contain',
+        borderRadius: el.imgRadius ? `${el.imgRadius}px` : '0'
     }),
     panel: (el) => ({
         width: '100%', height: '100%',
-        border: `${el.panelBorderWidth}px ${el.panelBorderStyle} ${el.panelBorderColor}`,
-        borderRadius: el.panelRadius, background: el.fill
+        border: `${el.panelBorderWidth || 4}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}`,
+        borderRadius: `${el.panelRadius || 0}px`,
+        background: el.fill || 'transparent',
+        boxShadow: el.panelShadow || 'none'
     }),
-    shape: (el) => ({
-        width: '100%', height: '100%',
-        background: el.shape === 'triangle' ? 'transparent' : el.fill,
-        borderRadius: el.shape === 'circle' ? '50%' : 0,
-        clipPath: el.shape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none'
-    }),
+    shape: (el) => {
+        const base = {
+            width: '100%', height: '100%',
+            background: el.shape === 'triangle' ? 'transparent' : (el.fill || '#000'),
+            borderRadius: el.shape === 'circle' ? '50%' : 0
+        }
+        if (el.shape === 'diamond') base.transform = 'rotate(45deg)'
+        if (el.shape === 'triangle') {
+            base.width = '0'
+            base.height = '0'
+            base.borderLeft = `${el.width / 2}px solid transparent`
+            base.borderRight = `${el.width / 2}px solid transparent`
+            base.borderBottom = `${el.height}px solid ${el.fill || '#000'}`
+        }
+        return base
+    },
+    balloon: (el) => {
+        const bStyle = BALLOON_PROPS[el.balloonType || 'dialog'] || BALLOON_PROPS.dialog
+        return {
+            fontSize: el.fontSize || 14,
+            padding: '10px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            textAlign: 'center', width: '100%', height: '100%',
+            ...bStyle
+        }
+    },
+    video: { width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' },
+    audioLog: { width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', border: '1px solid #d4af37', padding: 10, color: '#fff', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' },
     modalControls: {
         display: 'flex', gap: '10px', marginTop: '15px'
     }
@@ -120,7 +179,8 @@ function Reader() {
                 }
                 break
             case 'vfx':
-                triggerVfx(actionVal)
+                // fallback to "flash" when actionVal is missing so older elements still trigger
+                triggerVfx(actionVal || 'flash')
                 break
             case 'sfx':
                 playSFX(actionVal)
@@ -192,6 +252,25 @@ function Reader() {
                                 )}
                                 {el.type === 'shader' && (
                                     <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
+                                )}
+                                {el.type === 'balloon' && (
+                                    <div style={styles.balloon(el)}>{el.content}</div>
+                                )}
+                                {el.type === 'video' && (
+                                    el.src
+                                        ? <video src={el.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls autoPlay muted />
+                                        : <div style={styles.video}>VIDEO: No Source</div>
+                                )}
+                                {el.type === 'audio-log' && (
+                                    <div style={styles.audioLog}>
+                                        <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+                                            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                                onClick={(e) => { e.stopPropagation(); if (el.src) { const a = new Audio(el.src); a.play().catch(() => { }) } }}
+                                            >▶</div>
+                                            <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
+                                        </div>
+                                        <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[{el.vizTheme || 'bars'}]</div>
+                                    </div>
                                 )}
                             </div>
                         )

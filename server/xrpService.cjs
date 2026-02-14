@@ -125,7 +125,11 @@ async function issueCreatorToken(creatorSeed, buyerAddress, tokenCode, amount) {
         };
 
         const result = await client.submitAndWait(payment, { wallet: creatorWallet });
-        return result.result.meta.TransactionResult === 'tesSUCCESS';
+        if (result.result.meta.TransactionResult !== 'tesSUCCESS') {
+            throw new Error(`XRPL Payment Failed: ${result.result.meta.TransactionResult}`);
+        }
+        // Return tx hash on success (consistent with other methods)
+        return result.result.hash;
     });
 }
 

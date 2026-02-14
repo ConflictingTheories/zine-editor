@@ -1,12 +1,16 @@
 
 import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
+import { useVP } from '../context/VPContext'
 
 const TokenMarketplace = () => {
     const { xrState, buyTokens, createTrustLine } = useXRPayID()
+    const { token: vpToken, showModal } = useVP()
+    const isLoggedIn = !!vpToken
     const [tokens, setTokens] = useState([])
     const [sortBy, setSortBy] = useState('popular')
     const [buyAmount, setBuyAmount] = useState({})
+    const [isTokensLoading, setIsTokensLoading] = useState(true)
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState(null)
 
@@ -15,12 +19,16 @@ const TokenMarketplace = () => {
     }, [sortBy])
 
     const loadTokens = async () => {
+        setIsTokensLoading(true)
         try {
             const res = await fetch(`/api/market?sort=${sortBy}`)
             const data = await res.json()
             setTokens(data)
         } catch (err) {
             console.error('Failed to load tokens:', err)
+            setMessage({ type: 'error', text: 'Failed to load tokens' })
+        } finally {
+            setIsTokensLoading(false)
         }
     }
 
@@ -35,6 +43,8 @@ const TokenMarketplace = () => {
             const result = await buyTokens(tokenId, amount)
             setMessage({ type: 'success', text: `Successfully bought ${amount} tokens for ${result.totalCost} credits!` })
             setBuyAmount({ ...buyAmount, [tokenId]: 0 })
+            // Reload tokens to update supply/stats if needed
+            loadTokens()
         } catch (err) {
             setMessage({ type: 'error', text: err.message })
         }
@@ -43,11 +53,15 @@ const TokenMarketplace = () => {
     }
 
     const handleTrustLine = async (tokenId) => {
+        setIsLoading(true)
+        setMessage(null)
         try {
             await createTrustLine(tokenId)
             setMessage({ type: 'success', text: 'Trust line created!' })
         } catch (err) {
             setMessage({ type: 'error', text: err.message })
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -75,70 +89,78 @@ const TokenMarketplace = () => {
                 </div>
             )}
 
-            <div className="token-grid">
-                {tokens.map(token => (
-                    <div key={token.id} className="token-card">
-                        <div className="token-header">
-                            <span className="token-name">{token.token_name}</span>
-                            <span className="token-code">{token.token_code}</span>
-                        </div>
-
-                        <div className="token-creator">
-                            by @{token.creator_name}
-                        </div>
-
-                        <div className="token-description">
-                            {token.description || 'No description'}
-                        </div>
-
-                        <div className="token-stats">
-                            <div className="stat">
-                                <span className="label">Price</span>
-                                <span className="value">{token.price_per_token} credits</span>
+            {isTokensLoading ? (
+                <div className="loading-state">Loading tokens...</div>
+            ) : (
+                <div className="token-grid">
+                    {tokens.map(token => (
+                        <div key={token.id} className="token-card">
+                            <div className="token-header">
+                                <span className="token-name">{token.token_name}</span>
+                                <span className="token-code">{token.token_code}</span>
                             </div>
-                            <div className="stat">
-                                <span className="label">Available</span>
-                                <span className="value">{token.current_supply?.toLocaleString()}</span>
+
+                            <div className="token-creator">
+                                by @{token.creator_name}
                             </div>
-                            <div className="stat">
-                                <span className="label">Sold</span>
-                                <span className="value">{((token.initial_supply || 0) - (token.current_supply || 0)).toLocaleString()}</span>
+
+                            <div className="token-description">
+                                {token.description || 'No description'}
+                            </div>
+
+                            <div className="token-stats">
+                                <div className="stat">
+                                    <span className="label">Price</span>
+                                    <span className="value">{token.price_per_token} credits</span>
+                                </div>
+                                <div className="stat">
+                                    <span className="label">Available</span>
+                                    <span className="value">{token.current_supply?.toLocaleString()}</span>
+                                </div>
+                                <div className="stat">
+                                    <span className="label">Sold</span>
+                                    <span className="value">{((token.initial_supply || 0) - (token.current_supply || 0)).toLocaleString()}</span>
+                                </div>
+                            </div>
+
+                            <div className="token-actions">
+                                {!isLoggedIn ? (
+                                    <button className="trust-btn disabled" onClick={() => showModal('authModal')}>🔒 Login to create trust line</button>
+                                ) : (!hasTrustLine(token.id) && (
+                                    <button
+                                        className="trust-btn"
+                                        onClick={() => handleTrustLine(token.id)}
+                                        disabled={isLoading}
+                                    >
+                                        {isLoading ? 'Processing...' : '🔗 Create Trust Line'}
+                                    </button>
+                                ))}
+
+                                <div className="buy-section">
+                                    <input
+                                        type="number"
+                                        placeholder="Amount"
+                                        value={buyAmount[token.id] || ''}
+                                        onChange={(e) => setBuyAmount({
+                                            ...buyAmount,
+                                            [token.id]: parseInt(e.target.value) || 0
+                                        })}
+                                        min="1"
+                                        disabled={!isLoggedIn || isLoading}
+                                    />
+                                    <button
+                                        className="buy-btn"
+                                        onClick={() => isLoggedIn ? handleBuy(token.id) : showModal('authModal')}
+                                        disabled={isLoading || !buyAmount[token.id] || !isLoggedIn}
+                                    >
+                                        {isLoggedIn ? 'Buy' : 'Login to Buy'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-
-                        <div className="token-actions">
-                            {!hasTrustLine(token.id) && (
-                                <button
-                                    className="trust-btn"
-                                    onClick={() => handleTrustLine(token.id)}
-                                >
-                                    🔗 Create Trust Line
-                                </button>
-                            )}
-
-                            <div className="buy-section">
-                                <input
-                                    type="number"
-                                    placeholder="Amount"
-                                    value={buyAmount[token.id] || ''}
-                                    onChange={(e) => setBuyAmount({
-                                        ...buyAmount,
-                                        [token.id]: parseInt(e.target.value) || 0
-                                    })}
-                                    min="1"
-                                />
-                                <button
-                                    className="buy-btn"
-                                    onClick={() => handleBuy(token.id)}
-                                    disabled={isLoading || !buyAmount[token.id]}
-                                >
-                                    Buy
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
 
             {tokens.length === 0 && (
                 <div className="empty-state">

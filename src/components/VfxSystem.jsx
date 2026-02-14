@@ -1,62 +1,72 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useVP } from '../context/VPContext.jsx'
 
 function VfxSystem() {
     const { activeVfx } = useVP()
     const [style, setStyle] = useState({})
+    const [shakeClass, setShakeClass] = useState('')
 
     useEffect(() => {
         if (!activeVfx) return
 
         if (activeVfx === 'flash') {
-            setStyle({ background: '#fff', opacity: 1, pointerEvents: 'none' })
-            setTimeout(() => setStyle({ background: '#fff', opacity: 0, transition: 'opacity 0.5s', pointerEvents: 'none' }), 50)
+            setStyle({ background: '#fff', opacity: 1, pointerEvents: 'none', transition: 'opacity 0.45s ease' })
+            setTimeout(() => setStyle({ background: '#fff', opacity: 0, pointerEvents: 'none', transition: 'opacity 0.45s ease' }), 50)
         } else if (activeVfx === 'lightning') {
-            setStyle({ background: '#fff', animation: 'lightning 0.4s' })
+            setStyle({ background: '#fff', opacity: 1, pointerEvents: 'none', animation: 'vfx-lightning 0.4s' })
+            setTimeout(() => setStyle({ background: '#fff', opacity: 0, pointerEvents: 'none', transition: 'opacity 0.3s ease' }), 450)
+        } else if (activeVfx === 'shake') {
+            // Apply shake animation to app container
+            const container = document.querySelector('.app-container')
+            if (container) {
+                container.classList.remove('shake-anim')
+                void container.offsetWidth // force reflow to restart animation
+                container.classList.add('shake-anim')
+                setTimeout(() => container.classList.remove('shake-anim'), 500)
+            }
+        } else if (activeVfx === 'pulse') {
+            // Apply pulse animation to app container
+            const container = document.querySelector('.app-container')
+            if (container) {
+                container.classList.remove('pulse-anim')
+                void container.offsetWidth
+                container.classList.add('pulse-anim')
+                setTimeout(() => container.classList.remove('pulse-anim'), 500)
+            }
         }
 
         const timer = setTimeout(() => setStyle({}), 1000)
         return () => clearTimeout(timer)
     }, [activeVfx])
 
-    return (
+    if (typeof document === 'undefined') return null
+
+    const node = (
         <>
             <div className={`vfx-overlay ${activeVfx === 'flash' || activeVfx === 'lightning' ? 'active' : ''}`} style={style} />
             <style>{`
                 .vfx-overlay {
                     position: fixed;
                     inset: 0;
-                    z-index: 9999;
+                    z-index: 2147483647;
                     pointer-events: none;
                     opacity: 0;
+                    transition: opacity 0.35s ease;
+                    mix-blend-mode: normal;
                 }
-                .vfx-overlay.active {
-                    opacity: 1;
-                }
-                @keyframes lightning {
-                    0%, 100% { opacity: 0; }
-                    20%, 80% { opacity: 1; }
-                    40% { opacity: 0.2; }
-                    60% { opacity: 1; }
-                }
-                .shake-anim {
-                    animation: shake 0.3s;
-                }
-                @keyframes shake {
-                    0%, 100% { transform: translateX(0); }
-                    25% { transform: translateX(-10px); }
-                    75% { transform: translateX(10px); }
-                }
-                .pulse-anim {
-                    animation: pulse 0.4s;
-                }
-                @keyframes pulse {
-                    0%, 100% { transform: scale(1); }
-                    50% { transform: scale(1.02); }
+                .vfx-overlay.active { opacity: 1; }
+                @keyframes vfx-lightning {
+                    0%,100%{opacity:0}
+                    20%,80%{opacity:1}
+                    40%{opacity:0.2}
+                    60%{opacity:1}
                 }
             `}</style>
         </>
     )
+
+    return createPortal(node, document.body)
 }
 
 export default VfxSystem

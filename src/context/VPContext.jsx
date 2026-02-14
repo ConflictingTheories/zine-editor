@@ -358,15 +358,93 @@ const VPProvider = ({ children }) => {
     }
 
     const playBGM = (url) => {
-        if (bgmRef.current && bgmRef.current.src === url) return
-        if (bgmRef.current) {
-            bgmRef.current.pause()
-            bgmRef.current = null
-        }
+        if (bgmRef.current && bgmRef.current._src === url) return
+        stopBGM()
         if (!url) return
+
+        // Handle synthesized ambient moods (gen:drone, gen:horror, etc.)
+        if (url.startsWith('gen:')) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)()
+                const gainNode = ctx.createGain()
+                gainNode.gain.value = 0.15
+                gainNode.connect(ctx.destination)
+
+                const mood = url.replace('gen:', '')
+                const oscs = []
+
+                if (mood === 'drone') {
+                    const freqs = [55, 82.5, 110]
+                    freqs.forEach(f => {
+                        const osc = ctx.createOscillator()
+                        osc.type = 'sine'
+                        osc.frequency.value = f
+                        osc.connect(gainNode)
+                        osc.start()
+                        oscs.push(osc)
+                    })
+                } else if (mood === 'horror') {
+                    const freqs = [40, 43, 80]
+                    freqs.forEach((f, i) => {
+                        const osc = ctx.createOscillator()
+                        osc.type = i === 2 ? 'sawtooth' : 'sine'
+                        osc.frequency.value = f
+                        osc.detune.value = Math.random() * 20 - 10
+                        osc.connect(gainNode)
+                        osc.start()
+                        oscs.push(osc)
+                    })
+                } else if (mood === 'cyber') {
+                    const freqs = [220, 330, 440]
+                    freqs.forEach(f => {
+                        const osc = ctx.createOscillator()
+                        osc.type = 'square'
+                        osc.frequency.value = f
+                        const subGain = ctx.createGain()
+                        subGain.gain.value = 0.05
+                        osc.connect(subGain)
+                        subGain.connect(ctx.destination)
+                        osc.start()
+                        oscs.push(osc)
+                    })
+                } else if (mood === 'nature') {
+                    // White noise via buffer
+                    const bufferSize = ctx.sampleRate * 2
+                    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+                    const data = buffer.getChannelData(0)
+                    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1
+                    const noise = ctx.createBufferSource()
+                    noise.buffer = buffer
+                    noise.loop = true
+                    const filter = ctx.createBiquadFilter()
+                    filter.type = 'lowpass'
+                    filter.frequency.value = 800
+                    noise.connect(filter)
+                    filter.connect(gainNode)
+                    noise.start()
+                    oscs.push(noise)
+                }
+
+                bgmRef.current = {
+                    _src: url,
+                    _ctx: ctx,
+                    _oscs: oscs,
+                    pause() {
+                        oscs.forEach(o => { try { o.stop() } catch (e) { } })
+                        ctx.close().catch(() => { })
+                    }
+                }
+            } catch (e) {
+                console.warn('Gen BGM failed:', e)
+            }
+            return
+        }
+
+        // Normal audio URL
         const a = new Audio(url)
         a.loop = true
         a.volume = 0.5
+        a._src = url
         a.play().catch(() => { })
         bgmRef.current = a
     }
@@ -386,8 +464,15 @@ const VPProvider = ({ children }) => {
     }
 
     const triggerVfx = (type) => {
-        setActiveVfx(type)
-        setTimeout(() => setActiveVfx(null), 600)
+        if (!type) return
+        // Force a state change so the same effect can be retriggered quickly
+        setActiveVfx(null)
+        // schedule on next tick to guarantee a different state value
+        setTimeout(() => {
+            setActiveVfx(type)
+            // automatically clear after the effect duration
+            setTimeout(() => setActiveVfx(null), 600)
+        }, 0)
     }
 
     const getAssets = (type) => {

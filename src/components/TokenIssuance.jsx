@@ -1,9 +1,12 @@
-
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
+import { useVP } from '../context/VPContext'
 
 const TokenIssuance = () => {
     const { xrState, createToken } = useXRPayID()
+    const { vpState } = useVP()
+    const token = vpState.token
+    const isLoggedIn = !!token
     const [formData, setFormData] = useState({
         tokenCode: '',
         tokenName: '',
@@ -13,9 +16,28 @@ const TokenIssuance = () => {
     })
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState(null)
+    const [myTokens, setMyTokens] = useState([])
 
-    // Get tokens created by current user
-    const myTokens = xrState.tokens.filter(t => t.creator_name === xrState.wallet?.xrp_address)
+    // Load tokens created by current user
+    useEffect(() => {
+        const loadMyTokens = async () => {
+            try {
+                if (!token) return
+                const res = await fetch('/api/tokens?mine=1', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                if (res.ok) {
+                    const allTokens = await res.json()
+                    // Filter from xrState tokens that match current user's creations
+                    setMyTokens(allTokens.filter(t => xrState.tokens.some(xt => xt.id === t.id)))
+                }
+            } catch (err) {
+                // Fallback: show all tokens from state
+                setMyTokens(xrState.tokens)
+            }
+        }
+        loadMyTokens()
+    }, [xrState.tokens])
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -130,10 +152,16 @@ const TokenIssuance = () => {
                 <button
                     type="submit"
                     className="submit-btn"
-                    disabled={isLoading}
+                    disabled={isLoading || !isLoggedIn}
                 >
-                    {isLoading ? 'Creating...' : 'Issue Token'}
+                    {isLoading ? 'Creating...' : (isLoggedIn ? 'Issue Token' : 'Login to Issue')}
                 </button>
+
+                {!isLoggedIn && (
+                    <div className="message error" style={{ marginTop: 8 }}>
+                        You must be logged in to issue tokens. Open the auth modal to continue.
+                    </div>
+                )}
 
                 {message && (
                     <div className={`message ${message.type}`}>

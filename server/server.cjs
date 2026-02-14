@@ -15,6 +15,7 @@ const CONFIG = require('./config.cjs');
 
 // Import economy service for Stripe and XRP integration
 const economyService = require('./economyService.cjs');
+const { encrypt, decrypt } = require('./encryption.cjs');
 const xrpService = require('./xrpService.cjs');
 
 const app = express();
@@ -1699,9 +1700,10 @@ const getOrCreateWallet = async (userId, providedAddress, providedPayId) => {
             try {
                 // If address provided, use it (non-custodial view), else generate (custodial)
                 const walletData = providedAddress ? { address: providedAddress, seed: null } : await xrpService.createWallet();
+                const encryptedSecret = walletData.seed ? encrypt(walletData.seed) : null;
 
                 db.run(`INSERT INTO wallets (user_id, xrp_address, xrp_secret_encrypted, payid, is_verified) VALUES (?, ?, ?, ?, ?)`,
-                    [userId, walletData.address, walletData.seed, providedPayId || null, 1],
+                    [userId, walletData.address, encryptedSecret, providedPayId || null, 1],
                     function (err) {
                         if (err) return reject(err);
                         resolve({ xrp_address: walletData.address, xrp_secret_encrypted: walletData.seed });
@@ -1886,8 +1888,10 @@ app.post('/api/zines/:id/purchase', authenticateToken, (req, res) => {
                 // Currency: zine.xrp_currency_code
                 // Issuer: zine.creator_address
 
+                const decryptedSecret = decrypt(wallet.xrp_secret_encrypted);
+
                 const txHash = await xrpService.sendPayment(
-                    wallet.xrp_secret_encrypted,
+                    decryptedSecret,
                     zine.creator_address,
                     zine.token_price,
                     zine.xrp_currency_code,
@@ -1943,7 +1947,9 @@ app.post('/api/trustlines', authenticateToken, (req, res) => {
                     db.get(`SELECT xrp_secret_encrypted FROM wallets WHERE user_id = ?`, [req.user.id], async (err, wallet) => {
                         if (err || !wallet) return res.status(404).json({ error: 'User wallet not found' });
 
-                        const result = await economyService.establishTrustLine(wallet.xrp_secret_encrypted, tokenInfo.issuer_address, tokenInfo.xrp_currency_code, limit);
+                        const decryptedSecret = decrypt(wallet.xrp_secret_encrypted);
+
+                        const result = await economyService.establishTrustLine(decryptedSecret, tokenInfo.issuer_address, tokenInfo.xrp_currency_code, limit);
 
                         if (!result.success) return res.status(500).json({ error: 'XRPL TrustSet failed: ' + result.error });
 
@@ -2423,12 +2429,48 @@ app.use(express.static(__dirname));
 app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
     const { amountUSD } = req.body;
 
+    // Basic validation to prevent tampering
+    if (typeof amountUSD !== 'number' || isNaN(amountUSD) || amountUSD <= 0 || amountUSD > 10000) {
+        return res.status(400).json({ error: 'Invalid amountUSD' });
+    }
+
     try {
         const session = await economyService.createCheckoutSession(req.user.id, amountUSD, req.user.email);
         res.json(session);
     } catch (error) {
         console.error('Stripe error:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Stripe public config (publishable key) - safe to expose to frontend
+app.get('/api/stripe/config', (req, res) => {
+    try {
+        res.json({ publishableKey: CONFIG.payment.stripePublishableKey || null, enabled: !CONFIG.payment.mockMode });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to read Stripe config' });
+    }
+});
+
+// Confirm Stripe payment after redirect (frontend calls this to finalize credit issuance)
+app.post('/api/stripe/confirm-payment', authenticateToken, async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+
+    try {
+        const session = await economyService.retrieveCheckoutSession(sessionId);
+        const paymentStatus = session.payment_status || session.status || 'unknown';
+        const metadata = session.metadata || {};
+
+        if (paymentStatus !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
+        if (!metadata.userId || parseInt(metadata.userId) !== req.user.id) return res.status(403).json({ error: 'Session does not match user' });
+
+        const vpcAmount = metadata.vpcAmount ? parseInt(metadata.vpcAmount) : Math.round((session.amount_total || 0) / 100 * economyService.CREDITS_PER_USD);
+        const result = await economyService.fulfillCreditPurchase(req.user.id, vpcAmount, db);
+        res.json({ success: true, result });
+    } catch (err) {
+        console.error('Confirm payment failed:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 

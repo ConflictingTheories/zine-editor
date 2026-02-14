@@ -18,13 +18,18 @@ export default defineConfig(({ command, mode }) => {
                     target: env.VITE_API_BASE_URL || 'http://localhost:3000',
                     changeOrigin: true,
                     secure: false,
+                },
+                '/mcp': {
+                    target: env.VITE_API_BASE_URL || 'http://localhost:3000',
+                    changeOrigin: true,
+                    secure: false,
                 }
             }
         },
         build: {
             outDir: 'dist',
             sourcemap: mode === 'development',
-            minify: mode === 'production' ? 'terser' : false,
+            minify: mode === 'production' ? 'esbuild' : false,
         },
         envPrefix: 'VITE_', // Only expose VITE_ prefixed variables
     }

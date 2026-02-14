@@ -114,26 +114,31 @@ const WalletModal = ({ isOpen, onClose }) => {
                                 className="generate-btn"
                                 onClick={async () => {
                                     setIsLoading(true)
+                                    setMessage(null)
                                     try {
-                                        // Generate a local wallet (simulated for demo - in production would use xrpl.js)
-                                        const generatedAddress = 'r' + Math.random().toString(36).substring(2, 34)
-                                        const generatedSecret = 's' + Math.random().toString(36).substring(2, 38)
-                                        const generatedPayid = `$user${Math.floor(Math.random() * 10000)}.voidpress`
+                                        // Use connectWallet from context with no params for generation
+                                        const res = await connectWallet()
 
-                                        setXrpAddress(generatedAddress)
-                                        setPayid(generatedPayid)
+                                        setXrpAddress(res.xrpAddress)
                                         setMessage({
                                             type: 'success',
-                                            text: `Generated! Address: ${generatedAddress.substring(0, 20)}... (Save your secret!)`
+                                            text: `Wallet Created! Address: ${res.xrpAddress}`
                                         })
+
+                                        setTimeout(() => {
+                                            onClose()
+                                        }, 1500)
+
                                     } catch (err) {
+                                        console.error(err)
                                         setMessage({ type: 'error', text: err.message })
+                                    } finally {
+                                        setIsLoading(false)
                                     }
-                                    setIsLoading(false)
                                 }}
                                 disabled={isLoading}
                             >
-                                🎲 Generate New Wallet
+                                🎲 Create New XRP Wallet
                             </button>
                         </div>
 

@@ -4,6 +4,7 @@ import { useXRPayID } from '../context/XRPayIDContext'
 
 const CreatorMonetization = () => {
     const { xrState, getReputation, setTokenGate } = useXRPayID()
+    const isLoggedIn = !!localStorage.getItem('vp_token')
     const [activeTab, setActiveTab] = useState('overview')
     const [reputation, setReputation] = useState(null)
     const [gateSettings, setGateSettings] = useState({
@@ -203,9 +204,13 @@ const CreatorMonetization = () => {
                                 </label>
                             </div>
 
-                            <button className="save-btn" onClick={handleSetGate}>
-                                Save Settings
+                            <button className="save-btn" onClick={handleSetGate} disabled={!isLoggedIn}>
+                                {isLoggedIn ? 'Save Settings' : 'Login to Save'}
                             </button>
+
+                            {!isLoggedIn && (
+                                <div style={{ marginTop: 8 }} className="hint">You must be logged in to update monetization settings.</div>
+                            )}
                         </div>
                     </div>
                 )}

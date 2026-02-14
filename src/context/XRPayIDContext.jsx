@@ -1,11 +1,15 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { useVP } from './VPContext.jsx'
 
 const XRPayIDContext = createContext()
 
 export const useXRPayID = () => useContext(XRPayIDContext)
 
 const XRPayIDProvider = ({ children }) => {
+    const { vpState } = useVP()
+    const token = vpState.token
+
     const [xrState, setXrState] = useState({
         wallet: null,
         credits: 0,
@@ -26,8 +30,12 @@ const XRPayIDProvider = ({ children }) => {
 
     // API helper
     const api = async (endpoint, method = 'GET', body = null) => {
-        const token = localStorage.getItem('vp_token')
-        if (!token) throw new Error('Not authenticated')
+        if (!token) {
+            // If it's a GET request and we're not logged in, just return null
+            // This prevents "Not authenticated" errors from breaking the state
+            if (method === 'GET') return null
+            throw new Error('Not authenticated')
+        }
 
         const headers = { 'Content-Type': 'application/json' }
         headers['Authorization'] = `Bearer ${token}`
@@ -40,6 +48,7 @@ const XRPayIDProvider = ({ children }) => {
 
         if (!res.ok) {
             const error = await res.json().catch(() => ({ error: 'Request failed' }))
+            // If session expired, don't crash the context, let VPContext handle logout
             throw new Error(error.error || 'Request failed')
         }
 
@@ -48,8 +57,20 @@ const XRPayIDProvider = ({ children }) => {
 
     // Load initial data
     const loadData = async () => {
-        if (!localStorage.getItem('vp_token')) {
-            setXrState(prev => ({ ...prev, isLoading: false }))
+        if (!token) {
+            setXrState(prev => ({
+                ...prev,
+                wallet: null,
+                credits: 0,
+                tokens: [],
+                trustLines: [],
+                subscriptions: [],
+                subscribers: [],
+                bids: [],
+                transactions: [],
+                isLoading: false,
+                error: null
+            }))
             return
         }
 
@@ -94,12 +115,13 @@ const XRPayIDProvider = ({ children }) => {
 
     useEffect(() => {
         loadData()
-    }, [localStorage.getItem('vp_token')])
+    }, [token])
 
     // Wallet functions
     const connectWallet = async (xrpAddress, payid) => {
-        await api('/wallet/create', 'POST', { xrpAddress, payid })
+        const result = await api('/wallet/create', 'POST', { xrpAddress, payid })
         await loadData()
+        return result
     }
 
     // Credit functions
