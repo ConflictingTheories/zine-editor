@@ -75,7 +75,7 @@ function validateConfig() {
         errors.push('JWT_SECRET not configured');
     }
 
-    if (CONFIG.jwt.secret === 'dev_secret_key_unsafe_for_production_only' && CONFIG.server.isProd) {
+    if ((CONFIG.jwt.secret === 'dev_secret_key_unsafe_for_production_only' || CONFIG.jwt.secret === 'dev_docker_secret_must_be_changed_in_prod') && CONFIG.server.isProd) {
         errors.push('JWT_SECRET must be changed for production');
     }
 

@@ -9,19 +9,27 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    volumes:
-      - backend_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
-      - JWT_SECRET=${JWT_SECRET:-unsafe_default_secret_please_change}
-      - DB_PATH=/app/data/database.sqlite
-      - CORS_ORIGIN=*
+      - JWT_SECRET=${JWT_SECRET:-dev_docker_secret_must_be_changed_in_prod}
+      - DB_CLIENT=pg
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-zineuser}
+      - DB_PASSWORD=${DB_PASSWORD:-zinepass}
+      - DB_NAME=${DB_NAME:-zinedb}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       # Economy Configuration
       - XRPL_NODE_URL=wss://s.altnet.rippletest.net:51233
-      - PLATFORM_WALLET_SEED=${PLATFORM_WALLET_SEED}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - PLATFORM_WALLET_SEED=${PLATFORM_WALLET_SEED:-snq8...} # dev seed
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
     networks:
       - void-net
     healthcheck:
@@ -30,13 +38,29 @@ services:
       timeout: 10s
       retries: 3
 
+  db:
+    image: postgres:15-alpine
+    container_name: void-press-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USER:-zineuser}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-zinepass}
+      - POSTGRES_DB=${DB_NAME:-zinedb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - void-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zineuser} -d ${DB_NAME:-zinedb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        # If using the Nginx proxy (recommended), this can be just /api
-        # If accessing backend directly from browser, use http://localhost:3000
         - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
     container_name: void-press-frontend
     restart: unless-stopped
@@ -48,7 +72,7 @@ services:
       - void-net
 
 volumes:
-  backend_data:
+  postgres_data:
 
 networks:
   void-net:
