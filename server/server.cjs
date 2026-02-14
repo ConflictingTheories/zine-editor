@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
@@ -7,17 +10,51 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 
+// Load configuration from config.cjs
+const CONFIG = require('./config.cjs');
+
 const app = express();
-const PORT = process.env.PORT || 3000;
-const SECRET_KEY = 'void_press_secret_key_change_in_prod'; // Use env var in production
+
+// ═══════════════════════════════════════════════════
+// USE CONFIGURATION FROM CONFIG.CJS
+// ═══════════════════════════════════════════════════
+const { server, jwt: jwtConfig, cors: corsConfig, database, payment, xrp } = CONFIG;
+const PORT = server.port;
+const NODE_ENV = server.env;
+const JWT_SECRET = jwtConfig.secret;
+const JWT_EXPIRY = jwtConfig.expiresIn;
+const STRIPE_SECRET_KEY = payment.stripeSecretKey;
+const DB_PATH = database.getPath();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: corsConfig.origins,
+    credentials: true,
+    methods: corsConfig.methods,
+    allowedHeaders: corsConfig.allowedHeaders,
+}));
 app.use(bodyParser.json({ limit: '50mb' })); // Allow large payloads for images
 
+// ─── Security Headers ─────────────────────────────
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+});
+
 // Database Setup
-const dbPath = path.resolve(__dirname, 'database.sqlite');
-const db = new sqlite3.Database(dbPath);
+console.log(`[${NODE_ENV}] Database: ${DB_PATH}`);
+console.log(`[${NODE_ENV}] API listening on port ${PORT}`);
+
+// Create data directory if it doesn't exist
+const dataDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const db = new sqlite3.Database(DB_PATH);
 
 db.serialize(() => {
     // Users Table
@@ -168,7 +205,7 @@ const authenticateToken = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.sendStatus(401);
 
-    jwt.verify(token, SECRET_KEY, (err, user) => {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
         next();
@@ -188,7 +225,7 @@ app.post('/api/auth/register', async (req, res) => {
         [username, email, hashedPassword],
         function (err) {
             if (err) return res.status(400).json({ error: 'User already exists' });
-            const token = jwt.sign({ id: this.lastID, username }, SECRET_KEY);
+            const token = jwt.sign({ id: this.lastID, username }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
             res.json({ token, user: { id: this.lastID, username, is_premium: 0 } });
         }
     );
@@ -203,7 +240,7 @@ app.post('/api/auth/login', (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password_hash);
         if (!validPassword) return res.status(400).json({ error: 'Invalid credentials' });
 
-        const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY);
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
         res.json({ token, user: { id: user.id, username: user.username, is_premium: user.is_premium } });
     });
 });
@@ -305,7 +342,7 @@ app.get('/api/zines/:id', (req, res) => {
         const token = req.headers['authorization']?.split(' ')[1];
         if (!token) return res.status(403).json({ error: 'Private zine' });
 
-        jwt.verify(token, SECRET_KEY, (err, user) => {
+        jwt.verify(token, JWT_SECRET, (err, user) => {
             if (err || user.id !== zine.user_id) return res.status(403).json({ error: 'Forbidden' });
             res.json({ ...zine, data: JSON.parse(zine.data) });
         });
@@ -2281,6 +2318,79 @@ app.use((req, res, next) => {
     next();
 });
 app.use(express.static(__dirname));
+
+// PAYMENT ENDPOINTS (SIMULATED WITH REAL DATABASE UPDATES)
+// ═══════════════════════════════════════════════════
+app.post('/api/payment/initiate', authenticateToken, (req, res) => {
+    const { credits, cardLast4, billingEmail } = req.body;
+    if (!credits || credits <= 0) {
+        return res.status(400).json({ error: 'Invalid credit amount' });
+    }
+
+    // Create a simulated payment session
+    const sessionId = 'pay_' + Math.random().toString(36).substr(2, 9);
+    const amount = credits * 100; // $1 per credit
+
+    res.json({
+        sessionId,
+        amount,
+        credits,
+        status: 'pending',
+        paymentUrl: `http://localhost:5174?pay_id=${sessionId}`
+    });
+});
+
+app.post('/api/payment/confirm', authenticateToken, (req, res) => {
+    const { sessionId, credits } = req.body;
+    if (!sessionId || !credits || credits <= 0) {
+        return res.status(400).json({ error: 'Invalid payment data' });
+    }
+
+    const intCredits = parseInt(credits);
+
+    // Add credits to user account
+    db.get(`SELECT * FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (creditRow) {
+            db.run(
+                `UPDATE credits SET balance = balance + ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+                [intCredits, intCredits, req.user.id],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Record transaction
+                    db.run(
+                        `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
+                        [req.user.id, null, intCredits, 'payment_purchase', `Purchased ${intCredits} credits via payment gateway (${sessionId})`],
+                        (err) => {
+                            if (err) console.error('Transaction log error:', err);
+                            res.json({ success: true, newBalance: creditRow.balance + intCredits, credits: intCredits });
+                        }
+                    );
+                }
+            );
+        } else {
+            db.run(
+                `INSERT INTO credits (user_id, balance, total_spent) VALUES (?, ?, ?)`,
+                [req.user.id, intCredits, intCredits],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Record transaction
+                    db.run(
+                        `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
+                        [req.user.id, null, intCredits, 'payment_purchase', `Purchased ${intCredits} credits via payment gateway (${sessionId})`],
+                        (err) => {
+                            if (err) console.error('Transaction log error:', err);
+                            res.json({ success: true, newBalance: intCredits, credits: intCredits });
+                        }
+                    );
+                }
+            );
+        }
+    });
+});
 
 // Serve index.html (zine_builder.html) for unknown routes (SPA)
 // Actually, let's keep it simple and just serve static.

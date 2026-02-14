@@ -49,6 +49,54 @@ body {
     color: var(--vp-text)
 }
 
+/* UNIVERSAL BUTTON & INPUT STYLING                   */
+/* ═══════════════════════════════════════════════════ */
+button,
+input[type="button"],
+input[type="submit"] {
+    font-family: var(--font-ui);
+}
+
+button:disabled,
+input[type="button"]:disabled,
+input[type="submit"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+    font-family: var(--font-ui);
+    background: var(--vp-surface2);
+    border: 1px solid var(--vp-border);
+    color: var(--vp-text);
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 0.95em;
+    transition: all 0.2s;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--vp-accent);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+    background: var(--vp-surface);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
 /* ═══════════════════════════════════════════════════ */
 /* TOP NAV BAR                                        */
 /* ═══════════════════════════════════════════════════ */
@@ -108,7 +156,7 @@ body {
 
 .topnav-tab.active {
     background: var(--vp-accent2);
-    color: #fff
+    color: #fff;
 }
 
 .topnav-right {
@@ -199,55 +247,80 @@ body {
 /* ═══════════════════════════════════════════════════ */
 .dashboard {
     overflow-y: auto;
-    padding: 40px 48px
+    padding: 32px 40px;
+    background: var(--vp-bg);
 }
 
 .dash-header {
-    margin-bottom: 32px
+    margin-bottom: 56px;
+    border-bottom: 2px solid var(--vp-border);
+    padding-bottom: 24px;
 }
 
 .dash-header h1 {
     font-family: var(--font-display);
-    font-size: 2em;
+    font-size: 2.2em;
     color: var(--vp-accent);
-    margin-bottom: 4px
+    margin-bottom: 8px;
+    letter-spacing: -1px;
+    font-weight: 900;
 }
 
 .dash-header p {
     color: var(--vp-text-dim);
-    font-size: .95em
+    font-size: 1.1em;
+    line-height: 1.6;
 }
 
 .dash-stats {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 32px
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    margin-bottom: 56px;
 }
 
 .stat-card {
-    flex: 1;
-    padding: 20px;
-    background: var(--vp-surface);
+    padding: 20px 16px;
+    background: linear-gradient(135deg, var(--vp-surface2) 0%, var(--vp-surface) 100%);
     border: 1px solid var(--vp-border);
     border-radius: var(--radius-lg);
+    transition: all 0.3s ease;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--vp-accent);
+}
+
+.stat-card:hover {
+    border-color: var(--vp-accent);
 }
 
 .stat-card .stat-value {
-    font-size: 2em;
-    font-weight: 700;
-    color: var(--vp-accent)
+    font-size: 2.8em;
+    font-weight: 900;
+    color: var(--vp-accent);
+    margin-bottom: 8px;
+    font-family: var(--font-display);
 }
 
 .stat-card .stat-label {
-    font-size: .8em;
+    font-size: 0.95em;
     color: var(--vp-text-dim);
-    margin-top: 4px
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
 }
 
 .zine-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 20px
+    gap: 16px;
 }
 
 .zine-card {
@@ -256,14 +329,13 @@ body {
     border-radius: var(--radius-lg);
     overflow: hidden;
     cursor: pointer;
-    transition: all .3s;
+    transition: all 0.2s ease;
     position: relative;
 }
 
 .zine-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow);
-    border-color: var(--vp-accent)
+    transform: translateY(-2px);
+    border-color: var(--vp-accent);
 }
 
 .zine-card-cover {
@@ -278,11 +350,11 @@ body {
 
 .zine-card-cover .cover-icon {
     font-size: 4em;
-    opacity: .3
+    opacity: 0.3;
 }
 
 .zine-card-body {
-    padding: 16px
+    padding: 16px;
 }
 
 .zine-card-body h3 {
@@ -291,12 +363,12 @@ body {
     margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis
+    text-overflow: ellipsis;
 }
 
 .zine-card-body p {
-    font-size: .8em;
-    color: var(--vp-text-dim)
+    font-size: 0.8em;
+    color: var(--vp-text-dim);
 }
 
 .zine-card-badge {
@@ -305,46 +377,46 @@ body {
     right: 12px;
     padding: 3px 10px;
     border-radius: 10px;
-    font-size: .7em;
+    font-size: 0.7em;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: .5px;
+    letter-spacing: 0.5px;
 }
 
 .badge-draft {
     background: var(--vp-surface2);
-    color: var(--vp-text-dim)
+    color: var(--vp-text-dim);
 }
 
 .badge-published {
     background: var(--vp-success);
-    color: #000
+    color: #000;
 }
 
 .badge-featured {
     background: var(--vp-accent);
-    color: #000
+    color: #000;
 }
 
 .zine-card.create-card .zine-card-cover {
-    background: linear-gradient(135deg, rgba(139, 92, 246, .1), rgba(212, 175, 55, .1));
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(212, 175, 55, 0.1));
     border: 2px dashed var(--vp-border);
 }
 
 .zine-card.create-card:hover .zine-card-cover {
-    border-color: var(--vp-accent)
+    border-color: var(--vp-accent);
 }
 
 .zine-card.create-card .cover-icon {
     font-size: 3em;
-    opacity: .6;
-    color: var(--vp-accent)
+    opacity: 0.6;
+    color: var(--vp-accent);
 }
 
 .zine-card-actions {
     display: flex;
     gap: 6px;
-    margin-top: 8px
+    margin-top: 8px;
 }
 
 .zine-card-actions button {
@@ -353,22 +425,21 @@ body {
     background: var(--vp-surface2);
     border: 1px solid var(--vp-border);
     color: var(--vp-text-dim);
-    font-size: .75em;
+    font-size: 0.75em;
     cursor: pointer;
     border-radius: 4px;
-    transition: all .2s;
+    transition: all 0.2s;
 }
 
 .zine-card-actions button:hover {
     background: var(--vp-accent);
     color: #000;
-    border-color: var(--vp-accent)
+    border-color: var(--vp-accent);
 }
 
 .zine-card-actions button.del:hover {
     background: var(--vp-danger);
     border-color: var(--vp-danger);
-    color: #fff
 }
 
 /* ═══════════════════════════════════════════════════ */

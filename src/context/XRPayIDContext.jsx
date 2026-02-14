@@ -94,7 +94,7 @@ const XRPayIDProvider = ({ children }) => {
 
     useEffect(() => {
         loadData()
-    }, [])
+    }, [localStorage.getItem('vp_token')])
 
     // Wallet functions
     const connectWallet = async (xrpAddress, payid) => {

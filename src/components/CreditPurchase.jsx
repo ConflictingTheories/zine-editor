@@ -1,9 +1,12 @@
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { loadStripe } from '@stripe/stripe-js'
 import { useXRPayID } from '../context/XRPayIDContext'
 
+const stripePromise = loadStripe('pk_test_51234567890987654321234567890') // Test key
+
 const CreditPurchase = () => {
-    const { xrState, purchaseCredits } = useXRPayID()
+    const { xrState } = useXRPayID()
     const [amount, setAmount] = useState(100)
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState(null)
@@ -14,8 +17,31 @@ const CreditPurchase = () => {
         setMessage(null)
 
         try {
-            const result = await purchaseCredits(amount)
-            setMessage({ type: 'success', text: `Successfully purchased ${amount} credits!` })
+            const token = localStorage.getItem('vp_token')
+            if (!token) throw new Error('Not authenticated')
+
+            // Get checkout session from backend
+            const sessionRes = await fetch('/api/stripe/checkout-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ credits: amount })
+            })
+
+            const sessionData = await sessionRes.json()
+            if (!sessionRes.ok) throw new Error(sessionData.error)
+
+            // Redirect to Stripe checkout
+            const stripe = await stripePromise
+            const { error } = await stripe.redirectToCheckout({
+                sessionId: sessionData.sessionId
+            })
+
+            if (error) {
+                setMessage({ type: 'error', text: error.message })
+            }
         } catch (err) {
             setMessage({ type: 'error', text: err.message })
         }
@@ -56,12 +82,17 @@ const CreditPurchase = () => {
                 />
             </div>
 
+            <div className="price-display">
+                <strong>Price: ${amount}.00 USD</strong>
+                <small>$1 = 1 credit</small>
+            </div>
+
             <button
                 className="purchase-btn"
                 onClick={handlePurchase}
                 disabled={isLoading || amount <= 0}
             >
-                {isLoading ? 'Processing...' : `Purchase ${amount} Credits`}
+                {isLoading ? 'Redirecting to Stripe...' : `Pay $${amount}.00 with Stripe`}
             </button>
 
             {message && (
@@ -75,10 +106,12 @@ const CreditPurchase = () => {
                     padding: 20px;
                     background: var(--ed-white, #fdfaf1);
                     border-radius: 8px;
+                    max-width: 500px;
                 }
                 .credit-purchase h3 {
                     margin-top: 0;
                     color: var(--ed-black, #1a1a1a);
+                    margin-bottom: 20px;
                 }
                 .balance-display {
                     display: flex;
@@ -112,7 +145,7 @@ const CreditPurchase = () => {
                     display: flex;
                     align-items: center;
                     gap: 12px;
-                    margin-bottom: 20px;
+                    margin-bottom: 16px;
                 }
                 .custom-amount input {
                     padding: 8px;
@@ -120,6 +153,22 @@ const CreditPurchase = () => {
                     border-radius: 4px;
                     width: 100px;
                     font-size: 16px;
+                }
+                .price-display {
+                    padding: 12px;
+                    background: rgba(212, 175, 55, 0.15);
+                    border-radius: 4px;
+                    margin-bottom: 16px;
+                    text-align: center;
+                }
+                .price-display strong {
+                    display: block;
+                    font-size: 1.2em;
+                    color: var(--ed-gold, #d4af37);
+                    margin-bottom: 4px;
+                }
+                .price-display small {
+                    color: var(--ed-gray, #34495e);
                 }
                 .purchase-btn {
                     width: 100%;
@@ -156,4 +205,5 @@ const CreditPurchase = () => {
 }
 
 export default CreditPurchase
+
 
