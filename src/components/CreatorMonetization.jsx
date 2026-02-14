@@ -1,10 +1,13 @@
 
 import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
+import { useVP } from '../context/VPContext'
 
 const CreatorMonetization = () => {
     const { xrState, getReputation, setTokenGate } = useXRPayID()
-    const isLoggedIn = !!localStorage.getItem('vp_token')
+    const { vpState } = useVP()
+    const token = vpState.token
+    const isLoggedIn = !!token
     const [activeTab, setActiveTab] = useState('overview')
     const [reputation, setReputation] = useState(null)
     const [gateSettings, setGateSettings] = useState({
@@ -15,12 +18,11 @@ const CreatorMonetization = () => {
 
     useEffect(() => {
         loadReputation()
-    }, [])
+    }, [token])
 
     const loadReputation = async () => {
         try {
             // Get current user's reputation
-            const token = localStorage.getItem('vp_token')
             if (token) {
                 const decoded = JSON.parse(atob(token.split('.')[1]))
                 const rep = await getReputation(decoded.id)

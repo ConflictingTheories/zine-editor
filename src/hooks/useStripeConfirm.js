@@ -1,8 +1,11 @@
 import { useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
+import { useVP } from '../context/VPContext'
 
 export const useStripeConfirm = () => {
     const { loadData } = useXRPayID()
+    const { vpState } = useVP()
+    const token = vpState.token
 
     useEffect(() => {
         // Check for Stripe session_id in URL
@@ -16,7 +19,6 @@ export const useStripeConfirm = () => {
 
     const confirmPayment = async (sessionId) => {
         try {
-            const token = localStorage.getItem('vp_token')
             if (!token) {
                 console.error('Not authenticated')
                 return

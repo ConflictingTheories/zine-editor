@@ -5,6 +5,8 @@ import { useVP } from '../context/VPContext'
 
 const CreditPurchase = () => {
     const { xrState } = useXRPayID()
+    const { vpState } = useVP()
+    const token = vpState.token
     const [amount, setAmount] = useState(10) // amount in USD
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState(null)
@@ -38,7 +40,6 @@ const CreditPurchase = () => {
         setMessage(null)
 
         try {
-            const token = localStorage.getItem('vp_token')
             if (!token) throw new Error('Not authenticated')
 
             // Create Stripe session on backend (amount in USD)
