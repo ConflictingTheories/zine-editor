@@ -76,18 +76,22 @@ function Dashboard() {
                     </div>
                 </div>
                 {projects.map((project, index) => {
-                    const isPub = project.serverId && vpState.published?.find(x => x.id === project.serverId)
+                    const isPub = project._published || false
+                    const isSyncing = project._dirty && vpState.isSyncing
                     const badge = isPub ? 'badge-published' : 'badge-draft'
-                    const statusIcon = project._dirty ? '☁️⃠' : '☁️'
+                    const syncStatus = isSyncing ? '☁️↻' : (project._dirty ? '☁️⃠' : '☁️✓')
                     return (
                         <div key={project.id} className="zine-card" onClick={() => handleOpenProject(index)}>
                             <div className="zine-card-cover">
-                                <span className={`zine-card-badge ${badge}`}>{isPub ? 'Published' : 'Draft'}</span>
+                                <span className={`zine-card-badge ${badge}`}>{isPub ? '✓ Published' : isPub === null ? 'Syncing...' : 'Draft'}</span>
                                 <div className="cover-icon">📖</div>
                             </div>
                             <div className="zine-card-body">
-                                <h3>{project.title || 'Untitled Zine'} <span style={styles.statusIcon}>{statusIcon}</span></h3>
-                                <p>{project.pages?.length || 0} pages · {project.theme || 'classic'}</p>
+                                <h3>{project.title || 'Untitled Zine'}</h3>
+                                <div style={{ fontSize: '0.85em', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
+                                    {project.pages?.length || 0} pages · {project.theme || 'classic'}
+                                    {isSyncing && ' (syncing...)'}
+                                </div>
                                 <div className="zine-card-actions">
                                     <button onClick={() => handleOpenProject(index)}>Edit</button>
                                     <button onClick={(e) => handleRenameProject(e, index)}>Rename</button>

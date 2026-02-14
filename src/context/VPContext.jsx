@@ -117,6 +117,15 @@ const VPProvider = ({ children }) => {
         }
     }, [vpState.projects])
 
+    // Auto-sync every 30 seconds when online
+    useEffect(() => {
+        if (!vpState.isOnline || !vpState.token) return
+        const syncInterval = setInterval(() => sync(), 30000)
+        // Also sync once on mount if online
+        sync()
+        return () => clearInterval(syncInterval)
+    }, [vpState.isOnline, vpState.token])
+
     const updateCurrentProject = (project) => {
         setVpState(prev => {
             const idx = prev.projects.findIndex(p => p.id === project.id)
@@ -197,7 +206,10 @@ const VPProvider = ({ children }) => {
         if (p._remote) {
             toast('Downloading zine...', 'info')
             api(`/zines/${p.serverId}`).then(res => {
-                const project = { ...p, pages: res.data, _remote: false }
+                // Backend returns { ...zine, data: parsedPages }
+                // data is the array of pages
+                const pages = Array.isArray(res.data) ? res.data : (res.pages || [])
+                const project = { ...p, pages, _remote: false }
                 const nextProjects = [...projects]
                 nextProjects[idx] = project
                 setVpState(prev => ({
@@ -205,22 +217,23 @@ const VPProvider = ({ children }) => {
                     projects: nextProjects,
                     currentProject: project,
                     currentView: 'editor',
-                    selection: { type: 'page', id: project.pages[0].id, pageIdx: 0 },
+                    selection: { type: 'page', id: project.pages[0]?.id, pageIdx: 0 },
                     history: [JSON.parse(JSON.stringify(project))],
                     historyIdx: 0
                 }))
-                saveLocal()
-            }).catch(() => toast('Failed to load zine', 'error'))
-        } else {
-            setVpState(prev => ({
-                ...prev,
-                currentProject: p,
-                currentView: 'editor',
-                selection: { type: 'page', id: p.pages[0].id, pageIdx: 0 },
-                history: [JSON.parse(JSON.stringify(p))],
-                historyIdx: 0
-            }))
+            }).catch(e => {
+                toast('Failed to download zine: ' + e.message, 'error')
+            })
+            return
         }
+        setVpState(prev => ({
+            ...prev,
+            currentProject: p,
+            currentView: 'editor',
+            selection: { type: 'page', id: p.pages[0]?.id, pageIdx: 0 },
+            history: [JSON.parse(JSON.stringify(p))],
+            historyIdx: 0
+        }))
     }
 
     const saveProject = () => {
@@ -232,10 +245,11 @@ const VPProvider = ({ children }) => {
         const idx = vpState.projects.findIndex(p => p.id === project.id)
         if (idx >= 0) {
             const next = [...vpState.projects]
-            next[idx] = { ...project, _dirty: false }
+            next[idx] = { ...project, _dirty: true, _lastSaved: new Date().toISOString() }
             setVpState(prev => ({ ...prev, projects: next }))
+            // Trigger sync after saving
+            setTimeout(() => sync(), 300)
         }
-        saveLocal()
         toast('Project saved!', 'success')
     }
 
@@ -243,16 +257,25 @@ const VPProvider = ({ children }) => {
         if (!vpState.isOnline || !vpState.token) return
         setVpState(prev => ({ ...prev, isSyncing: true }))
         try {
-            const projects = vpState.projects
+            const projects = vpState.projects || []
             for (const p of projects) {
                 if (p._dirty && p.pages) {
-                    const res = await api('/zines', 'POST', { serverId: p.serverId, title: p.title, data: p.pages, theme: p.theme })
-                    p.serverId = res.id
-                    delete p._dirty
+                    try {
+                        const res = await api('/zines', 'POST', {
+                            serverId: p.serverId,
+                            title: p.title,
+                            data: p.pages,
+                            theme: p.theme
+                        })
+                        p.serverId = res.id
+                        p._dirty = false
+                        p._synced = new Date().toISOString()
+                    } catch (e) {
+                        console.warn(`Failed to sync project ${p.title}:`, e)
+                    }
                 }
             }
             setVpState(prev => ({ ...prev, projects: [...prev.projects] }))
-            saveLocal()
         } catch (e) {
             console.error('Sync failed', e)
         }
@@ -396,6 +419,7 @@ const VPProvider = ({ children }) => {
             { id: 'zap', preview: '<span style="font-family:Bangers;font-size:20px;color:#ff0">ZAP!</span>', name: 'Zap' },
             { id: 'pow', preview: '<span style="font-family:Bangers;font-size:20px;color:#f44">POW!</span>', name: 'POW' },
             { id: 'whoosh', preview: '<span style="font-family:Bangers;font-size:20px;color:#4af">WHOOSH</span>', name: 'Whoosh' },
+            { id: 'splash', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLASH!</span>', name: 'Splat' },
             { id: 'splat', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLAT!</span>', name: 'Splat' }
         ]
         const symbols = [
@@ -456,8 +480,16 @@ const VPProvider = ({ children }) => {
                 genre: formData.genre || 'classic',
                 tags: (formData.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(',')
             })
+            // Mark project as published
+            project._published = true
+            const idx = vpState.projects.findIndex(p => p.id === project.id)
+            if (idx >= 0) {
+                const next = [...vpState.projects]
+                next[idx] = { ...project, _published: true, _dirty: false }
+                setVpState(prev => ({ ...prev, projects: next, currentProject: project }))
+            }
             closeModal('publishModal')
-            toast('🚀 Zine published!', 'success')
+            toast('🚀 Zine published! Go to Discover to see it live.', 'success')
         } catch (e) {
             toast('Publish failed: ' + (e.message || 'Error'), 'error')
         }

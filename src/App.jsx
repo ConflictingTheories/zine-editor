@@ -7,6 +7,7 @@ import Discover from './components/Discover.jsx'
 import Reader from './components/Reader.jsx'
 import VfxSystem from './components/VfxSystem.jsx'
 import Toast from './components/Toast.jsx'
+import MonetizationDashboard from './components/MonetizationDashboard.jsx'
 import { useVP } from './context/VPContext.jsx'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
             case 'editor': return <Editor />
             case 'discover': return <Discover />
             case 'reader': return <Reader />
+            case 'monetization': return <MonetizationDashboard />
             default: return <Dashboard />
         }
     }

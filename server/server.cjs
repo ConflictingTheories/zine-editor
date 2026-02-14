@@ -44,6 +44,120 @@ db.serialize(() => {
         genre TEXT,
         tags TEXT,
         read_count INTEGER DEFAULT 0,
+        token_price INTEGER DEFAULT 0,
+        is_token_gated INTEGER DEFAULT 0,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )`);
+
+    // Credits Table (fiat-purchased virtual currency)
+    db.run(`CREATE TABLE IF NOT EXISTS credits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE,
+        balance DECIMAL(10,2) DEFAULT 0,
+        total_spent DECIMAL(10,2) DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )`);
+
+    // XRP Wallets Table
+    db.run(`CREATE TABLE IF NOT EXISTS wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE,
+        xrp_address TEXT UNIQUE,
+        xrp_secret_encrypted TEXT,
+        payid TEXT UNIQUE,
+        is_verified INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )`);
+
+    // Creator Tokens Table
+    db.run(`CREATE TABLE IF NOT EXISTS tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        creator_id INTEGER,
+        token_code TEXT,
+        token_name TEXT,
+        description TEXT,
+        icon_url TEXT,
+        initial_supply DECIMAL(20,2),
+        current_supply DECIMAL(20,2),
+        price_per_token DECIMAL(10,6),
+        xrp_currency_code TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(creator_id) REFERENCES users(id)
+    )`);
+
+    // Trust Lines Table
+    db.run(`CREATE TABLE IF NOT EXISTS trust_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        token_id INTEGER,
+        trust_line_limit DECIMAL(20,2),
+        xrpl_trustline_hash TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(token_id) REFERENCES tokens(id)
+    )`);
+
+    // Subscriptions Table
+    db.run(`CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscriber_id INTEGER,
+        creator_id INTEGER,
+        token_id INTEGER,
+        amount_per_period DECIMAL(10,2),
+        period_days INTEGER DEFAULT 30,
+        is_active INTEGER DEFAULT 1,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME,
+        FOREIGN KEY(subscriber_id) REFERENCES users(id),
+        FOREIGN KEY(creator_id) REFERENCES users(id),
+        FOREIGN KEY(token_id) REFERENCES tokens(id)
+    )`);
+
+    // Bids Table
+    db.run(`CREATE TABLE IF NOT EXISTS bids (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bidder_id INTEGER,
+        zine_id INTEGER,
+        amount DECIMAL(10,2),
+        message TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(bidder_id) REFERENCES users(id),
+        FOREIGN KEY(zine_id) REFERENCES zines(id)
+    )`);
+
+    // Transactions Table
+    db.run(`CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_user_id INTEGER,
+        to_user_id INTEGER,
+        token_id INTEGER,
+        amount DECIMAL(20,2),
+        type TEXT,
+        xrp_tx_hash TEXT,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(from_user_id) REFERENCES users(id),
+        FOREIGN KEY(to_user_id) REFERENCES users(id),
+        FOREIGN KEY(token_id) REFERENCES tokens(id)
+    )`);
+
+    // Reputation Table
+    db.run(`CREATE TABLE IF NOT EXISTS reputation (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE,
+        score INTEGER DEFAULT 0,
+        level TEXT DEFAULT 'newcomer',
+        total_tips_received DECIMAL(20,2) DEFAULT 0,
+        total_subscribers INTEGER DEFAULT 0,
+        total_content_sold INTEGER DEFAULT 0,
+        total_bids_accepted INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
 });
@@ -929,15 +1043,10 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
 // Tool handlers
 async function handleCreateZine(userId, args) {
     return new Promise((resolve, reject) => {
-        const project = {
-            id: Date.now(),
-            title: args.title,
-            theme: args.theme || 'classic',
-            pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }]
-        };
+        const pages = [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }];
 
         db.run(`INSERT INTO zines (user_id, title, data) VALUES (?, ?, ?)`,
-            [userId, args.title, JSON.stringify(project.pages)],
+            [userId, args.title, JSON.stringify(pages)],
             function (err) {
                 if (err) return reject(err);
                 resolve({ zineId: this.lastID, message: 'Zine created successfully' });
@@ -1471,6 +1580,696 @@ app.post('/mcp/export/html', authenticateToken, (req, res) => {
 app.post('/mcp/export/pdf', authenticateToken, (req, res) => {
     // Placeholder for PDF export
     res.json({ message: 'PDF export not implemented server-side yet' });
+});
+
+// ============================================
+// XRP PayID Integration API Endpoints
+// ============================================
+
+// ---- Credits API ----
+
+// Purchase credits (simulated fiat purchase)
+app.post('/api/credits/purchase', authenticateToken, (req, res) => {
+    const { amount, paymentMethod } = req.body;
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    // In production, this would integrate with a payment processor (Stripe, etc.)
+    // For now, we simulate the purchase
+    db.get(`SELECT * FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (creditRow) {
+            db.run(`UPDATE credits SET balance = balance + ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+                [amount, amount, req.user.id],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Record transaction
+                    db.run(`INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
+                        [req.user.id, null, amount, 'credit_purchase', `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`],
+                        (err) => { if (err) console.error('Transaction log error:', err); }
+                    );
+
+                    res.json({ success: true, newBalance: creditRow.balance + amount, amount });
+                }
+            );
+        } else {
+            db.run(`INSERT INTO credits (user_id, balance, total_spent) VALUES (?, ?, ?)`,
+                [req.user.id, amount, amount],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Record transaction
+                    db.run(`INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
+                        [req.user.id, null, amount, 'credit_purchase', `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`],
+                        (err) => { if (err) console.error('Transaction log error:', err); }
+                    );
+
+                    res.json({ success: true, newBalance: amount, amount });
+                }
+            );
+        }
+    });
+});
+
+// Get credit balance
+app.get('/api/credits/balance', authenticateToken, (req, res) => {
+    db.get(`SELECT balance FROM credits WHERE user_id = ?`, [req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ balance: row ? row.balance : 0 });
+    });
+});
+
+// ---- Wallet API ----
+
+// Create new XRP wallet for user
+app.post('/api/wallet/create', authenticateToken, (req, res) => {
+    const { xrpAddress, payid } = req.body;
+
+    if (!xrpAddress) {
+        return res.status(400).json({ error: 'XRP address required' });
+    }
+
+    // Check if wallet already exists
+    db.get(`SELECT * FROM wallets WHERE user_id = ?`, [req.user.id], (err, existing) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (existing) {
+            // Update existing wallet
+            db.run(`UPDATE wallets SET xrp_address = ?, payid = ?, is_verified = 1 WHERE user_id = ?`,
+                [xrpAddress, payid || null, req.user.id],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ success: true, xrpAddress, payid: payid || null });
+                }
+            );
+        } else {
+            // Insert new wallet
+            db.run(`INSERT INTO wallets (user_id, xrp_address, payid, is_verified) VALUES (?, ?, ?, ?)`,
+                [req.user.id, xrpAddress, payid || null, 1],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ success: true, xrpAddress, payid: payid || null });
+                }
+            );
+        }
+    });
+});
+
+// Get user's wallet info
+app.get('/api/wallet', authenticateToken, (req, res) => {
+    db.get(`SELECT xrp_address, payid, is_verified, created_at FROM wallets WHERE user_id = ?`, [req.user.id], (err, wallet) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(wallet || { xrp_address: null, payid: null, is_verified: false });
+    });
+});
+
+// ---- Tokens API ----
+
+// Create new token (creator issues their own currency)
+app.post('/api/tokens/create', authenticateToken, (req, res) => {
+    const { tokenCode, tokenName, description, initialSupply, pricePerToken, iconUrl } = req.body;
+
+    if (!tokenCode || !tokenName) {
+        return res.status(400).json({ error: 'Token code and name required' });
+    }
+
+    // Generate XRPL-compatible currency code (max 20 chars, uppercase)
+    const xrpCurrencyCode = tokenCode.toUpperCase().slice(0, 20);
+
+    db.run(`INSERT INTO tokens (creator_id, token_code, token_name, description, icon_url, initial_supply, current_supply, price_per_token, xrp_currency_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.id, tokenCode.toUpperCase(), tokenName, description || '', iconUrl || null, initialSupply || 1000000, initialSupply || 1000000, pricePerToken || 0.01, xrpCurrencyCode],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Initialize reputation for creator
+            db.run(`INSERT OR IGNORE INTO reputation (user_id, score, level) VALUES (?, ?, ?)`,
+                [req.user.id, 0, 'creator'],
+                (err) => { if (err) console.error('Reputation init error:', err); }
+            );
+
+            res.json({ success: true, tokenId: this.lastID, tokenCode: xrpCurrencyCode, tokenName });
+        }
+    );
+});
+
+// Get all active tokens (marketplace)
+app.get('/api/tokens', (req, res) => {
+    const { creatorId } = req.query;
+    let sql = `SELECT t.*, u.username as creator_name FROM tokens t JOIN users u ON t.creator_id = u.id WHERE t.is_active = 1`;
+    const params = [];
+
+    if (creatorId) {
+        sql += ` AND t.creator_id = ?`;
+        params.push(creatorId);
+    }
+
+    sql += ` ORDER BY t.created_at DESC`;
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Get specific token
+app.get('/api/tokens/:id', (req, res) => {
+    db.get(`SELECT t.*, u.username as creator_name FROM tokens t JOIN users u ON t.creator_id = u.id WHERE t.id = ?`, [req.params.id], (err, token) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!token) return res.status(404).json({ error: 'Token not found' });
+        res.json(token);
+    });
+});
+
+// Buy tokens with credits
+app.post('/api/tokens/:id/buy', authenticateToken, (req, res) => {
+    const { amount } = req.body;
+    const tokenId = req.params.id;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    // Get token info
+    db.get(`SELECT * FROM tokens WHERE id = ? AND is_active = 1`, [tokenId], (err, token) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!token) return res.status(404).json({ error: 'Token not found' });
+
+        const totalCost = amount * token.price_per_token;
+
+        // Check user's credit balance
+        db.get(`SELECT balance FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            const currentBalance = creditRow ? creditRow.balance : 0;
+            if (currentBalance < totalCost) {
+                return res.status(400).json({ error: 'Insufficient credits', required: totalCost, available: currentBalance });
+            }
+
+            // Deduct credits and record transaction
+            db.run(`UPDATE credits SET balance = balance - ? WHERE user_id = ?`,
+                [totalCost, req.user.id],
+                (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Update token supply
+                    db.run(`UPDATE tokens SET current_supply = current_supply - ? WHERE id = ?`,
+                        [amount, tokenId],
+                        (err) => {
+                            if (err) return res.status(500).json({ error: err.message });
+
+                            // Record transaction
+                            db.run(`INSERT INTO transactions (from_user_id, to_user_id, token_id, amount, type, description) VALUES (?, ?, ?, ?, ?, ?)`,
+                                [req.user.id, token.creator_id, tokenId, amount, 'token_purchase', `Bought ${amount} ${token.token_name} for ${totalCost} credits`],
+                                (err) => { if (err) console.error('Transaction log error:', err); }
+                            );
+
+                            res.json({ success: true, amount, totalCost, tokenName: token.token_name });
+                        }
+                    );
+                }
+            );
+        });
+    });
+});
+
+// ---- Trust Lines API ----
+
+// Create trust line record
+app.post('/api/trustlines', authenticateToken, (req, res) => {
+    const { tokenId, limit } = req.body;
+
+    if (!tokenId) {
+        return res.status(400).json({ error: 'Token ID required' });
+    }
+
+    // Check if trust line already exists
+    db.get(`SELECT * FROM trust_lines WHERE user_id = ? AND token_id = ? AND is_active = 1`,
+        [req.user.id, tokenId],
+        (err, existing) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            if (existing) {
+                return res.status(400).json({ error: 'Trust line already exists' });
+            }
+
+            db.run(`INSERT INTO trust_lines (user_id, token_id, trust_line_limit) VALUES (?, ?, ?)`,
+                [req.user.id, tokenId, limit || 1000000],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ success: true, trustLineId: this.lastID });
+                }
+            );
+        }
+    );
+});
+
+// Get user's trust lines
+app.get('/api/trustlines', authenticateToken, (req, res) => {
+    db.all(`SELECT tl.*, t.token_code, t.token_name FROM trust_lines tl JOIN tokens t ON tl.token_id = t.id WHERE tl.user_id = ? AND tl.is_active = 1`,
+        [req.user.id],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows);
+        }
+    );
+});
+
+// ---- Subscriptions API ----
+
+// Subscribe to creator
+app.post('/api/subscriptions/subscribe', authenticateToken, (req, res) => {
+    const { creatorId, tokenId, amountPerPeriod, periodDays } = req.body;
+
+    if (!creatorId || !tokenId) {
+        return res.status(400).json({ error: 'Creator ID and Token ID required' });
+    }
+
+    if (creatorId === req.user.id) {
+        return res.status(400).json({ error: 'Cannot subscribe to yourself' });
+    }
+
+    // Calculate cost
+    const amount = amountPerPeriod || 10;
+    const period = periodDays || 30;
+
+    // Check credit balance
+    db.get(`SELECT balance FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const currentBalance = creditRow ? creditRow.balance : 0;
+        if (currentBalance < amount) {
+            return res.status(400).json({ error: 'Insufficient credits', required: amount, available: currentBalance });
+        }
+
+        // Get creator's user info
+        db.get(`SELECT id, username FROM users WHERE id = ?`, [creatorId], (err, creator) => {
+            if (err || !creator) return res.status(404).json({ error: 'Creator not found' });
+
+            // Deduct credits
+            db.run(`UPDATE credits SET balance = balance - ? WHERE user_id = ?`,
+                [amount, req.user.id],
+                (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // Calculate expiration
+                    const expiresAt = new Date();
+                    expiresAt.setDate(expiresAt.getDate() + period);
+
+                    // Check for existing subscription
+                    db.get(`SELECT * FROM subscriptions WHERE subscriber_id = ? AND creator_id = ? AND is_active = 1`,
+                        [req.user.id, creatorId],
+                        (err, existing) => {
+                            if (err) return res.status(500).json({ error: err.message });
+
+                            if (existing) {
+                                // Update existing
+                                db.run(`UPDATE subscriptions SET amount_per_period = ?, expires_at = ?, token_id = ? WHERE id = ?`,
+                                    [amount, expiresAt.toISOString(), tokenId, existing.id],
+                                    (err) => {
+                                        if (err) return res.status(500).json({ error: err.message });
+
+                                        // Record transaction
+                                        db.run(`INSERT INTO transactions (from_user_id, to_user_id, token_id, amount, type, description) VALUES (?, ?, ?, ?, ?, ?)`,
+                                            [req.user.id, creatorId, tokenId, amount, 'subscription', `Subscribed to creator for ${amount} credits`],
+                                            (err) => { if (err) console.error('Transaction log error:', err); }
+                                        );
+
+                                        res.json({ success: true, message: 'Subscription renewed' });
+                                    }
+                                );
+                            } else {
+                                // Create new subscription
+                                db.run(`INSERT INTO subscriptions (subscriber_id, creator_id, token_id, amount_per_period, period_days, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
+                                    [req.user.id, creatorId, tokenId, amount, period, expiresAt.toISOString()],
+                                    (err) => {
+                                        if (err) return res.status(500).json({ error: err.message });
+
+                                        // Record transaction
+                                        db.run(`INSERT INTO transactions (from_user_id, to_user_id, token_id, amount, type, description) VALUES (?, ?, ?, ?, ?, ?)`,
+                                            [req.user.id, creatorId, tokenId, amount, 'subscription', `Subscribed to creator for ${amount} credits`],
+                                            (err) => { if (err) console.error('Transaction log error:', err); }
+                                        );
+
+                                        // Update creator reputation
+                                        db.run(`UPDATE reputation SET total_subscribers = total_subscribers + 1, score = score + 10 WHERE user_id = ?`,
+                                            [creatorId],
+                                            (err) => { if (err) console.error('Reputation update error:', err); }
+                                        );
+
+                                        res.json({ success: true, subscriptionId: this.lastID });
+                                    }
+                                );
+                            }
+                        }
+                    );
+                }
+            );
+        });
+    });
+});
+
+// Cancel subscription
+app.post('/api/subscriptions/cancel', authenticateToken, (req, res) => {
+    const { subscriptionId } = req.body;
+
+    if (!subscriptionId) {
+        return res.status(400).json({ error: 'Subscription ID required' });
+    }
+
+    db.run(`UPDATE subscriptions SET is_active = 0 WHERE id = ? AND subscriber_id = ?`,
+        [subscriptionId, req.user.id],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (this.changes === 0) return res.status(404).json({ error: 'Subscription not found' });
+            res.json({ success: true, message: 'Subscription cancelled' });
+        }
+    );
+});
+
+// Get user's subscriptions
+app.get('/api/subscriptions', authenticateToken, (req, res) => {
+    const { type } = req.query;
+
+    let sql = '';
+    let params = [req.user.id];
+
+    if (type === 'subscribers') {
+        // Get people subscribed to me
+        sql = `SELECT s.*, u.username as subscriber_name FROM subscriptions s JOIN users u ON s.subscriber_id = u.id WHERE s.creator_id = ? AND s.is_active = 1`;
+    } else {
+        // Get my subscriptions
+        sql = `SELECT s.*, u.username as creator_name FROM subscriptions s JOIN users u ON s.creator_id = u.id WHERE s.subscriber_id = ? AND s.is_active = 1`;
+    }
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// ---- Bids API ----
+
+// Place bid on content
+app.post('/api/bids/create', authenticateToken, (req, res) => {
+    const { zineId, amount, message } = req.body;
+
+    if (!zineId || !amount) {
+        return res.status(400).json({ error: 'Zine ID and amount required' });
+    }
+
+    // Check credit balance
+    db.get(`SELECT balance FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const currentBalance = creditRow ? creditRow.balance : 0;
+        if (currentBalance < amount) {
+            return res.status(400).json({ error: 'Insufficient credits', required: amount, available: currentBalance });
+        }
+
+        db.run(`INSERT INTO bids (bidder_id, zine_id, amount, message) VALUES (?, ?, ?, ?)`,
+            [req.user.id, zineId, amount, message || null],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true, bidId: this.lastID, amount });
+            }
+        );
+    });
+});
+
+// Accept bid
+app.post('/api/bids/:id/accept', authenticateToken, (req, res) => {
+    const bidId = req.params.id;
+
+    // Get bid info
+    db.get(`SELECT b.*, z.user_id as zine_owner_id FROM bids b JOIN zines z ON b.zine_id = z.id WHERE b.id = ?`, [bidId], (err, bid) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!bid) return res.status(404).json({ error: 'Bid not found' });
+
+        // Verify ownership
+        if (bid.zine_owner_id !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // Deduct credits from bidder and transfer to owner
+        db.run(`UPDATE credits SET balance = balance - ? WHERE user_id = ?`,
+            [bid.amount, bid.bidder_id],
+            (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+
+                // Credit the owner (insert or update)
+                db.run(`INSERT INTO credits (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?`,
+                    [req.user.id, bid.amount, bid.amount],
+                    (err) => { if (err) console.error('Credit owner error:', err); }
+                );
+
+                // Update bid status
+                db.run(`UPDATE bids SET status = 'accepted' WHERE id = ?`, [bidId], (err) => {
+                    if (err) console.error('Bid update error:', err);
+                });
+
+                // Record transactions
+                db.run(`INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
+                    [bid.bidder_id, req.user.id, bid.amount, 'bid_accepted', 'Bid accepted for content'],
+                    (err) => { if (err) console.error('Transaction log error:', err); }
+                );
+
+                // Update reputation
+                db.run(`UPDATE reputation SET total_bids_accepted = total_bids_accepted + 1, score = score + 15, total_content_sold = total_content_sold + ? WHERE user_id = ?`,
+                    [bid.amount, req.user.id],
+                    (err) => { if (err) console.error('Reputation update error:', err); }
+                );
+
+                res.json({ success: true, message: 'Bid accepted', amount: bid.amount });
+            }
+        );
+    });
+});
+
+// Reject bid
+app.post('/api/bids/:id/reject', authenticateToken, (req, res) => {
+    const bidId = req.params.id;
+
+    db.get(`SELECT b.*, z.user_id as zine_owner_id FROM bids b JOIN zines z ON b.zine_id = z.id WHERE b.id = ?`, [bidId], (err, bid) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!bid) return res.status(404).json({ error: 'Bid not found' });
+
+        if (bid.zine_owner_id !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        db.run(`UPDATE bids SET status = 'rejected' WHERE id = ?`, [bidId], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, message: 'Bid rejected' });
+        });
+    });
+});
+
+// Get bids for user's content
+app.get('/api/bids', authenticateToken, (req, res) => {
+    const { zineId } = req.query;
+
+    let sql = '';
+    let params = [];
+
+    if (zineId) {
+        // Get bids for specific zine
+        sql = `SELECT b.*, u.username as bidder_name, z.title as zine_title FROM bids b JOIN users u ON b.bidder_id = u.id JOIN zines z ON b.zine_id = z.id WHERE b.zine_id = ? ORDER BY b.created_at DESC`;
+        params.push(zineId);
+    } else {
+        // Get all my bids (as bidder) and bids on my content
+        sql = `SELECT b.*, u.username as bidder_name, z.title as zine_title FROM bids b JOIN users u ON b.bidder_id = u.id JOIN zines z ON b.zine_id = z.id WHERE b.bidder_id = ? OR z.user_id = ? ORDER BY b.created_at DESC`;
+        params = [req.user.id, req.user.id];
+    }
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// ---- Reputation API ----
+
+// Get user reputation
+app.get('/api/reputation/:userId', (req, res) => {
+    db.get(`SELECT r.*, u.username FROM reputation r JOIN users u ON r.user_id = u.id WHERE r.user_id = ?`, [req.params.userId], (err, rep) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (!rep) {
+            // Create default reputation if not exists
+            return res.json({
+                user_id: req.params.userId,
+                score: 0,
+                level: 'newcomer',
+                total_tips_received: 0,
+                total_subscribers: 0,
+                total_content_sold: 0,
+                total_bids_accepted: 0
+            });
+        }
+
+        // Calculate level based on score
+        let level = 'newcomer';
+        if (rep.score >= 1000) level = 'legendary';
+        else if (rep.score >= 500) level = 'master';
+        else if (rep.score >= 200) level = 'established';
+        else if (rep.score >= 100) level = 'contributor';
+        else if (rep.score >= 50) level = 'supporter';
+
+        res.json({ ...rep, level });
+    });
+});
+
+// Update reputation (internal, called after actions)
+app.post('/api/reputation/update', authenticateToken, (req, res) => {
+    const { action, amount } = req.body;
+
+    // Initialize reputation if not exists
+    db.run(`INSERT OR IGNORE INTO reputation (user_id, score, level) VALUES (?, ?, ?)`,
+        [req.user.id, 0, 'newcomer'],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            let scoreIncrease = 0;
+            switch (action) {
+                case 'publish': scoreIncrease = 5; break;
+                case 'subscribe': scoreIncrease = 3; break;
+                case 'tip': scoreIncrease = 2; break;
+                case 'bid_accepted': scoreIncrease = 15; break;
+                case 'content_sold': scoreIncrease = 10; break;
+                default: scoreIncrease = amount || 1;
+            }
+
+            db.run(`UPDATE reputation SET score = score + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+                [scoreIncrease, req.user.id],
+                (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ success: true, scoreIncrease });
+                }
+            );
+        }
+    );
+});
+
+// ---- Marketplace API ----
+
+// Get marketplace listings
+app.get('/api/market', (req, res) => {
+    const { sort } = req.query;
+
+    let sql = `SELECT t.*, u.username as creator_name, 
+               (t.initial_supply - t.current_supply) as tokens_sold
+               FROM tokens t 
+               JOIN users u ON t.creator_id = u.id 
+               WHERE t.is_active = 1 AND t.current_supply > 0`;
+
+    switch (sort) {
+        case 'popular': sql += ` ORDER BY tokens_sold DESC`; break;
+        case 'newest': sql += ` ORDER BY t.created_at DESC`; break;
+        case 'price_low': sql += ` ORDER BY t.price_per_token ASC`; break;
+        case 'price_high': sql += ` ORDER BY t.price_per_token DESC`; break;
+        default: sql += ` ORDER BY tokens_sold DESC`;
+    }
+
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Get transaction history
+app.get('/api/transactions', authenticateToken, (req, res) => {
+    const { type } = req.query;
+
+    let sql = `SELECT t.*, 
+               from_user.username as from_username,
+               to_user.username as to_username,
+               token.token_name
+               FROM transactions t
+               LEFT JOIN users from_user ON t.from_user_id = from_user.id
+               LEFT JOIN users to_user ON t.to_user_id = to_user.id
+               LEFT JOIN tokens token ON t.token_id = token.id
+               WHERE t.from_user_id = ? OR t.to_user_id = ?`;
+
+    const params = [req.user.id, req.user.id];
+
+    if (type) {
+        sql += ` AND t.type = ?`;
+        params.push(type);
+    }
+
+    sql += ` ORDER BY t.created_at DESC LIMIT 50`;
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// ---- Zine Tokenization ----
+
+// Set token price for zine (token gating)
+app.post('/api/zines/:id/token-gate', authenticateToken, (req, res) => {
+    const { tokenPrice, tokenId, isTokenGated } = req.body;
+    const zineId = req.params.id;
+
+    db.get(`SELECT * FROM zines WHERE id = ? AND user_id = ?`, [zineId, req.user.id], (err, zine) => {
+        if (err || !zine) return res.status(404).json({ error: 'Zine not found or not owned' });
+
+        db.run(`UPDATE zines SET token_price = ?, is_token_gated = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [tokenPrice || 0, isTokenGated ? 1 : 0, zineId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true, tokenPrice, isTokenGated: !!isTokenGated });
+            }
+        );
+    });
+});
+
+// Get zine with token access check
+app.get('/api/zines/:id/access', authenticateToken, (req, res) => {
+    const zineId = req.params.id;
+
+    db.get(`SELECT * FROM zines WHERE id = ?`, [zineId], (err, zine) => {
+        if (err || !zine) return res.status(404).json({ error: 'Not found' });
+
+        // If not token gated, allow access
+        if (!zine.is_token_gated || zine.token_price === 0) {
+            return res.json({ hasAccess: true });
+        }
+
+        // Check if user owns the zine
+        if (zine.user_id === req.user.id) {
+            return res.json({ hasAccess: true });
+        }
+
+        // Check if user has subscription to creator
+        db.get(`SELECT * FROM subscriptions WHERE subscriber_id = ? AND creator_id = ? AND is_active = 1`,
+            [req.user.id, zine.user_id],
+            (err, sub) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (sub) return res.json({ hasAccess: true, via: 'subscription' });
+
+                // Check if user has bid accepted
+                db.get(`SELECT * FROM bids WHERE bidder_id = ? AND zine_id = ? AND status = 'accepted'`,
+                    [req.user.id, zineId],
+                    (err, bid) => {
+                        if (err) return res.status(500).json({ error: err.message });
+                        if (bid) return res.json({ hasAccess: true, via: 'bid' });
+
+                        // No access
+                        res.json({
+                            hasAccess: false,
+                            tokenPrice: zine.token_price,
+                            creatorId: zine.user_id
+                        });
+                    }
+                );
+            }
+        );
+    });
 });
 
 // Static Files

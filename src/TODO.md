@@ -1,68 +1,53 @@
-# MCP Interface Expansion - TODO
+# XRP PayID Integration - Implementation TODO
 
-## ✅ Completed Tasks
+## Phase 1: Database Schema & Backend API
 
-### Server-side MCP Implementation
-- [x] Added MCP resources (themes, templates, assets)
-- [x] Added MCP prompts (create_story_zine, generate_comic_page, apply_theme_consistently)
-- [x] Expanded MCP tools list with all element types (shapes, SFX, symbols, shaders)
-- [x] Added page operations (delete_page, duplicate_page)
-- [x] Added element operations (delete_element, duplicate_element, move_layer)
-- [x] Implemented all new tool handlers in server.cjs
-- [x] Updated MCP capabilities to include resources and prompts
+### Database Tables (server/server.cjs)
+- [ ] credits - User credit balances (fiat-purchased)
+- [ ] wallets - XRP wallet connections
+- [ ] tokens - Creator-issued tokens
+- [ ] trust_lines - XRP trust line status
+- [ ] subscriptions - Creator-subscriber relationships
+- [ ] bids - Content bidding system
+- [ ] transactions - All financial transactions
+- [ ] reputation - User reputation scores
 
-### Client-side MCP Implementation
-- [x] Added new element creation methods (createShapeElement, createSFXElement, createSymbolElement, createShaderElement)
-- [x] Added page operations (duplicatePage)
-- [x] Added MCP resources and prompts methods
-- [x] Added batch operations for efficiency
+### Backend API Endpoints
+- [ ] POST /api/credits/purchase - Buy credits
+- [ ] GET /api/credits/balance - Get balance
+- [ ] POST /api/wallet/create - Create wallet
+- [ ] POST /api/wallet/import - Import wallet
+- [ ] POST /api/tokens/create - Issue token
+- [ ] GET /api/tokens - List tokens
+- [ ] POST /api/tokens/:id/buy - Buy tokens
+- [ ] POST /api/trustlines/create - Create trust line
+- [ ] GET /api/trustlines - List trust lines
+- [ ] POST /api/subscriptions/subscribe - Subscribe
+- [ ] POST /api/subscriptions/cancel - Cancel
+- [ ] POST /api/bids/create - Place bid
+- [ ] POST /api/bids/:id/accept - Accept bid
+- [ ] GET /api/reputation/:userId - Get reputation
+- [ ] GET /api/market - Token marketplace
 
-## 🔄 Next Steps
+## Phase 2: Frontend Components
+- [ ] WalletModal.jsx - XRP wallet connection
+- [ ] CreditPurchase.jsx - Buy credits UI
+- [ ] TokenIssuance.jsx - Create tokens
+- [ ] TokenMarketplace.jsx - Browse/buy tokens
+- [ ] SubscriptionManager.jsx - Manage subs
+- [ ] BiddingPanel.jsx - Bid on content
+- [ ] CreatorMonetization.jsx - Creator dashboard
+- [ ] ReputationBadge.jsx - Display reputation
+- [ ] xrpClient.js - XRP Ledger library
 
-### Testing & Validation
-- [ ] Test MCP interface with various automation scenarios
-- [ ] Verify all new tools work correctly
-- [ ] Test resource and prompt endpoints
-- [ ] Validate error handling and authentication
+## Phase 3: Integration
+- [ ] XRPayIDContext.jsx - New context
+- [ ] Integrate with VPContext
+- [ ] Add to TopNav - wallet/credits display
+- [ ] Add monetization tab to Dashboard
 
-### UI Integration
-- [ ] Integrate MCP client into UI for AI features
-- [ ] Add MCP-based content generation buttons
-- [ ] Implement AI-assisted zine creation workflow
-- [ ] Add MCP resource browsing in UI
-
-### Documentation & Examples
-- [ ] Update README with MCP capabilities
-- [ ] Create example scripts for MCP automation
-- [ ] Document MCP API for external integrations
-- [ ] Add MCP usage examples in code comments
-
-### Future Enhancements
-- [ ] Add more sophisticated prompts for specific genres
-- [ ] Implement MCP sampling for AI content generation
-- [ ] Add MCP-based collaborative features
-- [ ] Extend resources with user-generated content
-
-## 📋 MCP Tools Summary
-
-### Core Zine Operations
-- create_zine, get_zine, update_zine
-- add_page, delete_page, duplicate_page
-- apply_theme, apply_template
-- export_html, publish_zine
-
-### Element Operations
-- add_text_element, add_image_element, add_panel_element
-- add_shape_element, add_balloon_element
-- add_sfx_element, add_symbol_element, add_shader_element
-- update_element, delete_element, duplicate_element, move_layer
-
-### MCP Resources
-- zine://themes - Available themes with properties
-- zine://templates - Page templates
-- zine://assets - Asset library (shapes, symbols, etc.)
-
-### MCP Prompts
-- create_story_zine - Generate complete story zines
-- generate_comic_page - Create comic pages with panels
-- apply_theme_consistently - Apply themes across entire zines
+## Phase 4: XRP Ledger Integration (xrpl.js)
+- [ ] Wallet generation
+- [ ] Trust line creation
+- [ ] Token transfers
+- [ ] Payment processing

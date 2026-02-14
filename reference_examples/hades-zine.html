@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Iron and the Rose - Volume 2</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Bebas+Neue&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Special+Elite&family=IM+Fell+English:ital@0;1&family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&display=swap');
+
+```
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: 'Crimson Text', serif;
+        background: #0a0a0a;
+        color: #f5f5dc;
+        padding: 20px;
+        line-height: 1.6;
+    }
+    
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    
+    .header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 40px 20px;
+        background: linear-gradient(135deg, #000000 0%, #1a0a0a 50%, #000000 100%);
+        border: 4px solid #8B0000;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: 
+            radial-gradient(circle at 30% 50%, rgba(255, 105, 180, 0.1) 0%, transparent 50%),
+            radial-gradient(circle at 70% 50%, rgba(139, 0, 0, 0.1) 0%, transparent 50%);
+        pointer-events: none;
+    }
+    
+    .rose-corner {
+        position: absolute;
+        font-size: 3em;
+        opacity: 0.2;
+    }
+    
+    .rose-corner.tl { top: 10px; left: 10px; color: #FF69B4; }
+    .rose-corner.tr { top: 10px; right: 10px; color: #8B0000; }
+    .rose-corner.bl { bottom: 10px; left: 10px; color: #FF69B4; }
+    .rose-corner.br { bottom: 10px; right: 10px; color: #8B0000; }
+    
+    .logo {
+        font-family: 'Cinzel', serif;
+        font-size: 3em;
+        font-weight: 900;
+        background: linear-gradient(90deg, #8B0000 0%, #FF69B4 50%, #8B0000 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: none;
+        letter-spacing: 3px;
+        margin-bottom: 10px;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .subtitle {
+        font-family: 'IM Fell English', serif;
+        font-size: 1.5em;
+        color: #FF69B4;
+        font-style: italic;
+        margin-bottom: 5px;
+    }
+    
+    .issue-info {
+        font-family: 'Special Elite', monospace;
+        color: #8B0000;
+        font-size: 0.9em;
+        letter-spacing: 1px;
+    }
+    
+    .navigation {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+    }
+    
+    .nav-btn {
+        padding: 12px 24px;
+        background: #1a0a0a;
+        border: 2px solid #8B0000;
+        color: #f5f5dc;
+        cursor: pointer;
+        font-family: 'Bebas Neue', sans-serif;
+        font-size: 1.1em;
+        letter-spacing: 1px;
+        transition: all 0.3s;
+    }
+    
+    .nav-btn:hover {
+        background: #8B0000;
+        border-color: #FF69B4;
+        transform: scale(1.05);
+        box-shadow: 0 0 20px rgba(255, 105, 180, 0.3);
+    }
+    
+    .nav-btn.active {
+        background: linear-gradient(135deg, #8B0000 0%, #FF69B4 100%);
+        border-color: #f5f5dc;
+    }
+    
+    .page-container {
+        background: #f5f5dc;
+        box-shadow: 
+            0 20px 60px rgba(0, 0, 0, 0.9),
+            inset 0 0 100px rgba(0, 0, 0, 0.05);
+        margin: 0 auto 40px;
+        max-width: 800px;
+        position: relative;
+        border: 1px solid #2C2C2C;
+    }
+    
+    .page {
+        width: 100%;
+        aspect-ratio: 5.5 / 8.5;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    /* COVER PAGE */
+    .cover-page {
+        background: 
+            radial-gradient(circle at 20% 50%, rgba(255, 105, 180, 0.15) 0%, transparent 40%),
+            radial-gradient(circle at 80% 50%, rgba(0, 0, 0, 0.8) 0%, transparent 40%),
+            linear-gradient(135deg, #000000 0%, #1a0a0a 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+    }
+    
+    .cover-split-border {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 4px;
+        background: linear-gradient(to bottom, 
+            #8B0000 0%, 
+            #FF69B4 25%, 
+            #8B0000 50%, 
+            #FF69B4 75%, 
+            #8B0000 100%);
+    }
+    
+    .cover-title {
+        font-family: 'Cinzel', serif;
+        font-size: 3em;
+        font-weight: 900;
+        text-align: center;
+        z-index: 10;
+        line-height: 1.1;
+        margin-bottom: 30px;
+    }
+    
+    .cover-title .iron {
+        color: #8B0000;
+        text-shadow: 
+            2px 2px 0 #000,
+            4px 4px 0 #2C2C2C,
+            0 0 20px rgba(139, 0, 0, 0.5);
+    }
+    
+    .cover-title .and {
+        color: #f5f5dc;
+        font-size: 0.5em;
+        font-style: italic;
+    }
+    
+    .cover-title .rose {
+        color: #FF69B4;
+        text-shadow: 
+            2px 2px 0 #000,
+            4px 4px 0 #2C2C2C,
+            0 0 20px rgba(255, 105, 180, 0.5);
+    }
+    
+    .cover-illustration {
+        width: 350px;
+        height: 350px;
+        margin: 20px 0;
+        position: relative;
+        z-index: 5;
+    }
+    
+    .iron-side {
+        position: absolute;
+        left: 0;
+        width: 50%;
+        height: 100%;
+        background: 
+            linear-gradient(to right, rgba(0, 0, 0, 0.9), transparent),
+            repeating-linear-gradient(0deg, #1a1a1a, #1a1a1a 2px, #000 2px, #000 4px);
+        border-right: 2px solid #8B0000;
+    }
+    
+    .obsidian-throne {
+        position: absolute;
+        left: 20px;
+        top: 80px;
+        width: 120px;
+        height: 180px;
+        background: linear-gradient(135deg, #2C2C2C 0%, #000 100%);
+        clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 100%, 0% 100%, 0% 30%);
+        border: 1px solid #8B0000;
+    }
+    
+    .hades-figure {
+        position: absolute;
+        left: 50px;
+        top: 100px;
+        width: 80px;
+        height: 150px;
+        background: #1a1a1a;
+        clip-path: polygon(50% 0%, 60% 20%, 65% 50%, 60% 80%, 55% 100%, 45% 100%, 40% 80%, 35% 50%, 40% 20%);
+        border: 1px solid #2C2C2C;
+    }
+    
+    .rose-side {
+        position: absolute;
+        right: 0;
+        width: 50%;
+        height: 100%;
+        background: 
+            radial-gradient(circle at 70% 50%, rgba(255, 105, 180, 0.3) 0%, transparent 60%),
+            linear-gradient(to left, rgba(255, 105, 180, 0.1), transparent);
+        border-left: 2px solid #FF69B4;
+    }
+    
+    .aphrodite-figure {
+        position: absolute;
+        right: 50px;
+        top: 90px;
+        width: 90px;
+        height: 160px;
+        background: radial-gradient(circle, #FF69B4 0%, #FF1493 50%, transparent 80%);
+        clip-path: polygon(50% 0%, 65% 15%, 70% 40%, 65% 70%, 55% 100%, 45% 100%, 35% 70%, 30% 40%, 35% 15%);
+        opacity: 0.8;
+        animation: pulse-rose 3s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-rose {
+        0%, 100% { opacity: 0.7; transform: scale(1); }
+        50% { opacity: 0.9; transform: scale(1.03); }
+    }
+    
+    .floral-vines {
+        position: absolute;
+        right: 20px;
+        top: 40px;
+        font-size: 1.5em;
+        color: #FF69B4;
+        opacity: 0.4;
+        line-height: 1.2;
+        writing-mode: vertical-rl;
+    }
+    
+    .gold-thumbprint {
+        position: absolute;
+        width: 80px;
+        height: 80px;
+        background: radial-gradient(ellipse at 40% 40%, 
+            rgba(255, 215, 0, 0.6) 0%, 
+            rgba(255, 215, 0, 0.3) 30%,
+            rgba(255, 215, 0, 0.1) 60%,
+            transparent 100%);
+        border-radius: 50% 40% 45% 55%;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(25deg);
+        filter: blur(1px);
+        opacity: 0.7;
+    }
+    
+    .cover-tagline {
+        font-family: 'IM Fell English', serif;
+        font-size: 1.2em;
+        color: #f5f5dc;
+        font-style: italic;
+        text-align: center;
+        z-index: 10;
+        margin-top: 20px;
+    }
+    
+    .cover-volume {
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-family: 'Bebas Neue', sans-serif;
+        font-size: 1.2em;
+        color: #8B0000;
+        letter-spacing: 3px;
+    }
+    
+    /* STORY PAGES - SPLIT DESIGN */
+    .split-page {
+        background: linear-gradient(to right, #1a1a1a 0%, #1a1a1a 48%, #f5f5dc 52%, #f5f5dc 100%);
+        padding: 0;
+        position: relative;
+    }
+    
+    .split-divider {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 4px;
+        background: linear-gradient(to bottom, 
+            #8B0000 0%, 
+            #FF69B4 20%, 
+            #8B0000 40%,
+            #FF69B4 60%,
+            #8B0000 80%,
+            #FF69B4 100%);
+        z-index: 5;
+    }
+    
+    .dark-column {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 50%;
+        height: 100%;
+        padding: 30px 25px 30px 30px;
+        background: #0a0a0a;
+    }
+    
+    .light-column {
+        position: absolute;
+        right: 0;
+        top: 0;
+        width: 50%;
+        height: 100%;
+        padding: 30px 30px 30px 25px;
+        background: #f5f5dc;
+        overflow: hidden;
+    }
+    
+    .floral-strangling {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path d="M10,10 Q30,50 10,90 T10,170" stroke="%23FF69B4" stroke-width="1.5" fill="none" opacity="0.3"/><circle cx="10" cy="90" r="8" fill="%23FF69B4" opacity="0.4"/><path d="M190,30 Q170,70 190,110 T190,190" stroke="%23FF69B4" stroke-width="1.5" fill="none" opacity="0.3"/><circle cx="190" cy="110" r="6" fill="%23FF69B4" opacity="0.4"/></svg>');
+        background-repeat: repeat-y;
+        background-position: right;
+        opacity: 0.5;
+        pointer-events: none;
+    }
+    
+    .dark-text {
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 0.95em;
+        line-height: 1.7;
+        color: #8B8B8B;
+        text-align: justify;
+    }
+    
+    .dark-text strong {
+        color: #8B0000;
+        font-weight: 700;
+    }
+    
+    .light-text {
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 0.95em;
+        line-height: 1.7;
+        color: #2C2C2C;
+        text-align: justify;
+        position: relative;
+        z-index: 2;
+    }
+    
+    .light-text strong {
+        color: #FF69B4;
+        font-weight: 700;
+    }
+    
+    .drop-cap-dark {
+        float: left;
+        font-family: 'Cinzel', serif;
+        font-size: 4.5em;
+        line-height: 0.8;
+        margin-right: 8px;
+        margin-top: 5px;
+        color: #8B0000;
+        font-weight: 900;
+    }
+    
+    .drop-cap-light {
+        float: left;
+        font-family: 'Cinzel', serif;
+        font-size: 4.5em;
+        line-height: 0.8;
+        margin-right: 8px;
+        margin-top: 5px;
+        color: #FF69B4;
+        font-weight: 900;
+    }
+    
+    /* MANIFESTO PAGE */
+    .manifesto-page {
+        background: #000000;
+        padding: 30px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .scratched-background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: 
+            repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(139, 0, 0, 0.05) 2px, rgba(139, 0, 0, 0.05) 4px),
+            repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(255, 105, 180, 0.05) 3px, rgba(255, 105, 180, 0.05) 6px);
+        opacity: 0.3;
+    }
+    
+    .manifesto-title {
+        font-family: 'Bebas Neue', sans-serif;
+        font-size: 4em;
+        color: #8B0000;
+        text-align: center;
+        letter-spacing: 8px;
+        line-height: 0.9;
+        margin-bottom: 20px;
+        position: relative;
+        z-index: 10;
+        text-shadow: 
+            -1px -1px 0 #FF69B4,
+            1px -1px 0 #FF69B4,
+            -1px 1px 0 #FF69B4,
+            1px 1px 0 #FF69B4,
+            0 0 10px rgba(255, 105, 180, 0.5);
+        transform: rotate(-2deg);
+    }
+    
+    .manifesto-title .beautiful {
+        color: #FF69B4;
+        text-shadow: 
+            -1px -1px 0 #8B0000,
+            1px -1px 0 #8B0000,
+            -1px 1px 0 #8B0000,
+            1px 1px 0 #8B0000,
+            0 0 10px rgba(139, 0, 0, 0.5);
+    }
+    
+    .scratch-lines {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+    }
+    
+    .scratch-line {
+        position: absolute;
+        height: 3px;
+        background: rgba(139, 0, 0, 0.3);
+        transform-origin: left center;
+    }
+    
+    .manifesto-text {
+        font-family: 'IM Fell English', serif;
+        font-size: 1.2em;
+        line-height: 1.9;
+        color: #f5f5dc;
+        text-align: center;
+        max-width: 550px;
+        margin: 20px 0;
+        position: relative;
+        z-index: 10;
+    }
+    
+    .manifesto-text em {
+        color: #FF69B4;
+        font-style: italic;
+    }
+    
+    /* TOUCH PAGE */
+    .touch-page {
+        background: 
+            radial-gradient(circle at center, rgba(255, 215, 0, 0.3) 0%, transparent 40%),
+            linear-gradient(to right, #0a0a0a 0%, #1a0a0a 50%, #0a0a0a 100%);
+        padding: 30px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .touch-illustration {
+        width: 300px;
+        height: 300px;
+        position: relative;
+        margin: 30px 0;
+    }
+    
+    .iron-hand {
+        position: absolute;
+        left: 20px;
+        top: 100px;
+        width: 100px;
+        height: 80px;
+        background: linear-gradient(135deg, #2C2C2C 0%, #000 100%);
+        clip-path: polygon(0% 50%, 30% 20%, 60% 0%, 80% 30%, 100% 50%, 80% 80%, 50% 100%, 20% 80%);
+        border: 1px solid #8B0000;
+    }
+    
+    .rose-hand {
+        position: absolute;
+        right: 20px;
+        top: 100px;
+        width: 110px;
+        height: 90px;
+        background: radial-gradient(circle, #FF69B4 0%, #FF1493 60%, transparent 90%);
+        clip-path: polygon(20% 50%, 40% 20%, 70% 0%, 90% 30%, 100% 50%, 90% 80%, 60% 100%, 30% 80%);
+        opacity: 0.9;
+    }
+    
+    .golden-spark {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 100px;
+        height: 100px;
+        background: radial-gradient(circle, 
+            rgba(255, 215, 0, 0.8) 0%, 
+            rgba(255, 215, 0, 0.4) 30%,
+            rgba(255, 215, 0, 0.1) 60%,
+            transparent 100%);
+        animation: spark-pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes spark-pulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+        50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+    }
+    
+    .touch-text {
+        font-family: 'IM Fell English', serif;
+        font-size: 1.1em;
+        line-height: 1.8;
+        color: #f5f5dc;
+        text-align: center;
+        max-width: 600px;
+    }
+    
+    .touch-text strong {
+        background: linear-gradient(90deg, #8B0000 0%, #FF69B4 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+    }
+    
+    /* BACK COVER */
+    .back-cover {
+        padding: 30px;
+        background: linear-gradient(135deg, #000000 0%, #1a0a0a 50%, #000000 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    
+    .next-volume {
+        background: rgba(139, 0, 0, 0.2);
+        border: 2px solid #8B0000;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .next-volume h3 {
+        font-family: 'Cinzel', serif;
+        font-size: 1.5em;
+        color: #FF69B4;
+        margin-bottom: 10px;
+    }
+    
+    .next-volume p {
+        font-family: 'Crimson Text', serif;
+        font-size: 1em;
+        line-height: 1.6;
+        color: #f5f5dc;
+    }
+    
+    .contact-box {
+        background: rgba(255, 105, 180, 0.1);
+        border: 2px dashed #FF69B4;
+        padding: 15px;
+        text-align: center;
+        font-family: 'Special Elite', monospace;
+        font-size: 0.9em;
+        color: #f5f5dc;
+        margin-bottom: 20px;
+    }
+    
+    .ethos {
+        font-family: 'IM Fell English', serif;
+        font-style: italic;
+        text-align: center;
+        color: #f5f5dc;
+        font-size: 1.05em;
+        line-height: 1.6;
+    }
+    
+    .credits {
+        text-align: center;
+        font-family: 'Special Elite', monospace;
+        font-size: 0.75em;
+        color: #8B0000;
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 1px solid #8B0000;
+    }
+    
+    @media (max-width: 768px) {
+        .logo {
+            font-size: 2em;
+        }
+        
+        .cover-title {
+            font-size: 2em;
+        }
+        
+        .cover-illustration {
+            width: 250px;
+            height: 250px;
+        }
+        
+        .split-page {
+            background: #1a1a1a;
+        }
+        
+        .dark-column {
+            position: relative;
+            width: 100%;
+            padding: 20px;
+        }
+        
+        .light-column {
+            position: relative;
+            width: 100%;
+            padding: 20px;
+            background: #2C2C2C;
+        }
+        
+        .light-text {
+            color: #f5f5dc;
+        }
+        
+        .split-divider {
+            display: none;
+        }
+    }
+</style>
+```
+
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="rose-corner tl">🌹</div>
+            <div class="rose-corner tr">⚔</div>
+            <div class="rose-corner bl">⚔</div>
+            <div class="rose-corner br">🌹</div>
+            <div class="logo">THE IRON AND THE ROSE</div>
+            <div class="subtitle">Hades & Aphrodite</div>
+            <div class="issue-info">VOLUME 2 · THE STOLEN FLAME SERIES · 2026</div>
+        </div>
+
+```
+    <div class="navigation">
+        <button class="nav-btn active" onclick="showPage(0)">Cover</button>
+        <button class="nav-btn" onclick="showPage(1)">The Hollow</button>
+        <button class="nav-btn" onclick="showPage(2)">The Invasion</button>
+        <button class="nav-btn" onclick="showPage(3)">Manifesto</button>
+        <button class="nav-btn" onclick="showPage(4)">The Touch</button>
+        <button class="nav-btn" onclick="showPage(5)">Back</button>
+    </div>
+    
+    <!-- COVER PAGE -->
+    <div class="page-container" id="page0">
+        <div class="page cover-page">
+            <div class="cover-split-border"></div>
+            <div class="cover-title">
+                <div class="iron">THE IRON</div>
+                <div class="and">&</div>
+                <div class="rose">THE ROSE</div>
+            </div>
+            
+            <div class="cover-illustration">
+                <div class="iron-side">
+                    <div class="obsidian-throne"></div>
+                    <div class="hades-figure"></div>
+                </div>
+                <div class="rose-side">
+                    <div class="aphrodite-figure"></div>
+                    <div class="floral-vines">🌹 ✿ ❀ ✿ 🌹 ✿ ❀</div>
+                </div>
+                <div class="gold-thumbprint"></div>
+            </div>
+            
+            <div class="cover-tagline">
+                Where Death Met Desire<br>
+                & The Universe Buckled
+            </div>
+            
+            <div class="cover-volume">
+                VOLUME TWO · HADES & APHRODITE
+            </div>
+        </div>
+    </div>
+    
+    <!-- PAGE 1 - THE HOLLOW (Split Design) -->
+    <div class="page-container" id="page1" style="display: none;">
+        <div class="page split-page">
+            <div class="split-divider"></div>
+            
+            <div class="dark-column">
+                <div class="dark-text">
+                    <span class="drop-cap-dark">B</span>efore the first flower withered, before the first soul learned the way to the silent meadows, the Underworld was merely a hollow echo.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    <strong>Hades</strong> sat upon a throne of cold obsidian, his heart a clock of ticking stone. He was the inevitability of the end, a god who counted the cost of every life in shadows and silence.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    He believed he was complete in his solitude—until the surface world bled into his own.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    The Styx curled against black shores like a dying serpent. Asphodel stretched grey and endless, dust upon dust, memory upon fading memory.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    <strong>Iron.</strong> That's what he was made of. Unyielding, unmoved, the final equation. No warmth. No wanting. Only the quiet mathematics of ending.
+                </div>
+            </div>
+            
+            <div class="light-column">
+                <div class="floral-strangling"></div>
+                <div class="light-text">
+                    <span class="drop-cap-light">A</span>phrodite did not fall into the dark; <strong>she invaded it.</strong>
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    She was the salt-sting of the sea and the fever of a summer noon, wreathed in a beauty so sharp it cut through the gloom like a blade.
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    Where she stepped on the dry, grey earth of Asphodel, <strong>the dust grew heavy with the scent of crushed jasmine.</strong>
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    She was the pulse of the beginning, the chaotic hunger that drives a seed to break through soil. The ache in the throat before the first cry. The wanting that births stars.
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    <strong>Rose.</strong> Living, breathing, blooming even in the dark.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PAGE 2 - THE MEETING (Split Design) -->
+    <div class="page-container" id="page2" style="display: none;">
+        <div class="page split-page">
+            <div class="split-divider"></div>
+            
+            <div class="dark-column">
+                <div class="dark-text">
+                    They met where the Styx curdles against the shore. He, a monolith of shadowed iron; she, a riot of shimmering foam and gold.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    <strong>"You have no business here,"</strong> Hades spoke, his voice the sound of grinding tectonic plates.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    "Nothing grows in this soil. Nothing breathes. There is no room for your restless wanting."
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    His words were fortress walls. His presence, the weight of finality. He was the punctuation mark at the end of every story.
+                </div>
+                <div class="dark-text" style="margin-top: 15px;">
+                    <strong>She should have fled.</strong>
+                </div>
+            </div>
+            
+            <div class="light-column">
+                <div class="floral-strangling"></div>
+                <div class="light-text">
+                    Aphrodite stepped closer, the hem of her gossamer robes catching on jagged basalt.
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    <strong>She did not flinch at the cold.</strong>
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    "You are the only thing in this universe that does not move for me," she whispered, her eyes bright with a dangerous curiosity.
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    "The gods flee from the end, but <strong>you are the end.</strong> I wanted to see if the heart of the world still beat in the dark."
+                </div>
+                <div class="light-text" style="margin-top: 15px;">
+                    She was the only force that ever dared question his dominion. Not with rebellion, but with wonder.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PAGE 3 - MANIFESTO -->
+    <div class="page-container" id="page3" style="display: none;">
+        <div class="page manifesto-page">
+            <div class="scratched-background"></div>
+            
+            <!-- Scratch line effects -->
+            <div class="scratch-lines">
+                <div class="scratch-line" style="top: 15%; left: 10%; width: 200px; transform: rotate(-15deg);"></div>
+                <div class="scratch-line" style="top: 35%; right: 15%; width: 180px; transform: rotate(20deg);"></div>
+                <div class="scratch-line" style="bottom: 25%; left: 5%; width: 220px; transform: rotate(-8deg);"></div>
+                <div class="scratch-line" style="bottom: 45%; right: 10%; width: 160px; transform: rotate(12deg);"></div>
+            </div>
+            
+            <div class="manifesto-title">
+                DESIRE<br>
+                IS A<br>
+                <span class="beautiful">BEAUTIFUL</span><br>
+                DEATH
+            </div>
+            
+            <div class="manifesto-text">
+                In the secret hollows of the deep earth,<br>
+                where light forgets to reach<br>
+                and time loses count of its hours,
+            </div>
+            
+            <div class="manifesto-text">
+                <em>they wove a new pact.</em>
+            </div>
+            
+            <div class="manifesto-text">
+                He gave her the stillness she could never find<br>
+                in the frantic world of the living.
+            </div>
+            
+            <div class="manifesto-text">
+                She gave him the fire that turned his iron<br>
+                into a sanctuary.
+            </div>
+            
+            <div class="manifesto-text" style="margin-top: 30px;">
+                In the dark,<br>
+                <em>the Rose bloomed from the Obsidian,</em><br>
+                and for the first time,<br>
+                the King of Shadows learned to sigh.
+            </div>
+        </div>
+    </div>
+    
+    <!-- PAGE 4 - THE TOUCH -->
+    <div class="page-container" id="page4" style="display: none;">
+        <div class="page touch-page">
+            <div class="touch-illustration">
+                <div class="iron-hand"></div>
+                <div class="rose-hand"></div>
+                <div class="golden-spark"></div>
+            </div>
+            
+            <div class="touch-text">
+                She reached out, pressing a palm of living warmth against his breastplate of cold ore.
+            </div>
+            
+            <div class="touch-text" style="margin-top: 20px;">
+                <strong>In that contact, the law of the universe buckled.</strong>
+            </div>
+            
+            <div class="touch-text" style="margin-top: 20px;">
+                Hades felt the terrifying friction of life—the ache, the heat, the unbearable weight of a single moment.
+            </div>
+            
+            <div class="touch-text" style="margin-top: 20px;">
+                He realized then that <strong>death is not the opposite of love; it is love's ultimate shadow.</strong>
+            </div>
+            
+            <div class="touch-text" style="margin-top: 20px;">
+                To love is to fear the loss.<br>
+                To die is to surrender to the longing.
+            </div>
+            
+            <div class="touch-text" style="margin-top: 30px; font-size: 1.2em;">
+                He did not capture her.<br>
+                She did not seduce him.
+            </div>
+            
+            <div class="touch-text" style="margin-top: 20px; font-size: 1.3em; color: #FFD700;">
+                They simply recognized each other<br>
+                as the two great gravities—<br>
+                <em>the pull of the womb<br>
+                and the pull of the grave.</em>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PAGE 5 - BACK COVER -->
+    <div class="page-container" id="page5" style="display: none;">
+        <div class="page back-cover">
+            <div class="next-volume">
+                <h3>📜 Volume 3 Beckons...</h3>
+                <p>
+                    What happens when the Trickster meets the one who stays? <strong>Loki and Sigyn's bitter-sweet venom.</strong> The god who breaks every rule bound by the goddess who refuses to leave. Loyalty tested drop by burning drop. Chaos held in tender hands.
+                </p>
+                <p style="margin-top: 15px; font-style: italic;">
+                    The pain that proves devotion. The madness that reveals truth.
+                </p>
+            </div>
+            
+            <div class="contact-box">
+                <strong>✂ KEEP THE EMBERS BREATHING ✂</strong><br><br>
+                
+                Mail your ghosts, your forbidden loves,<br>
+                your myths that burn in the dark:<br><br>
+                
+                THE STOLEN FLAME<br>
+                P.O. Box [REDACTED]<br>
+                Vancouver, BC<br><br>
+                
+                Digital whispers:<br>
+                stolenflame@protonmail.com<br>
+                Signal: @fire_keeper<br><br>
+                
+                <em>Every myth is a love letter to the impossible.</em>
+            </div>
+            
+            <div class="ethos">
+                This zine believes in:<br>
+                The meeting of opposites<br>
+                Beauty that cuts through darkness<br>
+                Stillness earned through chaos<br>
+                Desire as transformation<br>
+                Death not as ending but as deepening<br>
+                Love that buckles the laws of the universe
+            </div>
+            
+            <div style="text-align: center; margin: 25px 0; color: #FF69B4; font-size: 2em;">
+                🌹 ⚔ ✦ ⚔ 🌹
+            </div>
+            
+            <div class="credits">
+                Volume 2 · The Iron and the Rose · 2026<br>
+                Heavy black ink for the iron / Delicate floral filigree for the rose<br>
+                Gold thumbprint where they touch (imperfect, human)<br>
+                Split-page design: Dark/Light, Death/Desire<br>
+                Scratched calligraphy for the manifesto<br><br>
+                
+                A myth retold with weight and longing<br>
+                Words that ache. Silence that speaks.<br><br>
+                
+                The Iron and the Rose meet in the dark.<br>
+                And the dark becomes bearable.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function showPage(pageNum) {
+        for (let i = 0; i <= 5; i++) {
+            const page = document.getElementById('page' + i);
+            if (page) page.style.display = 'none';
+        }
+        
+        const selectedPage = document.getElementById('page' + pageNum);
+        if (selectedPage) selectedPage.style.display = 'block';
+        
+        const buttons = document.querySelectorAll('.nav-btn');
+        buttons.forEach((btn, idx) => {
+            btn.classList.toggle('active', idx === pageNum);
+        });
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+```
+
+</body>
+</html>

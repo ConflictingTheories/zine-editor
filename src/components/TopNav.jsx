@@ -49,6 +49,12 @@ function TopNav() {
                 >
                     Discover
                 </button>
+                <button
+                    className={`topnav-tab ${vpState.currentView === 'monetization' ? 'active' : ''}`}
+                    onClick={() => handleViewChange('monetization')}
+                >
+                    💎 Monetization
+                </button>
             </div>
             <div className="topnav-right">
                 <div className="cloud-status" title={vpState.isOnline ? 'Online' : 'Offline'}>
