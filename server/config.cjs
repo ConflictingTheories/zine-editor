@@ -22,7 +22,7 @@ const CONFIG = {
 
     // Database
     database: {
-        path: process.env.DB_PATH || './database.sqlite',
+        path: process.env.DB_PATH || './data/database.sqlite',
         // Ensure absolute path for Docker compatibility
         getPath() {
             const dbPath = this.path;

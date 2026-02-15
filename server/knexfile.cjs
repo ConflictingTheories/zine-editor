@@ -4,7 +4,7 @@ module.exports = {
     development: {
         client: 'sqlite3',
         connection: {
-            filename: process.env.DB_PATH || path.join(__dirname, 'server', 'database.sqlite')
+            filename: process.env.DB_PATH || path.join(__dirname, 'server', 'data', 'database.sqlite')
         },
         useNullAsDefault: true,
         migrations: {

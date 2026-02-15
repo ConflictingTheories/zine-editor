@@ -49,7 +49,7 @@
 - File: src/components/TokenMarketplace.jsx
 - File: src/components/TokenIssuance.jsx
 - File: src/components/Dashboard.jsx
-- Ensure auth-gated content is properly hidden
+- Ensure auth-gated content is properly hidden and managed through XRP payment validation and backend server control
 - Status: TODO
 
 ## Priority 4: Configuration

@@ -9,19 +9,28 @@ This upgrade plan transforms Void Press from a basic zine editor into a comprehe
 ### Strengths
 - Solid React-based architecture with modular components
 - Existing interactive narrative engine (logic branching, VFX, shaders)
-- PWA support with offline capabilities
 - Multi-format export (HTML, PDF)
 - Theme system with 7 aesthetic variants
 
 ### Gaps Identified
+- No Favourites / Shelf / Saved for Later (from discover)
+- Needs Better Paging / Search / Recommendations / Categories
+- Limited categories
+- Templates are extremely limited
+- Lacking editor plugin system / extensions / creator addons
 - Limited drawing tools (basic text/image placement only)
 - No collaborative features
 - Basic asset library (needs expansion)
+- Needs PWA support with offline capabilities - can "download zines for offline reading from discover"  - can "sync local edits when back online" (offline technically only given existing provided login session active and then it will attempt to resync when online)
 - No user profiles or social features (see /_old/ version)
 - Limited template system
 - Needs dozens of aesthetics to appeal to broad audiences
-- Needs cleaner UI - the problem is not in tools themselves - its in white space, padding, placement, use of space, contextual location, borders, shadows, and contrast and fonts which need improvment to make sure that the UI is painless to use and easy to comprehend, but powerful for experienced users without bottlenecks or too many repetive click routines.
-- No AI integration framework
+- Needs cleaner UI - Light + Dark modes - Better Font - Better Padding
+- State / Routing / Navigation / Auth vs Non-Auth state is broken
+- No Admin / Moderator Backend / CMS
+- No "Series" where zine volumes comprise a series
+- No Creator search / No Creator Profiles / No Profile Sections
+- Discovery needs better support for different search (should be moved to backend)
 
 ---
 

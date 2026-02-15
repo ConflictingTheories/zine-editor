@@ -2336,9 +2336,9 @@ app.post('/api/payment/initiate', authenticateToken, async (req, res) => {
     }
 });
 
-// Serve index.html (zine_builder.html) for unknown routes (SPA)
+// Serve index.html (index.html) for unknown routes (SPA)
 // Actually, let's keep it simple and just serve static.
-// app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'zine_builder.html')));
+// app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
