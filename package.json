@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "server": "node server/server.cjs",
     "mcp": "node server/mcp.js",
+    "migrate": "knex migrate:latest --knexfile server/knexfile.cjs",
+    "rollback": "knex migrate:rollback --knexfile server/knexfile.cjs",
+    "nuke-db": "rm -f server/data/database.sqlite && knex migrate:latest --knexfile server/knexfile.cjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
