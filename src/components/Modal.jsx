@@ -13,11 +13,29 @@ const THEME_OPTIONS = [
     { key: 'arcane', name: 'Arcane Lore', desc: 'Sigils, runes & the unknowable', colors: ['#6a040f', '#ff9e00', '#3c096c', '#70e000'] }
 ]
 
+const MONETIZATION_TYPES = [
+    { key: 'free', name: 'Free', desc: 'Anyone can read for free', icon: '🎁' },
+    { key: 'crowdfund', name: 'Crowdfund', desc: 'Readers contribute to unlock for everyone', icon: '🎯' },
+    { key: 'one_time', name: 'One-Time Payment', desc: 'Pay once, keep forever', icon: '💳' },
+    { key: 'subscription', name: 'Subscription', desc: 'Monthly subscription required', icon: '🔄' },
+    { key: 'token', name: 'Token Gated', desc: 'Requires sovereign token', icon: '🔐' },
+]
+
 function Modal() {
     const { vpState, updateVpState, closeModal, login, register, createProject, publishZine } = useVP()
     const [authMode, setAuthMode] = useState('login')
     const [authData, setAuthData] = useState({ email: '', password: '', username: '' })
-    const [publishData, setPublishData] = useState({ title: '', author: '', description: '', genre: 'classic', tags: '' })
+    const [publishData, setPublishData] = useState({
+        title: '',
+        author: '',
+        description: '',
+        genre: 'classic',
+        tags: '',
+        monetizationType: 'free',
+        fundingGoal: '',
+        tokenGate: false
+    })
+    const [publishStep, setPublishStep] = useState(1) // 1 = details, 2 = monetization
     const [helpTab, setHelpTab] = useState('shortcuts')
 
     const handleAuthSubmit = async (e) => {
@@ -34,14 +52,22 @@ function Modal() {
         if (!document.getElementById('pubGuidelines')?.checked) {
             return
         }
-        await publishZine({
+
+        // Prepare publish data with monetization settings
+        const fullPublishData = {
             title: publishData.title || vpState.currentProject?.title,
             author: publishData.author,
             description: publishData.description,
             genre: publishData.genre,
-            tags: publishData.tags
-        })
-        setPublishData({ title: '', author: '', description: '', genre: 'classic', tags: '' })
+            tags: publishData.tags,
+            monetization_type: publishData.monetizationType,
+            funding_goal: publishData.monetizationType === 'crowdfund' ? parseFloat(publishData.fundingGoal) || 100 : null,
+            is_premium: publishData.monetizationType === 'one_time' || publishData.monetizationType === 'subscription' ? 1 : 0,
+            requires_token: publishData.monetizationType === 'token' ? 1 : 0
+        }
+
+        await publishZine(fullPublishData)
+        setPublishData({ title: '', author: '', description: '', genre: 'classic', tags: '', monetizationType: 'free', fundingGoal: '', tokenGate: false })
     }
 
     const renderAuthModal = () => (
@@ -104,7 +130,7 @@ function Modal() {
 
     const renderPublishModal = () => (
         <div className="premium-modal-overlay active" id="publishModal">
-            <div className="premium-modal-box">
+            <div className="premium-modal-box" style={{ maxWidth: '600px' }}>
                 <button className="premium-modal-close" onClick={() => closeModal('publishModal')}>✕</button>
                 <h2 className="premium-modal-h2">Publish Your Zine</h2>
                 <form onSubmit={handlePublishSubmit}>
@@ -159,6 +185,69 @@ function Modal() {
                             onChange={(e) => setPublishData({ ...publishData, tags: e.target.value })}
                         />
                     </div>
+
+                    {/* Monetization Section */}
+                    <div className="form-row">
+                        <label>Monetization</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                            {MONETIZATION_TYPES.map(type => (
+                                <div
+                                    key={type.key}
+                                    onClick={() => setPublishData({ ...publishData, monetizationType: type.key })}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        padding: '10px',
+                                        background: publishData.monetizationType === type.key ? 'rgba(124, 92, 252, 0.15)' : 'var(--vp-surface)',
+                                        border: publishData.monetizationType === type.key ? '1px solid var(--vp-accent)' : '1px solid var(--vp-border)',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <span style={{ fontSize: '16px' }}>{type.icon}</span>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: '600', color: 'var(--vp-text)', fontSize: '13px' }}>{type.name}</div>
+                                        <div style={{ fontSize: '10px', color: 'var(--vp-text-dim)' }}>{type.desc}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {publishData.monetizationType === 'crowdfund' && (
+                        <div className="form-row">
+                            <label>Funding Goal (USD)</label>
+                            <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                placeholder="100"
+                                value={publishData.fundingGoal}
+                                onChange={(e) => setPublishData({ ...publishData, fundingGoal: e.target.value })}
+                            />
+                            <p style={{ fontSize: '11px', color: 'var(--vp-text-dim)', marginTop: '4px' }}>
+                                When goal reached, content becomes free for everyone!
+                            </p>
+                        </div>
+                    )}
+
+                    {publishData.monetizationType === 'token' && (
+                        <div className="form-row">
+                            <div style={{
+                                background: 'rgba(124, 92, 252, 0.1)',
+                                border: '1px solid rgba(124, 92, 252, 0.3)',
+                                borderRadius: '6px',
+                                padding: '10px'
+                            }}>
+                                <p style={{ margin: 0, fontSize: '11px', color: 'var(--vp-text-dim)' }}>
+                                    🔐 Requires sovereign token to access. Create tokens from your Dashboard.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="form-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <input type="checkbox" id="pubGuidelines" required style={{ width: 'auto' }} />
                         <label htmlFor="pubGuidelines" style={{ marginBottom: 0 }}>Accept Voyagers' Guidelines</label>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
+import ContentGate from './ContentGate.jsx'
 
 const ANIMATION_MAP = {
     'flash-in': 'reader-flash-in',
@@ -114,9 +115,38 @@ function Reader() {
     const [unlockedPages, setUnlockedPages] = useState(new Set())
     const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
     const [toggledLabels, setToggledLabels] = useState(new Set())
+    const [contentUnlocked, setContentUnlocked] = useState(false)
+    const [gateType, setGateType] = useState(null)
 
     const project = currentProject
     if (!project) return <div className="reader-empty">No project loaded</div>
+
+    // Check if content needs to be gated based on monetization settings
+    useEffect(() => {
+        if (!project) return
+
+        const hasGate = project.monetization_type &&
+            ['one_time', 'subscription', 'token', 'crowdfund'].includes(project.monetization_type)
+
+        if (hasGate) {
+            // Check if already unlocked (user contributed or has token)
+            const isAuthor = vpState.user && vpState.user.id === project.userId
+            const hasAccess = vpState.hasContentAccess || isAuthor
+
+            if (hasAccess) {
+                setContentUnlocked(true)
+            } else {
+                setGateType(project.monetization_type)
+            }
+        } else {
+            setContentUnlocked(true)
+        }
+    }, [project, vpState.user, vpState.hasContentAccess])
+
+    const handleGateUnlock = () => {
+        setContentUnlocked(true)
+        setGateType(null)
+    }
 
     const page = project.pages[pageIdx]
 
@@ -223,7 +253,18 @@ function Reader() {
                 <span>{pageIdx + 1} / {project.pages.length}</span>
             </div>
 
-            <div className="reader-canvas-wrap">
+            {/* Content Gate for monetized content */}
+            {gateType && !contentUnlocked && (
+                <ContentGate
+                    gateType={gateType}
+                    title={project.title}
+                    fundingGoal={project.funding_goal}
+                    amountRaised={project.amount_raised}
+                    onUnlock={handleGateUnlock}
+                />
+            )}
+
+            <div className="reader-canvas-wrap" style={{ display: contentUnlocked ? undefined : 'none' }}>
                 <div className="reader-page" style={styles.page(page)}>
                     {page.texture && (
                         <div style={styles.texture(page)} />

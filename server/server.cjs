@@ -16,6 +16,8 @@ const CONFIG = require('./config.cjs');
 
 // Import economy service for Stripe and XRP integration
 const economyService = require('./economyService.cjs');
+const contributionService = require('./contributionService.cjs');
+const sovereignService = require('./sovereignService.cjs');
 const { encrypt, decrypt } = require('./encryption.cjs');
 const xrpService = require('./xrpService.cjs');
 
@@ -211,20 +213,58 @@ app.get('/api/zines/:id', async (req, res) => {
         const zine = await db('zines').where({ id: req.params.id }).first();
         if (!zine) return res.status(404).json({ error: 'Not found' });
 
+        const isFunded = zine.funding_goal > 0 && zine.amount_raised >= zine.funding_goal;
+
+        const applyAccessControl = async (zine, user) => {
+            const isAuthor = user && zine.user_id === user.id;
+            let hasPaid = false;
+            if (user) {
+                const contribution = await db('contributions').where({ user_id: user.id, zine_id: zine.id }).first();
+                if (contribution) {
+                    hasPaid = true;
+                }
+            }
+
+            const canReadFully = isFunded || isAuthor || hasPaid;
+
+            if (canReadFully) {
+                return { ...zine, data: JSON.parse(zine.data) };
+            } else {
+                const zineData = JSON.parse(zine.data);
+                const firstPage = zineData.pages.length > 0 ? [zineData.pages[0]] : [];
+                return {
+                    ...zine,
+                    data: { pages: firstPage },
+                    locked: true,
+                };
+            }
+        };
+
         if (zine.is_published) {
             // Increment read count async
             db('zines').where({ id: req.params.id }).increment('read_count', 1).catch(() => { });
-            return res.json({ ...zine, data: JSON.parse(zine.data) });
+
+            const token = req.headers['authorization']?.split(' ')[1];
+            if (!token) {
+                return res.json(await applyAccessControl(zine, null));
+            }
+
+            jwt.verify(token, JWT_SECRET, async (err, user) => {
+                if (err) {
+                    return res.json(await applyAccessControl(zine, null));
+                }
+                return res.json(await applyAccessControl(zine, user));
+            });
+        } else {
+            // Check auth for private zines
+            const token = req.headers['authorization']?.split(' ')[1];
+            if (!token) return res.status(403).json({ error: 'Private zine' });
+
+            jwt.verify(token, JWT_SECRET, (err, user) => {
+                if (err || user.id !== zine.user_id) return res.status(403).json({ error: 'Forbidden' });
+                res.json({ ...zine, data: JSON.parse(zine.data) });
+            });
         }
-
-        // Check auth for private zines
-        const token = req.headers['authorization']?.split(' ')[1];
-        if (!token) return res.status(403).json({ error: 'Private zine' });
-
-        jwt.verify(token, JWT_SECRET, (err, user) => {
-            if (err || user.id !== zine.user_id) return res.status(403).json({ error: 'Forbidden' });
-            res.json({ ...zine, data: JSON.parse(zine.data) });
-        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2361,6 +2401,261 @@ app.post('/api/payment/initiate', authenticateToken, async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+
+// ---- Contributions API ----
+
+// Create a payment intent for a contribution
+app.post('/api/zines/:id/contribute', authenticateToken, async (req, res) => {
+    const { amount_dollars } = req.body;
+    const { id: zine_id } = req.params;
+    const { id: user_id } = req.user;
+
+    try {
+        const result = await contributionService.createContributionIntent(zine_id, amount_dollars, user_id);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Stripe webhook for payment confirmation
+app.post('/api/stripe-webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        await contributionService.handleStripeWebhook(req.body, req.headers['stripe-signature']);
+        res.json({ received: true });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// ============================================
+// Sovereign Token API Endpoints
+// ============================================
+
+// Create a new sovereign token
+app.post('/api/sovereign/create-token', authenticateToken, async (req, res) => {
+    const { identity, claims } = req.body;
+
+    try {
+        const result = await sovereignService.createToken(db, req.user.id, identity, claims);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get user's sovereign tokens
+app.get('/api/sovereign/tokens', authenticateToken, async (req, res) => {
+    try {
+        const tokens = await sovereignService.getUserTokens(db, req.user.id);
+        res.json(tokens);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Verify a sovereign token
+app.post('/api/sovereign/verify', async (req, res) => {
+    const { tokenData } = req.body;
+
+    try {
+        const result = await sovereignService.verifyToken(db, tokenData);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Seal content with a token gate
+app.post('/api/sovereign/seal', authenticateToken, async (req, res) => {
+    const { zineId, tokenId, content } = req.body;
+
+    if (!zineId || !tokenId || !content) {
+        return res.status(400).json({ error: 'zineId, tokenId, and content are required' });
+    }
+
+    try {
+        const result = await sovereignService.sealContent(db, zineId, tokenId, content);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Unlock content with a token
+app.post('/api/sovereign/unlock', async (req, res) => {
+    const { gateId, tokenData } = req.body;
+
+    if (!gateId || !tokenData) {
+        return res.status(400).json({ error: 'gateId and tokenData are required' });
+    }
+
+    try {
+        const result = await sovereignService.unlockContent(db, gateId, tokenData);
+        res.json(result);
+    } catch (error) {
+        res.status(403).json({ error: error.message });
+    }
+});
+
+// Create a delegated token
+app.post('/api/sovereign/delegate', authenticateToken, async (req, res) => {
+    const { tokenId, userId, purpose, ttl } = req.body;
+
+    if (!tokenId || !purpose) {
+        return res.status(400).json({ error: 'tokenId and purpose are required' });
+    }
+
+    try {
+        const result = await sovereignService.createDelegation(db, tokenId, userId || req.user.id, purpose, ttl);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get gate info (public - no content revealed)
+app.get('/api/gates/:gateId', async (req, res) => {
+    try {
+        const gate = await sovereignService.getGateInfo(db, req.params.gateId);
+        if (!gate) {
+            return res.status(404).json({ error: 'Gate not found' });
+        }
+        res.json(gate);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Check access to a zine
+app.get('/api/zines/:id/access', authenticateToken, async (req, res) => {
+    try {
+        const result = await sovereignService.checkAccess(db, req.params.id, req.user.id);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// Crowdfunding API Endpoints
+// ============================================
+
+// Get zine funding status
+app.get('/api/zines/:id/funding', async (req, res) => {
+    try {
+        const zine = await db('zines').where({ id: req.params.id }).first();
+        if (!zine) {
+            return res.status(404).json({ error: 'Zine not found' });
+        }
+
+        const isFunded = zine.funding_goal > 0 && zine.amount_raised >= zine.funding_goal;
+
+        res.json({
+            zineId: zine.id,
+            fundingGoal: zine.funding_goal || 0,
+            amountRaised: zine.amount_raised || 0,
+            isFunded: !!isFunded,
+            remaining: zine.funding_goal ? Math.max(0, zine.funding_goal - zine.amount_raised) : null,
+            currency: zine.funding_currency || 'USD',
+            deadline: zine.funding_deadline,
+            contributorCount: await db('contributions').where({ zine_id: zine.id }).count('* as count').first()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Set funding goal for zine
+app.post('/api/zines/:id/funding', authenticateToken, async (req, res) => {
+    const { fundingGoal, currency, deadline } = req.body;
+    const zineId = req.params.id;
+
+    try {
+        const zine = await db('zines').where({ id: zineId, user_id: req.user.id }).first();
+        if (!zine) {
+            return res.status(404).json({ error: 'Zine not found or not owned' });
+        }
+
+        await db('zines').where({ id: zineId }).update({
+            funding_goal: fundingGoal || null,
+            funding_currency: currency || 'USD',
+            funding_deadline: deadline || null,
+            monetization_type: fundingGoal ? 'crowdfund' : zine.monetization_type
+        });
+
+        res.json({ success: true, fundingGoal, currency: currency || 'USD' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get contributors for a zine
+app.get('/api/zines/:id/contributors', async (req, res) => {
+    try {
+        const contributors = await db('contributions as c')
+            .join('users as u', 'c.user_id', 'u.id')
+            .select('c.*', 'u.username')
+            .where('c.zine_id', req.params.id)
+            .orderBy('c.created_at', 'desc');
+
+        res.json(contributors);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Process crowdfunding payment (after Stripe success)
+app.post('/api/zines/:id/fund', authenticateToken, async (req, res) => {
+    const { amount, paymentIntentId } = req.body;
+    const zineId = req.params.id;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    try {
+        // Verify payment with Stripe (simplified)
+        // In production, verify the payment intent properly
+
+        // Determine credit tier based on contribution
+        const zine = await db('zines').where({ id: zineId }).first();
+        const goal = zine.funding_goal || 0;
+        const creditTier = goal > 0 && (amount / goal) >= 0.2 ? 'executive_producer' : 'associate_producer';
+
+        // Record contribution
+        await db('contributions').insert({
+            user_id: req.user.id,
+            zine_id: zineId,
+            amount,
+            currency: zine.funding_currency || 'USD',
+            stripe_payment_intent: paymentIntentId,
+            credit_tier: creditTier
+        });
+
+        // Update zine amount raised
+        const newRaised = (zine.amount_raised || 0) + amount;
+        const isNowFunded = goal > 0 && newRaised >= goal;
+
+        await db('zines').where({ id: zineId }).update({
+            amount_raised: newRaised,
+            is_funded: isNowFunded ? 1 : 0
+        });
+
+        res.json({
+            success: true,
+            amountRaised: newRaised,
+            isFunded: isNowFunded,
+            creditTier,
+            message: isNowFunded ? 'Funding goal reached! Content is now free for everyone.' : 'Thank you for your contribution!'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Serve static files from React app
 
 // Serve index.html (index.html) for unknown routes (SPA)
 // app.get('(.*)', (req, res) => {

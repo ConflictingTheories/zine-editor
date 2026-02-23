@@ -580,6 +580,28 @@ const VPProvider = ({ children }) => {
         }
     }
 
+    const reloadProject = async (zineId) => {
+        try {
+            const zine = await api(`/zines/${zineId}`);
+            setVpState(prev => {
+                const project = { ...zine, pages: zine.data.pages, serverId: zine.id, _remote: false, data: zine.data };
+                const idx = prev.projects.findIndex(p => p.serverId === zineId);
+                const nextProjects = [...prev.projects];
+                if (idx >= 0) {
+                    nextProjects[idx] = project;
+                }
+                return {
+                    ...prev,
+                    projects: nextProjects,
+                    currentProject: project,
+                };
+            });
+        } catch (error) {
+            toast('Failed to reload zine: ' + error.message, 'error');
+        }
+    };
+
+
     const addAsset = (type, assetId) => {
         const pageIdx = vpState.selection?.pageIdx ?? 0
         const base = { id: genId(), x: 120, y: 120, rotation: 0, opacity: 1, zIndex: 0, borderWidth: 0, borderColor: '#000', borderRadius: 0 }
