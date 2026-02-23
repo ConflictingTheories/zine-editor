@@ -2,10 +2,10 @@
 import MCPClient from './mcpClient.js'
 
 // Server-side export using MCP (for automation)
-export const exportToHTMLServer = async (project) => {
+export const exportToHTMLServer = async (project, token) => {
     const mcp = new MCPClient()
     try {
-        const result = await mcp.exportHTML(project)
+        const result = await mcp.exportHTML(project, token)
         return result.html
     } catch (error) {
         console.error('Server HTML export failed:', error)
@@ -13,10 +13,10 @@ export const exportToHTMLServer = async (project) => {
     }
 }
 
-export const exportToPDFServer = async (project) => {
+export const exportToPDFServer = async (project, token) => {
     const mcp = new MCPClient()
     try {
-        const result = await mcp.exportPDF(project)
+        const result = await mcp.exportPDF(project, token)
         return result
     } catch (error) {
         console.error('Server PDF export failed:', error)

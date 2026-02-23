@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 320px;
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+            background: #06060e;
+            color: #e8e4ff;
+        }
+
+        .header {
+            font-weight: 800;
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #7c5cfc;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #3ef0c0;
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            background: #000;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        button {
+            width: 100%;
+            background: #7c5cfc;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+
+        .token-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .token-item {
+            font-size: 12px;
+            padding: 8px;
+            border-bottom: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .token-id {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">Sovereign Keychain</div>
+
+    <div class="card">
+        <div class="label">Import Token</div>
+        <input type="text" id="tokenJson" placeholder="Paste Token JSON...">
+        <button id="importBtn">Import Token</button>
+    </div>
+
+    <div class="card">
+        <div class="label">Your Tokens</div>
+        <div class="token-list" id="tokenList">
+            <!-- Tokens injected here -->
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

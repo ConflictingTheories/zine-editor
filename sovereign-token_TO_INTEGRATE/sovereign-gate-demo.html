@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sovereign Gate · 4D Token + SCEE</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Syne:wght@400;700;800&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#06070a;
+  --bg2:#0c0e13;
+  --bg3:#111318;
+  --rim:rgba(255,255,255,0.07);
+  --rim2:rgba(255,255,255,0.12);
+  --white:#dce4f0;
+  --dim:rgba(220,228,240,0.38);
+  --green:#00e87a;
+  --amber:#ffb400;
+  --blue:#4d8fff;
+  --red:#ff4466;
+}
+
+html,body{min-height:100%;background:var(--bg);color:var(--white);
+  font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6}
+
+/* noise */
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity:.024;background-size:200px}
+
+/* ambient orbs */
+.orb{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;
+  animation:float 16s ease-in-out infinite alternate}
+.orb1{width:500px;height:500px;background:radial-gradient(circle,#3d2b8033,transparent 70%);top:-100px;left:-80px}
+.orb2{width:400px;height:400px;background:radial-gradient(circle,#00e87a18,transparent 70%);bottom:-80px;right:-60px;animation-delay:-8s}
+@keyframes float{from{transform:translate(0,0) scale(1)}to{transform:translate(30px,25px) scale(1.12)}}
+
+.shell{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:40px 20px 100px}
+
+/* ── HEADER ── */
+header{padding:48px 0 44px;border-bottom:1px solid var(--rim);margin-bottom:44px}
+.eyebrow{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:var(--green);margin-bottom:14px}
+h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.4rem,6vw,4rem);
+  letter-spacing:-.02em;line-height:1.05;color:var(--white)}
+h1 em{color:var(--green);font-style:normal}
+.tagline{margin-top:16px;font-size:11px;color:var(--dim);max-width:580px;line-height:2;font-style:italic}
+.tagline strong{color:var(--white);font-style:normal}
+
+/* ── SECTION TITLES ── */
+.section-head{margin:44px 0 20px;display:flex;align-items:baseline;gap:14px}
+.section-head h2{font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:-.01em}
+.section-head .sub{font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--rim);border-radius:8px;padding:24px;margin-bottom:16px}
+.card-title{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--green);
+  margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.card-title::before{content:'';width:3px;height:11px;background:var(--green);border-radius:1px}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--rim);margin-bottom:24px}
+.tab{padding:10px 20px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+.tab:hover:not(.active){color:var(--white)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* ── FIELDS ── */
+.field{margin-bottom:14px}
+label{display:block;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+input,textarea,select{width:100%;background:var(--bg3);border:1px solid var(--rim2);
+  color:var(--white);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:9px 12px;
+  outline:none;border-radius:4px;transition:border-color .15s;resize:vertical}
+input:focus,textarea:focus,select:focus{border-color:var(--green)}
+textarea{min-height:80px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+
+/* ── BUTTONS ── */
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+button{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border:none;
+  border-radius:4px;padding:9px 18px;transition:all .18s;white-space:nowrap}
+.btn-go{background:var(--green);color:#000}
+.btn-go:hover{filter:brightness(1.1)}
+.btn-go:disabled{opacity:.35;cursor:not-allowed;filter:none}
+.btn-ghost{background:transparent;color:var(--white);border:1px solid var(--rim2)}
+.btn-ghost:hover{border-color:var(--green);color:var(--green)}
+.btn-amber{background:rgba(255,180,0,.1);color:var(--amber);border:1px solid rgba(255,180,0,.3)}
+.btn-amber:hover{background:rgba(255,180,0,.18)}
+.btn-blue{background:rgba(77,143,255,.1);color:var(--blue);border:1px solid rgba(77,143,255,.3)}
+.btn-blue:hover{background:rgba(77,143,255,.18)}
+
+/* ── TERM / LOG ── */
+.term{background:var(--bg);border:1px solid var(--rim);border-radius:4px;padding:12px 14px;
+  font-size:10px;line-height:2;color:var(--dim);max-height:200px;overflow-y:auto;
+  white-space:pre-wrap;word-break:break-all;margin-top:12px}
+.term .g{color:var(--green)}.term .r{color:var(--red)}.term .a{color:var(--amber)}
+.term .b{color:var(--white);font-weight:600}.term .d{color:rgba(220,228,240,.2)}
+
+/* ── DATA BOX ── */
+.databox{background:var(--bg);border:1px solid var(--rim);border-radius:4px;padding:10px 12px;
+  font-size:10px;word-break:break-all;line-height:1.8;margin-top:10px;max-height:100px;
+  overflow-y:auto;position:relative;color:var(--green)}
+.databox .cbtn{position:sticky;float:right;top:0;font-size:9px;padding:2px 8px;
+  background:var(--bg2);border:1px solid var(--rim);color:var(--dim);cursor:pointer;border-radius:2px}
+.databox .cbtn:hover{color:var(--green)}
+.databox.token-box{color:var(--amber)}
+.databox.env-box{color:rgba(220,228,240,.3)}
+
+/* ── CHIP ── */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;
+  font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.chip-ok{background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.3);color:var(--green)}
+.chip-err{background:rgba(255,68,102,.1);border:1px solid rgba(255,68,102,.3);color:var(--red)}
+.chip-wait{background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.3);color:var(--amber)}
+.chip-dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ── GATE GRID ── */
+.gate-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+.gate-slot{background:var(--bg2);border:1px solid var(--rim);border-radius:8px;overflow:hidden}
+.gate-slot-header{padding:10px 14px;border-bottom:1px solid var(--rim);
+  font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);
+  display:flex;align-items:center;justify-content:space-between}
+.gate-slot-header .slot-title{color:var(--white)}
+
+/* ── DELEGATE TOKENS ── */
+.token-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.token-card{background:var(--bg);border:1px solid var(--rim);border-radius:6px;
+  padding:14px;display:flex;flex-direction:column;gap:8px}
+.token-card-head{display:flex;align-items:center;gap:10px}
+.token-mini-canvas{border-radius:50%;flex-shrink:0}
+.token-info{flex:1;min-width:0}
+.token-info .tid{font-size:10px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.token-info .tmeta{font-size:9px;color:var(--dim)}
+.token-actions{display:flex;gap:6px;flex-wrap:wrap}
+.token-actions button{font-size:9px;padding:5px 10px}
+
+/* ── EXTENSION HINT ── */
+.ext-hint{background:rgba(77,143,255,.06);border:1px solid rgba(77,143,255,.2);border-radius:6px;
+  padding:16px;margin-top:16px;font-size:11px;color:rgba(77,143,255,.8);line-height:2}
+.ext-hint code{font-size:10px;color:var(--green);background:var(--bg);padding:2px 6px;border-radius:2px}
+
+/* ── DEMO CONTENT (inside gates) ── */
+.demo-article{font-family:Georgia,serif;line-height:1.9;padding:20px;max-width:600px;margin:0 auto;color:#1a1a2e}
+.demo-article h2{font-size:1.3rem;margin-bottom:14px;color:#0d0d1e}
+.demo-game{display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px;
+  background:#0d0d1e;min-height:200px;color:#e0e0ff;font-family:monospace}
+
+/* ── CODE BLOCK ── */
+.code-block{background:var(--bg);border:1px solid var(--rim);border-radius:4px;
+  padding:14px 16px;font-size:10px;color:var(--amber);white-space:pre-wrap;word-break:break-all;
+  max-height:220px;overflow-y:auto;line-height:1.8;margin-top:10px}
+
+/* ── INFO BANNER ── */
+.info-banner{background:rgba(77,143,255,.07);border:1px solid rgba(77,143,255,.2);border-radius:4px;
+  padding:12px 16px;font-size:11px;color:rgba(77,143,255,.85);line-height:1.9;margin-bottom:18px}
+
+footer{text-align:center;font-size:9px;color:var(--dim);border-top:1px solid var(--rim);
+  padding-top:20px;margin-top:60px;letter-spacing:.1em;line-height:2}
+</style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<div class="shell">
+
+<header>
+  <div class="eyebrow">Sovereign Gate · Unified System</div>
+  <h1>4D Token + SCEE<br><em>Drop-in Content Gate</em></h1>
+  <p class="tagline">
+    Wrap any HTML — articles, games, scripts — behind an animated sovereign token.
+    <strong>Delegated token holders</strong> present their token to decrypt and render content client-side.
+    The host never holds the plaintext.
+  </p>
+</header>
+
+<!-- ═══════════════ AUTHORING TOOL ═══════════════ -->
+<div class="section-head">
+  <h2>1 · Author a Gate</h2>
+  <span class="sub">Encrypt content · Issue tokens</span>
+</div>
+
+<div class="card">
+  <div class="card-title">Seal Content</div>
+
+  <div class="info-banner">
+    ⚡ Click <strong>Load Demo Content</strong> for a pre-filled example, then hit <strong>Seal Gate</strong> to encrypt.
+    Delegated tokens will appear below — paste them into the live gates to unlock.
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="content">Content</div>
+    <div class="tab" data-tab="identity">Identity</div>
+    <div class="tab" data-tab="output">Output</div>
+  </div>
+
+  <div class="tab-panel active" id="tab-content">
+    <div class="field">
+      <label>Label (shown on gate)</label>
+      <input id="auth-label" type="text" value="Protected Content" placeholder="e.g. Sovereign Article · Encrypted Game">
+    </div>
+    <div class="field">
+      <label>HTML Content to Encrypt <span style="color:var(--dim);font-size:9px">(any HTML, scripts included)</span></label>
+      <textarea id="auth-content" style="min-height:160px;font-size:10px" placeholder="Paste any HTML here..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn-amber" onclick="loadDemoArticle()">Load Demo Article</button>
+      <button class="btn-amber" onclick="loadDemoGame()">Load Demo Game</button>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-identity">
+    <div class="grid2">
+      <div class="field">
+        <label>Publisher Identity</label>
+        <input id="auth-id" type="text" value="publisher@example.com" placeholder="email, DID, username...">
+      </div>
+      <div class="field">
+        <label>Gate ID <span style="color:var(--dim);font-size:9px">(auto-generated if blank)</span></label>
+        <input id="auth-gateid" type="text" placeholder="leave blank for random">
+      </div>
+    </div>
+    <div class="field">
+      <label>Publisher Claims (JSON)</label>
+      <textarea id="auth-claims" style="min-height:60px">{"role":"publisher","tier":"sovereign"}</textarea>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-output">
+    <div style="font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:6px">
+      Ciphertext Envelope <span style="color:var(--dim)">(put this in your HTML)</span>
+    </div>
+    <div class="databox env-box" id="out-envelope" style="min-height:40px">
+      <button class="cbtn" onclick="copyText(document.getElementById('out-envelope').dataset.val)">copy</button>
+      <span id="out-env-text">Seal a gate first...</span>
+    </div>
+
+    <div style="font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;margin-top:14px">
+      Drop-in HTML Element
+    </div>
+    <div class="code-block" id="out-html"><!-- Seal a gate to generate --></div>
+
+    <div style="font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;margin-top:14px">
+      Publisher Token <span style="color:var(--red);font-size:9px">⚠ Keep private — contains signing key</span>
+    </div>
+    <div class="databox token-box" id="out-publisher-token">
+      <button class="cbtn" onclick="copyText(document.getElementById('out-publisher-token').dataset.val)">copy</button>
+      <span id="out-pub-text">—</span>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-go" id="btn-seal" onclick="sealGate()">⬡ Seal Gate</button>
+    <button class="btn-ghost" id="btn-add-demo" onclick="addGateToDemo()" disabled>+ Add to Live Demo</button>
+  </div>
+
+  <div class="term" id="seal-log">Ready. Fill in content and click Seal Gate.
+<span class="d">// Content encrypted with AES-256-GCM
+// Key derived from publisher identity + gateId via HKDF
+// Token signed with ECDSA P-256</span></div>
+</div>
+
+<!-- ═══════════════ DELEGATE ═══════════════ -->
+<div class="section-head">
+  <h2>2 · Delegate Access</h2>
+  <span class="sub">Issue reader tokens</span>
+</div>
+
+<div class="card">
+  <div class="card-title">Issue Delegated Tokens</div>
+  <div class="grid2">
+    <div class="field">
+      <label>Purpose / Role</label>
+      <input id="del-purpose" type="text" value="read-only" placeholder="read-only, preview, trial...">
+    </div>
+    <div class="field">
+      <label>TTL <span style="color:var(--dim);font-size:9px">(ms, blank = no expiry)</span></label>
+      <input id="del-ttl" type="number" placeholder="e.g. 86400000 = 24h">
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-go" id="btn-delegate" onclick="issueDelegate()" disabled>⬡ Issue Delegate Token</button>
+  </div>
+  <div class="term" id="del-log">Seal a gate first to enable delegation.</div>
+  <div class="token-list" id="token-list"></div>
+</div>
+
+<!-- ═══════════════ LIVE GATES ═══════════════ -->
+<div class="section-head">
+  <h2>3 · Live Gates</h2>
+  <span class="sub">Present a token to unlock</span>
+</div>
+
+<div class="info-banner" id="gate-hint">
+  Seal a gate above and click "Add to Live Demo" — or use the pre-loaded examples below.
+  Present a delegated token to unlock any gate.
+</div>
+
+<div class="gate-grid" id="gate-grid">
+  <!-- Populated by JS + pre-loaded examples -->
+</div>
+
+<!-- ═══════════════ EXTENSION HOOK ═══════════════ -->
+<div class="section-head">
+  <h2>4 · Browser Extension Hook</h2>
+  <span class="sub">Auto-decryption API</span>
+</div>
+
+<div class="card">
+  <div class="card-title">Extension Integration</div>
+  <p style="font-size:11px;color:var(--dim);line-height:2;margin-bottom:16px">
+    The gate element emits standard DOM events. A browser extension can intercept
+    <code style="color:var(--green);background:var(--bg3);padding:1px 5px;border-radius:2px">sovereign:locked</code>
+    events, check a local token store, and auto-present matching tokens —
+    giving seamless auto-decryption for authorised users without any UI interaction.
+  </p>
+  <div class="ext-hint">
+    <strong style="color:var(--white)">Extension pattern (content script):</strong><br><br>
+    <code>document.addEventListener('sovereign:locked', async (e) => {</code><br>
+    <code>&nbsp;&nbsp;const { gateId } = e.detail;</code><br>
+    <code>&nbsp;&nbsp;const token = await localStore.getTokenForGate(gateId);</code><br>
+    <code>&nbsp;&nbsp;if (token) e.target.dispatchEvent(new CustomEvent('sovereign:present',</code><br>
+    <code>&nbsp;&nbsp;&nbsp;&nbsp;{ detail: { tokenJSON: token }, bubbles: false }));</code><br>
+    <code>});</code>
+    <br><br>
+    The gate handles verification + decryption automatically. The extension never touches plaintext.
+  </div>
+
+  <div style="margin-top:20px">
+    <div class="card-title">Simulate Auto-Decrypt</div>
+    <p style="font-size:11px;color:var(--dim);line-height:2;margin-bottom:12px">
+      This simulates a browser extension auto-presenting a stored token to all visible gates.
+    </p>
+    <div class="btn-row">
+      <button class="btn-blue" onclick="simulateExtension()">⚡ Simulate Extension Auto-Decrypt</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Sovereign Gate v1 · 4D Token (ECDSA P-256) + SCEE (AES-256-GCM + HKDF) · Web Components<br>
+  Drop-in · No server · No dependencies · Extension-ready<br>
+  <span style="color:rgba(220,228,240,.18)">All operations local — nothing transmitted</span>
+</footer>
+</div>
+
+<!-- The module itself, inlined -->
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  SOVEREIGN GATE MODULE (inlined for single-file demo)
+// ══════════════════════════════════════════════════════════════════
+
+(function(root){'use strict';
+
+const FRAME_COUNT=48,FRAME_SIZE=96,GATE_VERSION=1;
+const TE=new TextEncoder(),TD=new TextDecoder();
+
+const cat=(...a)=>{const l=a.reduce((s,x)=>s+x.length,0),o=new Uint8Array(l);let f=0;for(const x of a){o.set(x,f);f+=x.length;}return o;};
+const w32=n=>{const a=new Uint8Array(4);new DataView(a.buffer).setUint32(0,n);return a;};
+const r32=(b,o=0)=>new DataView(b.buffer,b.byteOffset+o).getUint32(0);
+const rnd=n=>crypto.getRandomValues(new Uint8Array(n));
+const tsEq=(a,b)=>{if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a[i]^b[i];return d===0;};
+const b64e=b=>btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+const b64d=s=>{try{return new Uint8Array([...atob(s.replace(/-/g,'+').replace(/_/g,'/'))].map(c=>c.charCodeAt(0)));}catch{return null;}};
+
+function mulberry32(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+async function hashSeed(s){const b=await crypto.subtle.digest('SHA-256',TE.encode(s));return new DataView(b).getUint32(0);}
+function derivePalette(seed){const r=mulberry32(seed);const h1=Math.floor(r()*360);const h2=(h1+137+Math.floor(r()*40))%360;const h3=(h2+137+Math.floor(r()*40))%360;return[h1,h2,h3];}
+
+// ECDSA
+async function genKP(){return crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);}
+async function signB(pk,d){return new Uint8Array(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},pk,d));}
+async function verifySig(jwk,d,s){const k=await crypto.subtle.importKey('jwk',jwk,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);return crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},k,s,d);}
+async function expPub(kp){return crypto.subtle.exportKey('jwk',kp.publicKey);}
+async function expPriv(kp){return crypto.subtle.exportKey('jwk',kp.privateKey);}
+async function impPriv(j){return crypto.subtle.importKey('jwk',j,{name:'ECDSA',namedCurve:'P-256'},false,['sign']);}
+async function impPub(j){return crypto.subtle.importKey('jwk',j,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);}
+
+// AES-GCM
+async function aesEnc(k,iv,pt){const key=await crypto.subtle.importKey('raw',k,{name:'AES-GCM',length:256},false,['encrypt']);return new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv,tagLength:128},key,pt));}
+async function aesDec(k,iv,ct){const key=await crypto.subtle.importKey('raw',k,{name:'AES-GCM',length:256},false,['decrypt']);return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,tagLength:128},key,ct));}
+async function deriveKey(identity,salt){const b=await crypto.subtle.importKey('raw',TE.encode(identity),'HKDF',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'HKDF',salt,hash:'SHA-256',info:TE.encode('sovereign-gate-v1')},b,256);return new Uint8Array(bits);}
+
+const GATE_MAGIC=new Uint8Array([0x53,0x47,0x41,0x54]);
+
+// TOKEN
+async function buildToken({id,role,claims,gateId,delegation,keyPair}){
+  const kp=keyPair||await genKP();
+  const pub=await expPub(kp),priv=await expPriv(kp);
+  const payload={v:GATE_VERSION,id,role,claims,gateId,delegation:delegation||null,publicKey:pub,iat:Date.now()};
+  const pb=TE.encode(JSON.stringify(payload));
+  const sig=await signB(kp.privateKey,pb);
+  return{...payload,sig:b64e(sig),_privateKey:priv};
+}
+
+async function verifyToken(t){
+  try{
+    const{sig,_privateKey,...payload}=t;
+    const pb=TE.encode(JSON.stringify(payload));
+    const sb=b64d(sig);
+    if(!sb)return{valid:false,error:'Bad sig'};
+    const ok=await verifySig(payload.publicKey,pb,sb);
+    if(!ok)return{valid:false,error:'Signature invalid'};
+    if(payload.delegation?.exp&&Date.now()>payload.delegation.exp)return{valid:false,error:'Token expired'};
+    return{valid:true,token:payload};
+  }catch(e){return{valid:false,error:e.message};}
+}
+
+// ENVELOPE
+async function sealContent(html,gateId,identity){
+  const salt=rnd(32),iv=rnd(12);
+  const key=await deriveKey(identity+':'+gateId,salt);
+  const ct=await aesEnc(key,iv,TE.encode(html));
+  const gateHash=new Uint8Array(await crypto.subtle.digest('SHA-256',TE.encode(gateId)));
+  const env=cat(GATE_MAGIC,new Uint8Array([1]),gateHash,salt,iv,w32(ct.length),ct);
+  return b64e(env);
+}
+
+async function openEnvelope(envStr,tokenJSON){
+  const{valid,token,error}=await verifyToken(tokenJSON);
+  if(!valid)throw new Error('Token invalid: '+error);
+  const env=b64d(envStr);
+  if(!env)throw new Error('Invalid envelope');
+  let o=0;
+  const magic=env.slice(o,o+4);o+=4;
+  if(!tsEq(magic,GATE_MAGIC))throw new Error('Bad envelope magic');
+  o+=1;
+  const storedHash=env.slice(o,o+32);o+=32;
+  const salt=env.slice(o,o+32);o+=32;
+  const iv=env.slice(o,o+12);o+=12;
+  const cl=r32(env,o);o+=4;
+  const ct=env.slice(o,o+cl);
+  const sealerId=token.role==='delegate'?(token.delegation?.parentId||token.id):token.id;
+  const gid=token.gateId;
+  const expHash=new Uint8Array(await crypto.subtle.digest('SHA-256',TE.encode(gid)));
+  if(!tsEq(storedHash,expHash))throw new Error('Token not authorized for this gate');
+  const key=await deriveKey(sealerId+':'+gid,salt);
+  let pt;
+  try{pt=await aesDec(key,iv,ct);}catch(e){throw new Error('Decryption failed — identity mismatch');}
+  return TD.decode(pt);
+}
+
+// ── TOKEN VISUAL RENDERER ──
+class TokenRenderer{
+  constructor(canvas,seed,palette,state='locked'){
+    this.canvas=canvas;this.ctx=canvas.getContext('2d');
+    this.seed=seed;this.palette=palette;this.state=state;
+    this.t=0;this._sp=0;this._raf=null;
+    this.particles=[];this.sigil=[];
+    const rng=mulberry32(seed+1);
+    const pc=55+Math.floor(rng()*25);
+    for(let i=0;i<pc;i++)this.particles.push({x:rng()*FRAME_SIZE,y:rng()*FRAME_SIZE,vx:0,vy:0,life:rng(),speed:.2+rng()*.55,size:.4+rng()*1.3,hOff:rng()*50-25,ph:rng()*Math.PI*2});
+    const r2=mulberry32(seed+2),arms=3+Math.floor(r2()*5);this.sigilArms=arms;
+    for(let i=0;i<arms;i++)this.sigil.push({base:(i/arms)*Math.PI*2,r1:9+r2()*15,r2:3+r2()*8,twist:(r2()-.5)*.9});
+  }
+  _flow(x,y,t){const nx=x/FRAME_SIZE*4,ny=y/FRAME_SIZE*4;return Math.sin(nx*1.3+t*.5)*Math.cos(ny*.9-t*.3)*Math.PI+Math.sin(nx*.7-ny*1.1+t*.2)*Math.PI*.5;}
+  setState(s){this.state=s;this._sp=0;}
+  _sc(){if(this.state==='locked')return[0,1,.65];if(this.state==='unlocking')return[40,1.1,.9];if(this.state==='unlocked')return[100,1.2,1.1];if(this.state==='denied')return[-30,1,.75];return[0,1,1];}
+  render(){
+    const ctx=this.ctx,t=this.t*.018,norm=(this.t%FRAME_COUNT)/FRAME_COUNT;
+    const[h1,h2,h3]=this.palette,[hs,sm,lm]=this._sc();
+    const S=this.canvas.width,cx=S/2,cy=S/2;
+    this._sp=Math.min(1,this._sp+.04);const sp=this._sp;
+    const bg=ctx.createRadialGradient(cx,cy,0,cx,cy,S*.8);
+    bg.addColorStop(0,`hsl(${h1+hs},${68*sm}%,${10*lm}%)`);
+    bg.addColorStop(.55,`hsl(${h2+hs},${58*sm}%,${6*lm}%)`);
+    bg.addColorStop(1,`hsl(${h3+hs},${48*sm}%,${3*lm}%)`);
+    ctx.fillStyle=bg;ctx.fillRect(0,0,S,S);
+    for(const p of this.particles){
+      const angle=this._flow(p.x,p.y,t);
+      p.vx=p.vx*.9+Math.cos(angle)*p.speed*.3;p.vy=p.vy*.9+Math.sin(angle)*p.speed*.3;
+      p.x=(p.x+p.vx+S)%S;p.y=(p.y+p.vy+S)%S;p.life+=.004;
+      const alpha=(.3+.3*Math.sin(p.life*Math.PI*2+norm*Math.PI))*sp;
+      const hue=h1+hs+p.hOff+norm*25,lum=48+28*Math.sin(p.ph+p.life*4+norm*Math.PI*2);
+      ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${hue},82%,${lum}%,${alpha})`;ctx.fill();
+    }
+    const spin=norm*Math.PI*.35+this.t*.003,pulse=1+.05*Math.sin(norm*Math.PI*2);
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(spin);ctx.scale(pulse,pulse);
+    const rg=ctx.createRadialGradient(0,0,20,0,0,30);
+    rg.addColorStop(0,`hsla(${h1+hs},90%,70%,0)`);
+    rg.addColorStop(.5,`hsla(${h1+hs},90%,70%,${.45*sp})`);
+    rg.addColorStop(1,`hsla(${h1+hs},90%,70%,0)`);
+    ctx.beginPath();ctx.arc(0,0,25,0,Math.PI*2);ctx.strokeStyle=rg;ctx.lineWidth=1;ctx.stroke();
+    for(const arm of this.sigil){
+      const a0=arm.base+spin*arm.twist;
+      const x1=Math.cos(a0)*arm.r1,y1=Math.sin(a0)*arm.r1;
+      const a1=a0+Math.PI/this.sigilArms;
+      const x2=Math.cos(a1)*arm.r2,y2=Math.sin(a1)*arm.r2;
+      ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(x1,y1,x2,y2);
+      ctx.strokeStyle=`hsla(${h1+hs+norm*35},78%,62%,${.65*sp})`;ctx.lineWidth=.7;ctx.stroke();
+    }
+    if(this.state==='locked'||this.state==='denied'){
+      const la=.22+.12*Math.sin(this.t*.08);
+      ctx.beginPath();ctx.arc(0,-5,4.5,Math.PI,0);
+      ctx.strokeStyle=`rgba(255,255,255,${la})`;ctx.lineWidth=1.3;ctx.stroke();
+      ctx.fillStyle=`rgba(255,255,255,${la*.55})`;ctx.fillRect(-4.5,-3.5,9,8);
+    }else if(this.state==='unlocked'){
+      const gg=ctx.createRadialGradient(0,0,0,0,0,13);
+      gg.addColorStop(0,`hsla(120,90%,65%,${.35*sp})`);gg.addColorStop(1,'transparent');
+      ctx.fillStyle=gg;ctx.fillRect(-13,-13,26,26);
+      ctx.beginPath();ctx.moveTo(-6,0);ctx.lineTo(-1,5);ctx.lineTo(7,-5);
+      ctx.strokeStyle=`rgba(80,255,140,${.9*sp})`;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
+    }else if(this.state==='unlocking'){
+      ctx.beginPath();ctx.arc(0,0,9,this.t*.12,this.t*.12+Math.PI*1.4);
+      ctx.strokeStyle=`rgba(255,190,60,${.7+.2*Math.sin(this.t*.18)})`;ctx.lineWidth=2;ctx.stroke();
+    }
+    const cg=ctx.createRadialGradient(0,0,0,0,0,5.5);
+    cg.addColorStop(0,`hsla(${h2+hs},100%,92%,.8)`);cg.addColorStop(1,`hsla(${h2+hs},90%,60%,0)`);
+    ctx.beginPath();ctx.arc(0,0,5.5,0,Math.PI*2);ctx.fillStyle=cg;ctx.fill();
+    ctx.restore();this.t++;
+  }
+  start(){const t=()=>{this._raf=requestAnimationFrame(t);this.render();};this._raf=requestAnimationFrame(t);}
+  stop(){if(this._raf)cancelAnimationFrame(this._raf);}
+}
+
+// ── SHADOW DOM STYLES ──
+const STYLES=`
+:host{display:block}*{box-sizing:border-box;margin:0;padding:0}
+.wrap{background:#07080a;border:1px solid rgba(255,255,255,.07);border-radius:8px;overflow:hidden;font-family:'IBM Plex Mono',monospace}
+.locked{display:flex;flex-direction:column;align-items:center;gap:16px;padding:28px 20px;min-height:160px;position:relative;z-index:2;transition:opacity .4s}
+.locked.fading{opacity:0}
+.ring{position:relative;flex-shrink:0;filter:drop-shadow(0 0 16px hsla(var(--h1),65%,55%,.45))}
+.ring::before{content:'';position:absolute;inset:-2px;border-radius:50%;z-index:-1;background:conic-gradient(from 0deg,hsl(var(--h1),65%,50%),hsl(var(--h2),65%,50%),hsl(var(--h3),65%,50%),hsl(var(--h1),65%,50%));animation:rspin 6s linear infinite}
+@keyframes rspin{to{transform:rotate(360deg)}}
+.ring::after{content:'';position:absolute;inset:-1px;border-radius:50%;background:#07080a;z-index:-1}
+canvas{display:block;border-radius:50%}
+.info{text-align:center}
+.lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(220,228,240,.5);margin-bottom:5px}
+.gid{font-size:8px;color:rgba(220,228,240,.2);letter-spacing:.06em}
+.chip{font-size:8px;letter-spacing:.14em;text-transform:uppercase;padding:2px 9px;border-radius:99px;display:inline-block;margin-top:5px}
+.locked-chip{background:rgba(255,100,80,.1);border:1px solid rgba(255,100,80,.22);color:#ff6450}
+.wait-chip{background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.22);color:#ffb400}
+.ok-chip{background:rgba(0,220,120,.1);border:1px solid rgba(0,220,120,.22);color:#00dc78}
+.denied-chip{background:rgba(255,50,80,.15);border:1px solid rgba(255,50,80,.3);color:#ff3250}
+.controls{display:flex;flex-direction:column;gap:6px;width:100%;max-width:240px}
+button{font-family:inherit;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border:none;border-radius:3px;padding:8px 14px;transition:all .15s;width:100%}
+.btn-main{background:linear-gradient(135deg,hsl(var(--h1),60%,40%),hsl(var(--h2),60%,36%));color:#fff}
+.btn-main:hover{filter:brightness(1.2)}
+.btn-sec{background:transparent;color:rgba(220,228,240,.45);border:1px solid rgba(255,255,255,.07)}
+.btn-sec:hover{border-color:hsl(var(--h1),50%,50%);color:rgba(220,228,240,.9)}
+.panel{display:none;flex-direction:column;gap:8px;background:rgba(0,0,0,.4);border-top:1px solid rgba(255,255,255,.05);padding:14px;position:relative;z-index:2}
+.panel.vis{display:flex}
+.ptitle{font-size:8px;letter-spacing:.2em;text-transform:uppercase;color:rgba(220,228,240,.25);margin-bottom:3px}
+textarea.ti{width:100%;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.07);color:hsl(var(--h2),65%,68%);font-family:inherit;font-size:8px;padding:9px;border-radius:3px;resize:vertical;min-height:64px;outline:none;transition:border-color .15s;line-height:1.6}
+textarea.ti:focus{border-color:hsl(var(--h1),50%,42%)}
+textarea.ti::placeholder{color:rgba(220,228,240,.13)}
+.pact{display:flex;gap:6px;flex-wrap:wrap}
+.pact button{width:auto}
+.dz{border:1px dashed rgba(255,255,255,.08);border-radius:3px;padding:9px;text-align:center;font-size:8px;color:rgba(220,228,240,.18);cursor:pointer;transition:all .2s;letter-spacing:.1em}
+.dz.over{border-color:hsl(var(--h1),55%,48%);color:hsl(var(--h1),65%,62%)}
+.dz input{display:none}
+.err{font-size:8px;color:#ff6450;min-height:13px;letter-spacing:.04em}
+iframe.cf{display:none;width:100%;border:none;background:#fff}
+iframe.cf.vis{display:block}
+.bar{display:none;align-items:center;gap:9px;padding:7px 12px;background:rgba(0,0,0,.5);border-bottom:1px solid rgba(255,255,255,.05);position:relative;z-index:3}
+.bar.vis{display:flex}
+.bar canvas{border-radius:50%;flex-shrink:0}
+.bar .bl{font-size:8px;color:rgba(0,210,110,.65);letter-spacing:.1em;text-transform:uppercase;flex:1}
+.bar button{font-size:7px;padding:2px 7px;width:auto;background:transparent;color:rgba(220,228,240,.2);border:1px solid rgba(255,255,255,.05);border-radius:2px}
+.bar button:hover{color:rgba(220,228,240,.6)}
+.scan{position:absolute;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.03) 3px,rgba(0,0,0,.03) 4px)}
+`;
+
+// ── CUSTOM ELEMENT ──
+class SovereignGateElement extends HTMLElement{
+  static get observedAttributes(){return['label','gate-id','envelope','size','content-height'];}
+  constructor(){super();this._shadow=this.attachShadow({mode:'open'});this._renderer=null;this._miniRend=null;}
+  connectedCallback(){this._render();this.addEventListener('sovereign:present',e=>{if(e.detail?.tokenJSON)this._tryToken(e.detail.tokenJSON);});}
+  disconnectedCallback(){if(this._renderer)this._renderer.stop();if(this._miniRend)this._miniRend.stop();}
+
+  async _render(){
+    const label=this.getAttribute('label')||'Protected Content';
+    const gateId=this.getAttribute('gate-id')||'unknown';
+    const size=parseInt(this.getAttribute('size')||'72');
+    const contentH=this.getAttribute('content-height')||'360px';
+    const seed=await hashSeed(gateId);
+    const palette=derivePalette(seed);
+    const[h1,h2,h3]=palette;
+    this._seed=seed;this._palette=palette;this._gateId=gateId;this._label=label;
+
+    this._shadow.innerHTML=`<style>${STYLES}:host{--h1:${h1};--h2:${h2};--h3:${h3}}.cf{height:${contentH}}</style>
+<div class="wrap">
+  <div class="scan"></div>
+  <div class="bar" id="bar">
+    <canvas id="bc" width="22" height="22"></canvas>
+    <span class="bl">✓ UNLOCKED — ${label}</span>
+    <button onclick="this.getRootNode().host._relock()">Re-lock</button>
+  </div>
+  <div class="locked" id="lu">
+    <div class="ring"><canvas id="tc" width="${size}" height="${size}" style="width:${size}px;height:${size}px"></canvas></div>
+    <div class="info">
+      <div class="lbl">${label}</div>
+      <div class="gid">gate·${gateId.slice(0,14)}</div>
+      <div class="chip locked-chip" id="ch">● LOCKED</div>
+    </div>
+    <div class="controls">
+      <button class="btn-main" onclick="this.getRootNode().host._showPanel()">⬡ Present Token</button>
+      <button class="btn-sec" onclick="this.getRootNode().host._showPanel()">Paste Token JSON</button>
+    </div>
+  </div>
+  <div class="panel" id="panel">
+    <div class="ptitle">Present Delegated Token</div>
+    <textarea class="ti" id="ti" placeholder="Paste token JSON here..."></textarea>
+    <div class="dz" id="dz"><input type="file" id="fi" accept=".token,.json">Drop .token file or click</div>
+    <div class="pact">
+      <button class="btn-main" onclick="this.getRootNode().host._submit()">Verify + Unlock</button>
+      <button class="btn-sec" onclick="this.getRootNode().host._hidePanel()">Cancel</button>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+  <iframe class="cf" id="cf" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+</div>`;
+
+    const tc=this._shadow.getElementById('tc');
+    this._renderer=new TokenRenderer(tc,seed,palette,'locked');
+    this._renderer.start();
+
+    const dz=this._shadow.getElementById('dz');
+    const fi=this._shadow.getElementById('fi');
+    dz.onclick=()=>fi.click();
+    fi.onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>{this._shadow.getElementById('ti').value=t;dz.textContent='✓ '+f.name;});};
+    dz.ondragover=e=>{e.preventDefault();dz.classList.add('over');};
+    dz.ondragleave=()=>dz.classList.remove('over');
+    dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f)f.text().then(t=>{this._shadow.getElementById('ti').value=t;});};
+
+    this.dispatchEvent(new CustomEvent('sovereign:locked',{bubbles:true,detail:{gateId,label}}));
+  }
+
+  _showPanel(){this._shadow.getElementById('panel').classList.add('vis');this._shadow.getElementById('ti').focus();}
+  _hidePanel(){this._shadow.getElementById('panel').classList.remove('vis');this._shadow.getElementById('err').textContent='';}
+
+  async _submit(){
+    const raw=this._shadow.getElementById('ti').value.trim();
+    if(!raw){this._setErr('Paste a token JSON first');return;}
+    let tj;try{tj=JSON.parse(raw);}catch(e){this._setErr('Invalid JSON');return;}
+    await this._tryToken(tj);
+  }
+
+  async _tryToken(tj){
+    const env=this.getAttribute('envelope');
+    if(!env){this._setErr('No envelope on this gate');return;}
+    this._setChip('wait','⟳ VERIFYING');
+    this._renderer.setState('unlocking');
+    this._setErr('');
+    this.dispatchEvent(new CustomEvent('sovereign:unlocking',{bubbles:true}));
+    try{
+      const html=await openEnvelope(env,tj);
+      this._renderer.setState('unlocked');
+      const lu=this._shadow.getElementById('lu');
+      lu.classList.add('fading');this._hidePanel();
+      setTimeout(()=>{
+        lu.style.display='none';
+        const bar=this._shadow.getElementById('bar');
+        bar.classList.add('vis');
+        const bc=this._shadow.getElementById('bc');
+        this._miniRend=new TokenRenderer(bc,this._seed,this._palette,'unlocked');
+        this._miniRend.start();
+        const cf=this._shadow.getElementById('cf');
+        cf.classList.add('vis');
+        const doc=cf.contentDocument||cf.contentWindow.document;
+        doc.open();doc.write(html);doc.close();
+        setTimeout(()=>{try{const h=doc.body?.scrollHeight;if(h&&h>60)cf.style.height=h+40+'px';}catch(e){}},300);
+      },400);
+      this.dispatchEvent(new CustomEvent('sovereign:unlocked',{bubbles:true,detail:{tokenId:tj.id,role:tj.role}}));
+    }catch(e){
+      this._renderer.setState('denied');
+      this._setChip('denied','✗ DENIED');
+      this._setErr(e.message);
+      setTimeout(()=>{this._renderer.setState('locked');this._setChip('locked','● LOCKED');},2500);
+      this.dispatchEvent(new CustomEvent('sovereign:denied',{bubbles:true,detail:{error:e.message}}));
+    }
+  }
+
+  _relock(){
+    this._renderer.setState('locked');
+    if(this._miniRend){this._miniRend.stop();this._miniRend=null;}
+    const cf=this._shadow.getElementById('cf');
+    cf.classList.remove('vis');try{(cf.contentDocument||cf.contentWindow.document).open();}catch(e){}
+    this._shadow.getElementById('bar').classList.remove('vis');
+    const lu=this._shadow.getElementById('lu');
+    lu.style.display='';lu.classList.remove('fading');
+    this._setChip('locked','● LOCKED');
+    this._shadow.getElementById('ti').value='';
+    this.dispatchEvent(new CustomEvent('sovereign:locked',{bubbles:true}));
+  }
+
+  _setChip(type,text){const c=this._shadow.getElementById('ch');if(!c)return;c.className='chip '+type+'-chip';c.textContent=text;}
+  _setErr(m){const e=this._shadow.getElementById('err');if(e)e.textContent=m;}
+}
+
+if(!customElements.get('sovereign-gate'))customElements.define('sovereign-gate',SovereignGateElement);
+
+// ── PUBLIC API ──
+const SovereignGate={
+  async seal({content,identity,label='Protected Content',gateId,claims={}}){
+    gateId=gateId||b64e(rnd(12));
+    const token=await buildToken({id:identity,role:'publisher',claims,gateId});
+    const envelope=await sealContent(content,gateId,identity);
+    return{gateId,envelope,publisherToken:token,label};
+  },
+  async delegate(publisherToken,{purpose='delegate',ttl=null,claims={}}={}){
+    if(!publisherToken._privateKey)throw new Error('Publisher token must include private key');
+    const pk=await impPriv(publisherToken._privateKey);
+    const pubK=await impPub(publisherToken.publicKey);
+    const kp={privateKey:pk,publicKey:pubK};
+    const token=await buildToken({
+      id:`${publisherToken.id}::${purpose}::${Date.now()}`,
+      role:'delegate',claims:{...claims,delegatedFrom:publisherToken.id},
+      gateId:publisherToken.gateId,
+      delegation:{parentId:publisherToken.id,purpose,exp:ttl?Date.now()+ttl:null},
+      keyPair:kp,
+    });
+    const{_privateKey,...shareToken}=token;
+    return{tokenJSON:shareToken,shareText:JSON.stringify(shareToken,null,2)};
+  },
+  verify:verifyToken,
+  derivePalette,hashSeed,
+};
+
+root.SovereignGate=SovereignGate;
+})(window);
+
+// ══════════════════════════════════════════════════════════════════
+//  DEMO APP
+// ══════════════════════════════════════════════════════════════════
+
+const TE2=new TextEncoder();
+let _publisherToken=null;
+let _lastSeal=null;
+let _delegateTokens=[];
+let _demoGates=[];
+
+// ── Tab switching ──
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    const group=t.closest('.card');
+    group.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    group.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    group.querySelector('#tab-'+t.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Logging ──
+function tlog(id,...lines){
+  const el=document.getElementById(id);
+  for(const[cls,txt]of lines)el.innerHTML+=`<span class="${cls}">${txt.replace(/</g,'&lt;')}</span>\n`;
+  el.scrollTop=el.scrollHeight;
+}
+function tset(id,...lines){document.getElementById(id).innerHTML='';tlog(id,...lines);}
+
+// ── Demo content ──
+function loadDemoArticle(){
+  document.getElementById('auth-label').value='Sovereign Article';
+  document.getElementById('auth-content').value=`<!DOCTYPE html><html><head>
+<style>body{font-family:Georgia,serif;line-height:1.9;padding:24px 32px;color:#1a1a2e;max-width:600px;margin:0 auto}
+h2{font-size:1.4rem;margin-bottom:16px;color:#0d0d1e;letter-spacing:-.01em}
+p{margin-bottom:16px;color:#2a2a4a}
+.tag{display:inline-block;background:#f0f0ff;border-radius:3px;padding:2px 8px;font-size:11px;
+color:#5050aa;margin-bottom:16px;letter-spacing:.06em;text-transform:uppercase}
+blockquote{border-left:3px solid #5050aa;padding-left:16px;color:#4a4a7a;font-style:italic;margin:20px 0}
+</style></head><body>
+<div class="tag">Sovereign Content · Encrypted</div>
+<h2>On Digital Sovereignty and the Right to Private Thought</h2>
+<p>The history of cryptography is the history of the individual asserting their right to inner life against institutions that would make everything legible.</p>
+<p>A sovereign token is not merely a credential — it is a declaration. It says: <em>this content exists, its provenance is verifiable, but its meaning is not yours without invitation.</em></p>
+<blockquote>"Privacy is not secrecy. A private matter is something one doesn't want the whole world to know, but a secret is something one doesn't want anybody to know."</blockquote>
+<p>The gate you just opened holds a promise: the host that served this content cannot read it. The infrastructure is blind. Only the token holder — you — has the key.</p>
+</body></html>`;
+}
+
+function loadDemoGame(){
+  document.getElementById('auth-label').value='Encrypted Mini-Game';
+  document.getElementById('auth-content').value=`<!DOCTYPE html><html><head>
+<style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d1e;color:#e0e0ff;font-family:monospace;display:flex;flex-direction:column;
+align-items:center;justify-content:center;min-height:300px;gap:16px;padding:20px}
+h3{font-size:1rem;letter-spacing:.1em;text-transform:uppercase;color:#7c5cfc}
+canvas{border:1px solid rgba(124,92,252,.3);border-radius:4px;background:#06060e}
+.score{font-size:.85rem;color:rgba(220,228,240,.5);letter-spacing:.1em}
+button{background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.3);color:#c0b0ff;
+padding:8px 20px;font-family:monospace;font-size:.8rem;letter-spacing:.1em;cursor:pointer;border-radius:3px}
+button:hover{background:rgba(124,92,252,.3)}
+</style></head><body>
+<h3>⬡ Sovereign Breaker</h3>
+<canvas id="c" width="300" height="200"></canvas>
+<div class="score" id="s">Click to start — WASD or arrows to move</div>
+<button onclick="init()">New Game</button>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=300,H=200;
+let px=140,py=170,pw=50,ph=8,bx=150,by=100,bdx=2,bdy=-2,score=0,running=false,bricks=[];
+const BC=5,BR=3,BW=50,BH=14,PAD=4;
+const COLORS=['#7c5cfc','#5c7cfc','#fc5c7c','#5cfcb0','#fcb05c'];
+function init(){
+  px=125;py=170;bx=150+Math.random()*20-10;by=80+Math.random()*20;bdx=(Math.random()>.5?1:-1)*2.2;bdy=-2.2;score=0;
+  bricks=[];for(let r=0;r<BR;r++)for(let c=0;c<BC;c++)bricks.push({x:PAD+c*(BW+PAD),y:20+r*(BH+PAD),alive:true,col:COLORS[(r*BC+c)%COLORS.length]});
+  running=true;draw();update(document.getElementById('s'));
+}
+function draw(){
+  ctx.fillStyle='#06060e';ctx.fillRect(0,0,W,H);
+  for(const b of bricks)if(b.alive){ctx.fillStyle=b.col+'33';ctx.fillRect(b.x,b.y,BW,BH);ctx.strokeStyle=b.col;ctx.lineWidth=1;ctx.strokeRect(b.x+.5,b.y+.5,BW-1,BH-1);}
+  const pg=ctx.createLinearGradient(px,py,px+pw,py+ph);pg.addColorStop(0,'#7c5cfc');pg.addColorStop(1,'#5c7cfc');
+  ctx.fillStyle=pg;ctx.fillRect(px,py,pw,ph);
+  ctx.beginPath();ctx.arc(bx,by,6,0,Math.PI*2);ctx.fillStyle='#e0e0ff';ctx.fill();
+}
+function update(sel){
+  if(!running)return;
+  bx+=bdx;by+=bdy;
+  if(bx<6||bx>W-6)bdx*=-1;
+  if(by<6)bdy*=-1;
+  if(by>H-6&&bx>=px&&bx<=px+pw)bdy*=-1;
+  if(by>H+10){running=false;sel.textContent='Game over! Score: '+score+' — click New Game';return;}
+  for(const b of bricks)if(b.alive&&bx>b.x&&bx<b.x+BW&&by>b.y&&by<b.y+BH){b.alive=false;bdy*=-1;score+=10;sel.textContent='Score: '+score;}
+  if(bricks.every(b=>!b.alive)){running=false;sel.textContent='You win! Score: '+score+'!';}
+  draw();requestAnimationFrame(()=>update(sel));
+}
+document.addEventListener('keydown',e=>{const s=18;if(['ArrowLeft','a','A'].includes(e.key))px=Math.max(0,px-s);if(['ArrowRight','d','D'].includes(e.key))px=Math.min(W-pw,px+s);e.preventDefault&&['Arrow','a','d','A','D'].some(k=>e.key.startsWith(k))&&e.preventDefault();});
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();px=Math.max(0,Math.min(W-pw,e.clientX-r.left-pw/2));});
+cv.addEventListener('click',()=>{if(!running)init();});
+init();
+<\/script>
+</body></html>`;
+}
+
+// ── Seal ──
+async function sealGate(){
+  const content=document.getElementById('auth-content').value.trim();
+  const identity=document.getElementById('auth-id').value.trim();
+  const label=document.getElementById('auth-label').value.trim()||'Protected Content';
+  let gateId=document.getElementById('auth-gateid').value.trim()||null;
+  let claims={};
+  try{claims=JSON.parse(document.getElementById('auth-claims').value);}catch{}
+
+  if(!content||!identity){tset('seal-log',['r','✗ Content and identity are required']);return;}
+
+  tset('seal-log',['d','▶ Sealing content...']);
+  const btn=document.getElementById('btn-seal');btn.disabled=true;btn.textContent='Sealing...';
+
+  try{
+    const t0=performance.now();
+    const result=await SovereignGate.seal({content,identity,label,gateId,claims});
+    const t1=performance.now();
+    _publisherToken=result.publisherToken;
+    _lastSeal=result;
+
+    tlog('seal-log',
+      ['g',`✓ Gate sealed in ${(t1-t0).toFixed(0)}ms`],
+      ['g',`✓ Gate ID: ${result.gateId}`],
+      ['d',`  envelope: ${result.envelope.length} chars`],
+      ['d',`  identity: ${identity}`],
+      ['g','✓ Publisher token issued (ECDSA P-256, signed)'],
+      ['g','✓ Ready to delegate access']
+    );
+
+    // Update output tab
+    document.getElementById('out-env-text').textContent=result.envelope.slice(0,80)+'...';
+    document.getElementById('out-envelope').dataset.val=result.envelope;
+
+    const gateHTML=`<sovereign-gate\n  label="${label}"\n  gate-id="${result.gateId}"\n  envelope="${result.envelope.slice(0,40)}..."\n  size="72"\n  content-height="360px"\n></sovereign-gate>`;
+    document.getElementById('out-html').textContent=gateHTML;
+
+    const pubStr=JSON.stringify(result.publisherToken,null,2);
+    document.getElementById('out-pub-text').textContent=pubStr.slice(0,200)+'...';
+    document.getElementById('out-publisher-token').dataset.val=pubStr;
+
+    document.getElementById('btn-add-demo').disabled=false;
+    document.getElementById('btn-delegate').disabled=false;
+    tset('del-log',['g','✓ Ready to issue delegate tokens']);
+
+  }catch(e){tlog('seal-log',['r','✗ '+e.message]);}
+  btn.disabled=false;btn.textContent='⬡ Seal Gate';
+}
+
+// ── Add to live demo ──
+async function addGateToDemo(){
+  if(!_lastSeal)return;
+  const slot=createGateSlot(_lastSeal.label,_lastSeal.gateId,_lastSeal.envelope);
+  document.getElementById('gate-grid').appendChild(slot);
+  document.getElementById('gate-hint').style.display='none';
+  _demoGates.push({gateId:_lastSeal.gateId,envelope:_lastSeal.envelope,publisherToken:_publisherToken});
+  // scroll to gates
+  slot.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function createGateSlot(label,gateId,envelope){
+  const div=document.createElement('div');
+  div.className='gate-slot';
+  div.innerHTML=`
+    <div class="gate-slot-header">
+      <span class="slot-title">${label}</span>
+      <span style="font-size:8px;color:rgba(220,228,240,.2)">${gateId.slice(0,12)}...</span>
+    </div>
+  `;
+  const gate=document.createElement('sovereign-gate');
+  gate.setAttribute('label',label);
+  gate.setAttribute('gate-id',gateId);
+  gate.setAttribute('envelope',envelope);
+  gate.setAttribute('size','72');
+  gate.setAttribute('content-height','360px');
+  div.appendChild(gate);
+  return div;
+}
+
+// ── Delegate ──
+async function issueDelegate(){
+  if(!_publisherToken)return;
+  const purpose=document.getElementById('del-purpose').value.trim()||'delegate';
+  const ttlRaw=document.getElementById('del-ttl').value;
+  const ttl=ttlRaw?parseInt(ttlRaw):null;
+
+  tset('del-log',['d',`▶ Issuing delegate token (purpose: ${purpose})...`]);
+
+  try{
+    const t0=performance.now();
+    const result=await SovereignGate.delegate(_publisherToken,{purpose,ttl});
+    const t1=performance.now();
+
+    tlog('del-log',
+      ['g',`✓ Delegate token issued in ${(t1-t0).toFixed(0)}ms`],
+      ['g',`  role: delegate · purpose: ${purpose}`],
+      ttl?['a',`  expires: ${new Date(Date.now()+ttl).toISOString()}`]:['d','  no expiry'],
+      ['g','✓ Private key NOT included — safe to share']
+    );
+
+    _delegateTokens.push({...result,purpose,label:purpose+' #'+_delegateTokens.length});
+    renderTokenList();
+  }catch(e){tlog('del-log',['r','✗ '+e.message]);}
+}
+
+function renderTokenList(){
+  const list=document.getElementById('token-list');
+  list.innerHTML='';
+  for(const[i,dt]of _delegateTokens.entries()){
+    const card=document.createElement('div');
+    card.className='token-card';
+
+    const seed=_publisherToken?parseInt(_publisherToken.gateId.slice(0,8),36)||12345:i*997;
+    const palette=[220+i*47,280+i*47,(340+i*47)%360];
+
+    card.innerHTML=`
+      <div class="token-card-head">
+        <canvas class="token-mini-canvas" width="32" height="32" id="tmini-${i}"></canvas>
+        <div class="token-info">
+          <div class="tid">${dt.label} — ${dt.purpose}</div>
+          <div class="tmeta">${dt.tokenJSON.id.slice(0,40)}...</div>
+        </div>
+      </div>
+      <div class="token-actions">
+        <button class="btn-ghost" onclick="copyDelegateToken(${i})">Copy JSON</button>
+        <button class="btn-go" onclick="pasteIntoGates(${i})">Present to All Gates</button>
+        <button class="btn-amber" onclick="downloadToken(${i})">Download .token</button>
+      </div>
+    `;
+    list.appendChild(card);
+
+    // Mini token animation
+    setTimeout(async()=>{
+      const c=document.getElementById('tmini-'+i);
+      if(!c)return;
+      const s=await SovereignGate.hashSeed(dt.tokenJSON.gateId||'x');
+      const p=SovereignGate.derivePalette(s);
+      const r=new TokenRenderer(c,s,p,'locked');
+      r.start();
+    },50);
+  }
+}
+
+function copyDelegateToken(i){
+  navigator.clipboard.writeText(_delegateTokens[i].shareText);
+  alert('Token JSON copied to clipboard!');
+}
+
+function downloadToken(i){
+  const blob=new Blob([_delegateTokens[i].shareText],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`delegate-${_delegateTokens[i].purpose}.token`;
+  a.click();
+}
+
+function pasteIntoGates(i){
+  const tokenJSON=_delegateTokens[i].tokenJSON;
+  // Dispatch to all sovereign-gate elements on page
+  document.querySelectorAll('sovereign-gate').forEach(gate=>{
+    gate.dispatchEvent(new CustomEvent('sovereign:present',{detail:{tokenJSON},bubbles:false}));
+  });
+}
+
+// ── Extension simulation ──
+async function simulateExtension(){
+  if(_delegateTokens.length===0){
+    alert('Issue at least one delegate token first (Section 2)');return;
+  }
+  // Simulate extension finding stored token and auto-presenting
+  const tokenJSON=_delegateTokens[_delegateTokens.length-1].tokenJSON;
+  const gates=document.querySelectorAll('sovereign-gate');
+  if(gates.length===0){alert('Add at least one gate to the Live Demo first');return;}
+  gates.forEach(gate=>{
+    setTimeout(()=>{
+      gate.dispatchEvent(new CustomEvent('sovereign:present',{detail:{tokenJSON},bubbles:false}));
+    },200+Math.random()*400);
+  });
+}
+
+// ── Pre-load example gates ──
+async function loadExampleGates(){
+  // Example 1: Article
+  const articleHTML=`<!DOCTYPE html><html><head>
+<style>body{font-family:Georgia,serif;line-height:1.9;padding:24px 32px;color:#1a1a2e;max-width:560px;margin:0 auto}
+h2{font-size:1.3rem;margin-bottom:14px;color:#0d0d1e}p{margin-bottom:14px;color:#2a2a4a}
+.tag{display:inline-block;background:#f0f0ff;border-radius:3px;padding:2px 8px;font-size:10px;
+color:#5050aa;margin-bottom:14px;letter-spacing:.06em;text-transform:uppercase}
+</style></head><body>
+<div class="tag">Example Gate · Sovereign Article</div>
+<h2>The Philosophy of the Private Key</h2>
+<p>You unlocked this content by presenting a delegated sovereign token. The host that served this page cannot read what you are now reading. The infrastructure between us is blind to meaning.</p>
+<p>This is what sovereignty looks like in practice: not privacy as a feature granted by a platform, but privacy as a property of the mathematics itself.</p>
+<p><strong>The 4D token you presented</strong> carries your identity across time — it is animated, alive, unique to you. Its visual character is deterministically derived from your identity, recognizable by sight, verifiable by cryptography.</p>
+</body></html>`;
+
+  // Example 2: Mini-game (abbreviated)
+  const gameHTML=`<!DOCTYPE html><html><head>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{background:#0d0d1e;color:#e0e0ff;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px;gap:12px;padding:16px}
+h3{font-size:.9rem;letter-spacing:.1em;text-transform:uppercase;color:#7c5cfc}
+canvas{border:1px solid rgba(124,92,252,.3);background:#06060e;border-radius:3px}
+.sc{font-size:.8rem;color:rgba(220,228,240,.45);letter-spacing:.08em}
+button{background:rgba(124,92,252,.12);border:1px solid rgba(124,92,252,.25);color:#c0b0ff;padding:6px 16px;font-family:monospace;font-size:.78rem;cursor:pointer;border-radius:3px}
+button:hover{background:rgba(124,92,252,.25)}</style></head><body>
+<h3>⬡ Sovereign Breaker</h3>
+<canvas id="c" width="280" height="180"></canvas>
+<div class="sc" id="s">Move mouse over canvas to play</div>
+<button onclick="init()">New Game</button>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=280,H=180;
+let px=115,py=160,pw=46,bx=140,by=90,bdx=2.1,bdy=-2.1,score=0,alive=true,bricks=[];
+const BC=5,BR=3,BW=46,BH=12,PAD=3;
+const COLS=['#7c5cfc','#5c7cfc','#fc5c7c','#5cfcb0','#fcb05c'];
+function init(){px=115;py=160;bx=140+Math.random()*20-10;by=70;bdx=(Math.random()>.5?1:-1)*2.2;bdy=-2.2;score=0;alive=true;
+bricks=[];for(let r=0;r<BR;r++)for(let c=0;c<BC;c++)bricks.push({x:PAD+c*(BW+PAD),y:16+r*(BH+PAD),a:true,col:COLS[(r*BC+c)%5]});go();}
+function draw(){ctx.fillStyle='#06060e';ctx.fillRect(0,0,W,H);
+for(const b of bricks)if(b.a){ctx.fillStyle=b.col+'22';ctx.fillRect(b.x,b.y,BW,BH);ctx.strokeStyle=b.col;ctx.lineWidth=1;ctx.strokeRect(b.x+.5,b.y+.5,BW-1,BH-1);}
+const g=ctx.createLinearGradient(px,py,px+pw,py);g.addColorStop(0,'#7c5cfc');g.addColorStop(1,'#3ef0c0');ctx.fillStyle=g;ctx.fillRect(px,py,pw,6);
+ctx.beginPath();ctx.arc(bx,by,5,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();}
+function go(){if(!alive)return;bx+=bdx;by+=bdy;if(bx<5||bx>W-5)bdx*=-1;if(by<5)bdy*=-1;
+if(by>H-5&&bx>=px&&bx<=px+pw){bdy*=-1;bdx+=(bx-(px+pw/2))/20;}
+if(by>H+10){alive=false;document.getElementById('s').textContent='Game over! Score: '+score;return;}
+for(const b of bricks)if(b.a&&bx>b.x&&bx<b.x+BW&&by>b.y&&by<b.y+BH){b.a=false;bdy*=-1;score+=10;document.getElementById('s').textContent='Score: '+score;}
+if(bricks.every(b=>!b.a)){alive=false;document.getElementById('s').textContent='You win! Score: '+score+'!';}
+draw();requestAnimationFrame(go);}
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();px=Math.max(0,Math.min(W-pw,e.clientX-r.left-pw/2));});
+cv.addEventListener('click',()=>{if(!alive)init();});
+init();
+<\/script></body></html>`;
+
+  // Seal both
+  const g1=await SovereignGate.seal({content:articleHTML,identity:'demo@sovereign.local',label:'Sovereign Article',gateId:'demo-article-gate-001'});
+  const g2=await SovereignGate.seal({content:gameHTML,  identity:'demo@sovereign.local',label:'Encrypted Game',  gateId:'demo-game-gate-001'});
+
+  // Store as demo publisher token
+  window._demoPublisherToken=g1.publisherToken;
+
+  // Add to grid
+  const grid=document.getElementById('gate-grid');
+  grid.appendChild(createGateSlot(g1.label,g1.gateId,g1.envelope));
+  grid.appendChild(createGateSlot(g2.label,g2.gateId,g2.envelope));
+
+  // Keep for extension simulation
+  _demoGates.push({gateId:g1.gateId,envelope:g1.envelope,publisherToken:g1.publisherToken});
+  _demoGates.push({gateId:g2.gateId,envelope:g2.envelope,publisherToken:g2.publisherToken});
+
+  document.getElementById('gate-hint').innerHTML=
+    '👆 Two example gates loaded. Issue a delegate token in Section 2, then click <strong>Present to All Gates</strong> — or use <strong>Simulate Extension Auto-Decrypt</strong> in Section 4.';
+}
+
+// ── Copy helper ──
+function copyText(s){if(s)navigator.clipboard.writeText(s).catch(()=>{});}
+
+// ── Init ──
+loadExampleGates();
+</script>
+</body>
+</html>

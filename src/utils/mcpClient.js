@@ -5,10 +5,9 @@ class MCPClient {
         this.baseURL = '/mcp'
     }
 
-    async request(endpoint, method = 'GET', body = null) {
-        const { vpState } = useVP()
+    async request(endpoint, method = 'GET', body = null, token = null) {
         const headers = { 'Content-Type': 'application/json' }
-        if (vpState.token) headers['Authorization'] = `Bearer ${vpState.token}`
+        if (token) headers['Authorization'] = `Bearer ${token}`
 
         const res = await fetch(`${this.baseURL}${endpoint}`, {
             method,
@@ -28,51 +27,51 @@ class MCPClient {
     }
 
     // Zine operations
-    async getZine(zineId) {
-        return this.request(`/zines/${zineId}`)
+    async getZine(zineId, token) {
+        return this.request(`/zines/${zineId}`, 'GET', null, token)
     }
 
-    async updateZine(zineId, title, data) {
-        return this.request(`/zines/${zineId}`, 'PUT', { title, data })
+    async updateZine(zineId, title, data, token) {
+        return this.request(`/zines/${zineId}`, 'PUT', { title, data }, token)
     }
 
     // Page operations
-    async addPage(zineId) {
-        return this.request(`/zines/${zineId}/pages`, 'POST')
+    async addPage(zineId, token) {
+        return this.request(`/zines/${zineId}/pages`, 'POST', null, token)
     }
 
-    async updatePage(zineId, pageIdx, background, texture) {
-        return this.request(`/zines/${zineId}/pages/${pageIdx}`, 'PUT', { background, texture })
+    async updatePage(zineId, pageIdx, background, texture, token) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}`, 'PUT', { background, texture }, token)
     }
 
-    async deletePage(zineId, pageIdx) {
-        return this.request(`/zines/${zineId}/pages/${pageIdx}`, 'DELETE')
+    async deletePage(zineId, pageIdx, token) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}`, 'DELETE', null, token)
     }
 
-    async duplicatePage(zineId, pageIdx) {
-        return this.request(`/zines/${zineId}/pages/${pageIdx}/duplicate`, 'POST')
+    async duplicatePage(zineId, pageIdx, token) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}/duplicate`, 'POST', null, token)
     }
 
     // Element operations
-    async addElement(zineId, pageIdx, element) {
-        return this.request(`/zines/${zineId}/pages/${pageIdx}/elements`, 'POST', { element })
+    async addElement(zineId, pageIdx, element, token) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}/elements`, 'POST', { element }, token)
     }
 
-    async updateElement(zineId, pageIdx, elementId, updates) {
-        return this.request(`/zines/${zineId}/pages/${pageIdx}/elements/${elementId}`, 'PUT', updates)
+    async updateElement(zineId, pageIdx, elementId, updates, token) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}/elements/${elementId}`, 'PUT', updates, token)
     }
 
-    async deleteElement(zineId, pageIdx, elementId) {
-        return this.request(`/zines/${zineId}/pages/${pageIdx}/elements/${elementId}`, 'DELETE')
+    async deleteElement(zineId, pageIdx, elementId, token) {
+        return this.request(`/zines/${zineId}/pages/${pageIdx}/elements/${elementId}`, 'DELETE', null, token)
     }
 
     // Export operations
-    async exportHTML(project) {
-        return this.request('/export/html', 'POST', { project })
+    async exportHTML(project, token) {
+        return this.request('/export/html', 'POST', { project }, token)
     }
 
-    async exportPDF(project) {
-        return this.request('/export/pdf', 'POST', { project })
+    async exportPDF(project, token) {
+        return this.request('/export/pdf', 'POST', { project }, token)
     }
 
     // Utility methods for AI automation

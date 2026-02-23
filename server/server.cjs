@@ -231,119 +231,143 @@ app.get('/api/zines/:id', async (req, res) => {
 });
 
 // MCP Interface for programmatic zine manipulation and automation
-app.get('/mcp/zines/:id', authenticateToken, (req, res) => {
-    db.get(`SELECT * FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+app.get('/mcp/zines/:id', authenticateToken, async (req, res) => {
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         res.json({ ...zine, data: JSON.parse(zine.data) });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/mcp/zines/:id', authenticateToken, (req, res) => {
+app.put('/mcp/zines/:id', authenticateToken, async (req, res) => {
     const { title, data } = req.body;
-    db.run(`UPDATE zines SET title = ?, data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
-        [title, JSON.stringify(data), req.params.id, req.user.id],
-        function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            if (this.changes === 0) return res.status(404).json({ error: 'Zine not found' });
-            res.json({ status: 'updated' });
-        }
-    );
+    try {
+        const updated = await db('zines')
+            .where({ id: req.params.id, user_id: req.user.id })
+            .update({
+                title,
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        if (updated === 0) return res.status(404).json({ error: 'Zine not found' });
+        res.json({ status: 'updated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/mcp/zines/:id/pages', authenticateToken, (req, res) => {
-    db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+app.post('/mcp/zines/:id/pages', authenticateToken, async (req, res) => {
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         const data = JSON.parse(zine.data);
         const newPage = { id: Date.now(), elements: [], background: '#ffffff', texture: null };
         data.pages.push(newPage);
-        db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), req.params.id],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ pageId: newPage.id, pageIdx: data.pages.length - 1 });
-            }
-        );
-    });
+        await db('zines')
+            .where({ id: req.params.id })
+            .update({
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        res.json({ pageId: newPage.id, pageIdx: data.pages.length - 1 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/mcp/zines/:id/pages/:pageIdx', authenticateToken, (req, res) => {
+app.put('/mcp/zines/:id/pages/:pageIdx', authenticateToken, async (req, res) => {
     const { background, texture } = req.body;
-    db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         const data = JSON.parse(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         if (!data.pages[pageIdx]) return res.status(404).json({ error: 'Page not found' });
         if (background !== undefined) data.pages[pageIdx].background = background;
         if (texture !== undefined) data.pages[pageIdx].texture = texture;
-        db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), req.params.id],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ status: 'updated' });
-            }
-        );
-    });
+        await db('zines')
+            .where({ id: req.params.id })
+            .update({
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        res.json({ status: 'updated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.delete('/mcp/zines/:id/pages/:pageIdx', authenticateToken, (req, res) => {
-    db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+app.delete('/mcp/zines/:id/pages/:pageIdx', authenticateToken, async (req, res) => {
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         const data = JSON.parse(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         if (data.pages.length <= 1) return res.status(400).json({ error: 'Cannot delete last page' });
         if (!data.pages[pageIdx]) return res.status(404).json({ error: 'Page not found' });
         data.pages.splice(pageIdx, 1);
-        db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), req.params.id],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ status: 'deleted' });
-            }
-        );
-    });
+        await db('zines')
+            .where({ id: req.params.id })
+            .update({
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        res.json({ status: 'deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/mcp/zines/:id/pages/:pageIdx/elements', authenticateToken, (req, res) => {
+app.post('/mcp/zines/:id/pages/:pageIdx/elements', authenticateToken, async (req, res) => {
     const { element } = req.body;
-    db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         const data = JSON.parse(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         if (!data.pages[pageIdx]) return res.status(404).json({ error: 'Page not found' });
         const el = { ...element, id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9), zIndex: data.pages[pageIdx].elements.length };
         data.pages[pageIdx].elements.push(el);
-        db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), req.params.id],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ elementId: el.id });
-            }
-        );
-    });
+        await db('zines')
+            .where({ id: req.params.id })
+            .update({
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        res.json({ elementId: el.id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToken, (req, res) => {
+app.put('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToken, async (req, res) => {
     const updates = req.body;
-    db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         const data = JSON.parse(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         const el = data.pages[pageIdx]?.elements.find(e => e.id === req.params.elementId);
         if (!el) return res.status(404).json({ error: 'Element not found' });
         Object.assign(el, updates);
-        db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), req.params.id],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ status: 'updated' });
-            }
-        );
-    });
+        await db('zines')
+            .where({ id: req.params.id })
+            .update({
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        res.json({ status: 'updated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.delete('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToken, (req, res) => {
-    db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [req.params.id, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found' });
+app.delete('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToken, async (req, res) => {
+    try {
+        const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found' });
         const data = JSON.parse(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         const elements = data.pages[pageIdx]?.elements;
@@ -351,14 +375,16 @@ app.delete('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToke
         const idx = elements.findIndex(e => e.id === req.params.elementId);
         if (idx === -1) return res.status(404).json({ error: 'Element not found' });
         elements.splice(idx, 1);
-        db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), req.params.id],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ status: 'deleted' });
-            }
-        );
-    });
+        await db('zines')
+            .where({ id: req.params.id })
+            .update({
+                data: JSON.stringify(data),
+                updated_at: db.fn.now()
+            });
+        res.json({ status: 'deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Model Context Protocol (MCP) Server Implementation
@@ -2337,8 +2363,9 @@ app.post('/api/payment/initiate', authenticateToken, async (req, res) => {
 });
 
 // Serve index.html (index.html) for unknown routes (SPA)
-// Actually, let's keep it simple and just serve static.
-// app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// app.get('(.*)', (req, res) => {
+//     res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
+// });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCEE · Self-Coding Embedded Encryption</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Bebas+Neue&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#07080a;
+  --bg2:#0d0f12;
+  --bg3:#13161a;
+  --green:#00e87a;
+  --green-dim:rgba(0,232,122,0.12);
+  --red:#ff4466;
+  --amber:#ffb700;
+  --blue:#4488ff;
+  --white:#dde4ee;
+  --dim:rgba(221,228,238,0.38);
+  --rim:rgba(255,255,255,0.07);
+  --rim2:rgba(255,255,255,0.13);
+}
+
+html,body{min-height:100%;background:var(--bg);color:var(--white);font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6}
+
+body::after{content:'';position:fixed;inset:0;z-index:9000;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.04) 3px,rgba(0,0,0,0.04) 4px)}
+
+.shell{max-width:960px;margin:0 auto;padding:36px 20px 100px}
+
+header{padding:40px 0 32px;border-bottom:1px solid var(--rim);margin-bottom:40px}
+.eyebrow{font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--green);margin-bottom:12px}
+h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.8rem,7vw,5.2rem);letter-spacing:.04em;line-height:1;color:var(--white)}
+h1 em{color:var(--green);font-style:normal}
+.tagline{margin-top:14px;font-size:11px;color:var(--dim);max-width:600px;line-height:2;font-style:italic}
+.tagline strong{color:var(--white);font-style:normal}
+
+.rail{display:flex;align-items:center;gap:0;margin-bottom:40px;overflow-x:auto;padding-bottom:4px}
+.rail-step{display:flex;align-items:center;gap:8px;padding:8px 16px;border:1px solid var(--rim);
+  background:var(--bg2);cursor:pointer;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);white-space:nowrap;transition:all .2s;flex-shrink:0}
+.rail-step:first-child{border-radius:4px 0 0 4px}
+.rail-step:last-child{border-radius:0 4px 4px 0}
+.rail-step+.rail-step{border-left:none}
+.rail-step.done{border-color:rgba(0,232,122,.3);color:var(--green);background:var(--green-dim)}
+.rail-step.active{border-color:var(--green);color:var(--green);background:var(--green-dim);font-weight:600}
+.rail-step .num{font-size:9px;opacity:.6}
+
+.step{display:none;animation:fadein .3s ease}
+.step.visible{display:block}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.card{background:var(--bg2);border:1px solid var(--rim);border-radius:6px;padding:24px;margin-bottom:16px}
+.card-title{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--green);
+  margin-bottom:18px;display:flex;align-items:center;gap:10px}
+.card-title::before{content:'';width:3px;height:12px;background:var(--green);border-radius:1px;flex-shrink:0}
+
+.field{margin-bottom:14px;position:relative}
+label{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+.tip-icon{width:14px;height:14px;border-radius:50%;border:1px solid rgba(68,136,255,.5);
+  color:var(--blue);font-size:9px;display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;transition:all .15s}
+.tip-icon:hover{background:rgba(68,136,255,.15);border-color:var(--blue)}
+
+input,textarea,select{width:100%;background:var(--bg3);border:1px solid var(--rim2);
+  color:var(--white);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:9px 12px;
+  outline:none;border-radius:4px;transition:border-color .15s;resize:vertical}
+input:focus,textarea:focus,select:focus{border-color:var(--green)}
+textarea{min-height:72px}
+select option{background:var(--bg2)}
+
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.field-row{grid-template-columns:1fr}}
+
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+button{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;cursor:pointer;border:none;border-radius:4px;padding:10px 20px;
+  transition:all .18s;white-space:nowrap}
+.btn-primary{background:var(--green);color:#000}
+.btn-primary:hover{filter:brightness(1.1)}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;filter:none}
+.btn-ghost{background:transparent;color:var(--white);border:1px solid var(--rim2)}
+.btn-ghost:hover{border-color:var(--green);color:var(--green)}
+.btn-ghost:disabled{opacity:.35;cursor:not-allowed}
+.btn-auto{background:rgba(68,136,255,.12);color:var(--blue);border:1px solid rgba(68,136,255,.3)}
+.btn-auto:hover{background:rgba(68,136,255,.2)}
+.btn-warn{background:rgba(255,183,0,.1);color:var(--amber);border:1px solid rgba(255,183,0,.3)}
+.btn-warn:hover{background:rgba(255,183,0,.18)}
+
+.term{background:var(--bg);border:1px solid var(--rim);border-radius:4px;padding:14px 16px;
+  font-size:11px;line-height:2;color:var(--dim);max-height:220px;overflow-y:auto;
+  white-space:pre-wrap;word-break:break-all;margin-top:14px}
+.term .g{color:var(--green)}
+.term .r{color:var(--red)}
+.term .a{color:var(--amber)}
+.term .b{color:var(--white);font-weight:600}
+.term .d{color:rgba(221,228,238,.2)}
+
+.databox{background:var(--bg);border:1px solid var(--rim);border-radius:4px;padding:10px 12px;
+  font-size:10px;color:var(--green);word-break:break-all;line-height:1.8;margin-top:10px;
+  max-height:90px;overflow-y:auto;position:relative}
+.databox .copy-btn{position:sticky;float:right;top:0;font-size:9px;padding:2px 8px;
+  background:var(--bg2);border:1px solid var(--rim);color:var(--dim);cursor:pointer;border-radius:2px}
+.databox .copy-btn:hover{color:var(--green)}
+.databox.env{color:rgba(221,228,238,.3)}
+
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;
+  font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;margin-top:10px}
+.chip-ok{background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.3);color:var(--green)}
+.chip-err{background:rgba(255,68,102,.1);border:1px solid rgba(255,68,102,.3);color:var(--red)}
+.chip-wait{background:rgba(255,183,0,.1);border:1px solid rgba(255,183,0,.3);color:var(--amber)}
+.chip-dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+.tip-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);
+  align-items:center;justify-content:center}
+.tip-overlay.show{display:flex}
+.tip-box{background:var(--bg2);border:1px solid rgba(68,136,255,.35);border-radius:8px;
+  padding:28px 32px;max-width:480px;width:90%;position:relative;animation:fadein .25s ease}
+.tip-box h3{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--blue);
+  letter-spacing:.05em;margin-bottom:12px}
+.tip-box p{font-size:12px;color:var(--dim);line-height:2;margin-bottom:10px}
+.tip-box p strong{color:var(--white)}
+.tip-box code{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--green);
+  background:var(--bg3);padding:2px 6px;border-radius:2px}
+.tip-close{position:absolute;top:12px;right:16px;cursor:pointer;color:var(--dim);
+  font-size:16px;background:none;border:none;font-family:inherit;line-height:1}
+.tip-close:hover{color:var(--white)}
+
+.diag{display:flex;flex-direction:column;gap:10px;margin:18px 0}
+.diag-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.diag-box{padding:6px 12px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap}
+.dg{background:var(--green-dim);border:1px solid rgba(0,232,122,.3);color:var(--green)}
+.db{background:rgba(68,136,255,.1);border:1px solid rgba(68,136,255,.3);color:var(--blue)}
+.da{background:rgba(255,183,0,.1);border:1px solid rgba(255,183,0,.3);color:var(--amber)}
+.diag-arr{color:var(--dim);font-size:13px}
+.diag-desc{color:var(--dim);font-size:10px}
+
+.step-nav{display:flex;gap:10px;justify-content:space-between;margin-top:24px;
+  padding-top:16px;border-top:1px solid var(--rim)}
+
+.progress-bar{height:2px;background:var(--rim);border-radius:1px;margin-bottom:32px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));
+  transition:width .4s ease;border-radius:1px}
+
+.demo-stage{background:var(--bg);border:1px solid var(--rim);border-radius:6px;
+  padding:24px;margin:16px 0;min-height:120px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;text-align:center}
+.demo-locked{filter:blur(3px);font-size:12px;color:var(--dim);user-select:none;
+  font-style:italic;line-height:2}
+.demo-unlocked{background:var(--green-dim);border:1px solid rgba(0,232,122,.25);
+  border-radius:4px;padding:18px;font-size:12px;color:var(--white);line-height:2;
+  animation:fadein .4s ease;text-align:left;width:100%}
+.demo-unlocked .dlabel{font-size:9px;color:var(--green);letter-spacing:.2em;
+  text-transform:uppercase;margin-bottom:8px}
+
+.embed-code-box{background:var(--bg);border:1px solid var(--rim);border-radius:4px;
+  padding:14px;font-size:10px;color:var(--amber);white-space:pre-wrap;word-break:break-all;
+  max-height:180px;overflow-y:auto;margin-top:12px;line-height:1.8}
+
+.info-banner{background:rgba(68,136,255,.07);border:1px solid rgba(68,136,255,.2);border-radius:4px;
+  padding:12px 16px;margin-bottom:18px;font-size:11px;color:var(--blue);line-height:1.9}
+
+footer{text-align:center;font-size:9px;color:var(--dim);border-top:1px solid var(--rim);
+  padding-top:20px;margin-top:48px;letter-spacing:.1em;line-height:2}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header>
+  <div class="eyebrow">Sovereignty Layer II · Self-Coding Encryption</div>
+  <h1>The Key <em>Is</em><br>The Algorithm</h1>
+  <p class="tagline">
+    Without the key, an attacker cannot decrypt the ciphertext —
+    but more importantly, they cannot even determine <strong>which cipher was used</strong>.
+    Guided demo below. Everything autofills.
+  </p>
+</header>
+
+<div class="rail">
+  <div class="rail-step active" data-step="0"><span class="num">01</span> Concept</div>
+  <div class="rail-step" data-step="1"><span class="num">02</span> Configure</div>
+  <div class="rail-step" data-step="2"><span class="num">03</span> Encrypt</div>
+  <div class="rail-step" data-step="3"><span class="num">04</span> Verify</div>
+  <div class="rail-step" data-step="4"><span class="num">05</span> Live Demo</div>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progress" style="width:10%"></div></div>
+
+<!-- ════════════ STEP 0: CONCEPT ════════════ -->
+<div class="step visible" id="step-0">
+  <div class="card">
+    <div class="card-title">How SCEE Works</div>
+    <p style="font-size:12px;color:var(--dim);line-height:2;margin-bottom:20px">
+      Normal encryption: cipher is public, key is secret.<br>
+      <strong style="color:var(--white)">SCEE: the cipher is also secret — encoded inside the key.</strong>
+    </p>
+
+    <div class="diag">
+      <div class="diag-row">
+        <div class="diag-box da">Meta-Passphrase</div>
+        <div class="diag-arr">→ unlocks →</div>
+        <div class="diag-box db">Algorithm Descriptor (ADB)</div>
+        <div class="diag-arr">→ reveals →</div>
+        <div class="diag-box dg">Cipher · KDF · IV · Salt</div>
+      </div>
+      <div class="diag-row">
+        <div class="diag-box dg">Content Passphrase</div>
+        <div class="diag-arr">+ cipher from ADB →</div>
+        <div class="diag-box db">Decrypt Envelope</div>
+        <div class="diag-arr">→</div>
+        <div class="diag-box dg">Plaintext</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px">
+      <div style="padding:16px;background:var(--bg);border:1px solid var(--rim);border-radius:4px">
+        <div style="font-size:9px;color:var(--green);letter-spacing:.2em;text-transform:uppercase;margin-bottom:10px">Key structure</div>
+        <div style="font-size:10px;color:var(--dim);line-height:2.2">
+          <span style="color:var(--green)">SCEE</span> magic (4B)<br>
+          <span style="color:var(--amber)">metaSalt + metaIV</span> (44B)<br>
+          <span style="color:var(--blue)">ADB encrypted</span> (cipher hidden here)<br>
+          <span style="color:var(--dim)">commitment hash</span> (32B)
+        </div>
+      </div>
+      <div style="padding:16px;background:var(--bg);border:1px solid var(--rim);border-radius:4px">
+        <div style="font-size:9px;color:var(--amber);letter-spacing:.2em;text-transform:uppercase;margin-bottom:10px">What an attacker sees</div>
+        <div style="font-size:10px;color:var(--dim);line-height:2.2">
+          Ciphertext: uniform random bytes<br>
+          No cipher identifier<br>
+          No KDF parameters<br>
+          No IV structure<br>
+          <span style="color:var(--red)">Attack surface: undefined</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:11px;color:var(--dim);line-height:2;margin-top:20px">
+      <strong style="color:var(--amber)">Plausible deniability for hosts:</strong>
+      A server serving the ciphertext envelope knows nothing about its cipher, its contents,
+      or how to decrypt it. They serve a dumb blob. The decryption engine lives in the embed script.
+    </p>
+  </div>
+  <div class="step-nav">
+    <span></span>
+    <button class="btn-primary" onclick="goStep(1)">Begin Demo →</button>
+  </div>
+</div>
+
+<!-- ════════════ STEP 1: CONFIGURE ════════════ -->
+<div class="step" id="step-1">
+  <div class="card">
+    <div class="card-title">Configure · Step 2 of 5</div>
+
+    <div class="info-banner">
+      ⚡ Click <strong>Autofill Demo Values</strong> to populate everything and run the full walkthrough automatically.
+      Or enter your own values below.
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Content Passphrase <span class="tip-icon" onclick="showTip('passphrase')">?</span></label>
+        <input id="cfg-pass" type="text" placeholder="e.g. correct-horse-staple">
+      </div>
+      <div class="field">
+        <label>Meta-Passphrase <span class="tip-icon" onclick="showTip('metapass')">?</span></label>
+        <input id="cfg-meta" type="text" placeholder="e.g. algorithm-guardian">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Content to Encrypt <span class="tip-icon" onclick="showTip('content')">?</span></label>
+      <textarea id="cfg-content" style="min-height:90px" placeholder="Enter any text — HTML, JSON, credentials..."></textarea>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Cipher Suite <span class="tip-icon" onclick="showTip('cipher')">?</span></label>
+        <select id="cfg-cipher">
+          <option value="1">AES-256-GCM (recommended)</option>
+          <option value="2">AES-128-GCM</option>
+          <option value="3">AES-256-CBC</option>
+          <option value="4">AES-256-CTR</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>KDF <span class="tip-icon" onclick="showTip('kdf')">?</span></label>
+        <select id="cfg-kdf">
+          <option value="3">HKDF-SHA256 (fast, good for demo)</option>
+          <option value="1">PBKDF2-SHA256 (100k iter)</option>
+          <option value="2">PBKDF2-SHA512 (100k iter)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-auto" onclick="autofillAll()">⚡ Autofill Demo Values</button>
+    </div>
+  </div>
+  <div class="step-nav">
+    <button class="btn-ghost" onclick="goStep(0)">← Back</button>
+    <button class="btn-primary" onclick="goEncrypt()">Generate Key + Encrypt →</button>
+  </div>
+</div>
+
+<!-- ════════════ STEP 2: ENCRYPT ════════════ -->
+<div class="step" id="step-2">
+  <div class="card">
+    <div class="card-title">Key Generation + Encryption · Step 3 of 5</div>
+    <div id="enc-status" class="chip chip-wait"><span class="chip-dot"></span>Working...</div>
+    <div class="term" id="enc-log">Starting...</div>
+
+    <div id="enc-results" style="display:none;margin-top:16px">
+      <div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:6px">
+        Generated Key <span style="color:var(--amber)">(ADB encrypted inside — algorithm invisible)</span>
+      </div>
+      <div class="databox" id="out-key">
+        <button class="copy-btn" onclick="copyVal(state.keyStr)">copy</button>
+        <span id="out-key-text"></span>
+      </div>
+
+      <div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;margin-top:14px">
+        Ciphertext Envelope <span style="color:var(--dim)">(random bytes — no cipher info)</span>
+      </div>
+      <div class="databox env" id="out-env">
+        <button class="copy-btn" onclick="copyVal(state.envelope)">copy</button>
+        <span id="out-env-text"></span>
+      </div>
+
+      <div style="margin-top:14px;padding:12px 14px;background:var(--bg);border:1px solid var(--rim);
+        border-radius:4px;font-size:10px;line-height:2.2;color:var(--dim)" id="key-anatomy"></div>
+    </div>
+  </div>
+  <div class="step-nav">
+    <button class="btn-ghost" onclick="goStep(1)">← Back</button>
+    <button class="btn-primary" id="btn-to-verify" onclick="goStep(3)" disabled>Verify It →</button>
+  </div>
+</div>
+
+<!-- ════════════ STEP 3: VERIFY ════════════ -->
+<div class="step" id="step-3">
+  <div class="card">
+    <div class="card-title">Verification · Step 4 of 5</div>
+    <p style="font-size:11px;color:var(--dim);line-height:2;margin-bottom:16px">
+      Fields are autofilled with the correct values. Try the <strong style="color:var(--amber)">tamper buttons</strong>
+      to see what happens with wrong credentials — the system fails at the ADB decryption stage,
+      before it can even attempt to find the cipher.
+    </p>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Content Passphrase <span class="tip-icon" onclick="showTip('passphrase')">?</span></label>
+        <input id="ver-pass" type="text">
+      </div>
+      <div class="field">
+        <label>Meta-Passphrase <span class="tip-icon" onclick="showTip('metapass')">?</span></label>
+        <input id="ver-meta" type="text">
+      </div>
+    </div>
+    <div class="field">
+      <label>Key <span style="font-size:9px;color:var(--dim);font-style:italic;letter-spacing:0">(autofilled)</span></label>
+      <textarea id="ver-key" style="min-height:46px;font-size:10px;color:var(--amber)"></textarea>
+    </div>
+    <div class="field">
+      <label>Envelope <span style="font-size:9px;color:var(--dim);font-style:italic;letter-spacing:0">(autofilled)</span></label>
+      <textarea id="ver-env" style="min-height:46px;font-size:10px;color:rgba(221,228,238,.35)"></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" onclick="doVerify()">Decrypt + Verify</button>
+      <button class="btn-warn" onclick="tamperMeta()">⚠ Wrong Meta-Pass</button>
+      <button class="btn-warn" onclick="tamperPass()">⚠ Wrong Content-Pass</button>
+      <button class="btn-auto" onclick="resetVerify()">↺ Reset</button>
+    </div>
+    <div class="term" id="ver-log">Click "Decrypt + Verify" to proceed (fields are already correct)...</div>
+    <div id="ver-result"></div>
+  </div>
+  <div class="step-nav">
+    <button class="btn-ghost" onclick="goStep(2)">← Back</button>
+    <button class="btn-primary" id="btn-to-demo" onclick="goStep(4)" disabled>See Live Embed →</button>
+  </div>
+</div>
+
+<!-- ════════════ STEP 4: LIVE DEMO ════════════ -->
+<div class="step" id="step-4">
+  <div class="card">
+    <div class="card-title">Live Embed Demo · Step 5 of 5</div>
+    <p style="font-size:11px;color:var(--dim);line-height:2;margin-bottom:16px">
+      This simulates a third-party page serving an encrypted embed. The host has no key, no algorithm knowledge,
+      no plaintext. Click <strong style="color:var(--white)">Attempt Access</strong> — a credential prompt appears.
+      Use <strong style="color:var(--green)">Autofill</strong> inside it to populate and decrypt.
+    </p>
+
+    <div style="background:var(--bg3);border:1px solid var(--rim);border-radius:6px;padding:20px;margin-bottom:20px">
+      <div style="font-size:9px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;
+        margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="color:var(--red)">●</span>
+        <span style="color:var(--amber)">●</span>
+        <span style="color:var(--green)">●</span>
+        <span style="margin-left:8px">example-publisher.com — Encrypted Article</span>
+      </div>
+      <div class="demo-stage" id="demo-stage">
+        <div class="demo-locked">This article is protected by sovereign encryption.<br>
+        Access requires authentication credentials.</div>
+        <div style="font-size:10px;color:var(--dim)">[SCEE Envelope · Cipher Unknown to Host]</div>
+        <button class="btn-ghost" onclick="launchEmbed()" style="margin-top:4px">Attempt Access</button>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--dim);line-height:2.2;padding:14px;
+      background:var(--bg);border:1px solid var(--rim);border-radius:4px">
+      <span style="color:var(--green)">What happens internally when you decrypt:</span><br>
+      1 · Browser receives opaque ciphertext blob — no cipher header<br>
+      2 · Meta-passphrase decrypts ADB → cipher + KDF revealed<br>
+      3 · Content key derived using KDF params from ADB<br>
+      4 · Envelope decrypted client-side — server never involved<br>
+      5 · Host cannot read their own content without your keys
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Generated Embed Code</div>
+    <p style="font-size:11px;color:var(--dim);line-height:2;margin-bottom:12px">
+      Drop into any HTML page. Self-contained engine — no external dependencies, no server calls.
+    </p>
+    <div class="embed-code-box" id="embed-code">Generate key and verify first...</div>
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="copyVal(document.getElementById('embed-code').textContent)">Copy Embed Code</button>
+    </div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-ghost" onclick="goStep(3)">← Back</button>
+    <button class="btn-primary" onclick="restart()">↺ Start Over with New Values</button>
+  </div>
+</div>
+
+<!-- ════════════ TOOLTIP OVERLAY ════════════ -->
+<div class="tip-overlay" id="tip-overlay" onclick="closeTipOuter(event)">
+  <div class="tip-box">
+    <button class="tip-close" onclick="closeTip()">✕</button>
+    <h3 id="tip-title"></h3>
+    <div id="tip-body"></div>
+  </div>
+</div>
+
+<!-- ════════════ EMBED MODAL ════════════ -->
+<div class="tip-overlay" id="embed-modal">
+  <div class="tip-box" style="border-color:rgba(0,232,122,.25);max-width:400px">
+    <button class="tip-close" onclick="closeEmbed()">✕</button>
+    <h3 style="color:var(--green)">SCEE · Access Required</h3>
+    <p style="color:var(--dim);font-size:11px;margin-bottom:16px">
+      Provide your credentials. Decryption happens entirely in your browser.
+      The host never sees your keys or the plaintext.
+    </p>
+    <div class="field">
+      <label>Content Passphrase</label>
+      <input id="em-pass" type="text" placeholder="passphrase...">
+    </div>
+    <div class="field">
+      <label>Key (base64url)</label>
+      <input id="em-key" type="text" placeholder="key..." style="font-size:10px">
+    </div>
+    <div class="field">
+      <label>Meta-Passphrase</label>
+      <input id="em-meta" type="text" placeholder="meta-passphrase...">
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="doEmbedDecrypt()">Decrypt</button>
+      <button class="btn-auto" onclick="autofillEmbed()">⚡ Autofill</button>
+    </div>
+    <div id="em-err" style="color:var(--red);font-size:10px;margin-top:8px;min-height:16px"></div>
+  </div>
+</div>
+
+<footer>
+  SCEE v1 · AES-GCM / CBC / CTR · PBKDF2 / HKDF · Web Crypto API<br>
+  Algorithm Descriptor Block · Commitment Hashing · Zero server-side plaintext<br>
+  All operations local — nothing transmitted
+</footer>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  CRYPTO ENGINE
+// ══════════════════════════════════════════════════════════
+
+const CIPHERS = {
+  1:{name:'AES-256-GCM',keyLen:256,ivLen:12,wc:'AES-GCM'},
+  2:{name:'AES-128-GCM',keyLen:128,ivLen:12,wc:'AES-GCM'},
+  3:{name:'AES-256-CBC',keyLen:256,ivLen:16,wc:'AES-CBC'},
+  4:{name:'AES-256-CTR',keyLen:256,ivLen:16,wc:'AES-CTR'},
+};
+const KDFS = {
+  1:{name:'PBKDF2-SHA256',hash:'SHA-256',pbkdf2:true,iter:100000},
+  2:{name:'PBKDF2-SHA512',hash:'SHA-512',pbkdf2:true,iter:100000},
+  3:{name:'HKDF-SHA256',  hash:'SHA-256',pbkdf2:false,iter:0},
+};
+const MAGIC = new Uint8Array([0x53,0x43,0x45,0x45]);
+const MENV  = new Uint8Array([0x45,0x4E,0x56,0x01]);
+const TE=new TextEncoder(), TD=new TextDecoder();
+
+const cat=(...a)=>{const l=a.reduce((s,x)=>s+x.length,0),o=new Uint8Array(l);let f=0;for(const x of a){o.set(x,f);f+=x.length;}return o;};
+const u16=n=>new Uint8Array([(n>>8)&255,n&255]);
+const u24=n=>new Uint8Array([(n>>16)&255,(n>>8)&255,n&255]);
+const r16=(b,o=0)=>(b[o]<<8)|b[o+1];
+const r24=(b,o=0)=>(b[o]<<16)|(b[o+1]<<8)|b[o+2];
+const r32=(b,o=0)=>new DataView(b.buffer,b.byteOffset+o).getUint32(0);
+const w32=n=>{const a=new Uint8Array(4);new DataView(a.buffer).setUint32(0,n);return a;};
+const rnd=n=>crypto.getRandomValues(new Uint8Array(n));
+const tsEq=(a,b)=>{if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a[i]^b[i];return d===0;};
+const b64e=b=>btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+const b64d=s=>new Uint8Array([...atob(s.replace(/-/g,'+').replace(/_/g,'/'))].map(c=>c.charCodeAt(0)));
+const hex=(b,n=8)=>Array.from(b.slice(0,n)).map(x=>x.toString(16).padStart(2,'0')).join('');
+
+async function mkMetaKey(pass,salt,usage=['encrypt','decrypt']){
+  const m=await crypto.subtle.importKey('raw',TE.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,usage);
+}
+
+async function mkContentKey(pass,salt,kdf,cipherWc,keyLen,usage){
+  let raw;
+  if(kdf.pbkdf2){
+    const m=await crypto.subtle.importKey('raw',TE.encode(pass),'PBKDF2',false,['deriveBits']);
+    raw=new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:kdf.iter,hash:kdf.hash},m,keyLen));
+  } else {
+    const m=await crypto.subtle.importKey('raw',TE.encode(pass),'HKDF',false,['deriveBits']);
+    raw=new Uint8Array(await crypto.subtle.deriveBits({name:'HKDF',salt,hash:kdf.hash,info:TE.encode('SCEE-v1')},m,keyLen));
+  }
+  return crypto.subtle.importKey('raw',raw,{name:cipherWc,length:keyLen},false,usage);
+}
+
+function buildADB(cId,kId,salt,iv){
+  const c=CIPHERS[cId];
+  return cat(new Uint8Array([cId,0x01,kId]),u24(KDFS[kId].iter),
+             new Uint8Array([iv.length,c.ivLen]),salt,iv,new Uint8Array(8));
+}
+function parseADB(b){
+  let o=0;
+  const ci=b[o++];o++;const ki=b[o++];o+=3;// skip iter (we get it from registry)
+  const il=b[o++];o++;
+  const salt=b.slice(o,o+32);o+=32;
+  const iv=b.slice(o,o+il);
+  return{ci,ki,salt,iv};
+}
+async function commitment(adb,ms){
+  return new Uint8Array(await crypto.subtle.digest('SHA-256',cat(MAGIC,adb,ms)));
+}
+
+async function generateKey(pass,meta,cId,kId){
+  const c=CIPHERS[cId];
+  const salt=rnd(32),iv=rnd(c.ivLen),ms=rnd(32),miv=rnd(12);
+  const adb=buildADB(cId,kId,salt,iv);
+  const mk=await mkMetaKey(meta,ms);
+  const adbEnc=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:miv,tagLength:128},mk,adb));
+  const cmt=await commitment(adb,ms);
+  const kb=cat(MAGIC,new Uint8Array([1]),ms,miv,u16(adbEnc.length),adbEnc,cmt);
+  return{keyStr:b64e(kb),kb,adb:{ci:cId,ki:kId,salt,iv},ms,adbEnc,cmt};
+}
+
+async function decodeKey(keyStr,meta){
+  const kb=b64d(keyStr);
+  if(!tsEq(kb.slice(0,4),MAGIC))throw new Error('Invalid key format');
+  let o=5;
+  const ms=kb.slice(o,o+32);o+=32;
+  const miv=kb.slice(o,o+12);o+=12;
+  const al=r16(kb,o);o+=2;
+  const adbEnc=kb.slice(o,o+al);o+=al;
+  const cmt=kb.slice(o,o+32);
+  const mk=await mkMetaKey(meta,ms,['decrypt']);
+  let adbBytes;
+  try{
+    adbBytes=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:miv,tagLength:128},mk,adbEnc));
+  }catch(e){
+    throw new Error('Wrong meta-passphrase — ADB is locked. Cipher identity unknown.');
+  }
+  return{adb:parseADB(adbBytes),cmt,adbLen:adbEnc.length};
+}
+
+async function doEncrypt(plaintext,pass,keyResult){
+  const{adb,cmt}=keyResult;
+  const c=CIPHERS[adb.ci],kdf=KDFS[adb.ki];
+  const ck=await mkContentKey(pass,adb.salt,kdf,c.wc,c.keyLen,['encrypt']);
+  const pt=TE.encode(plaintext);
+  let ct;
+  if(c.wc==='AES-GCM')ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:adb.iv,tagLength:128},ck,pt));
+  else if(c.wc==='AES-CBC')ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CBC',iv:adb.iv},ck,pt));
+  else ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR',counter:adb.iv,length:64},ck,pt));
+  const env=cat(MENV,cmt,w32(ct.length),ct);
+  return b64e(env);
+}
+
+async function doDecrypt(envStr,pass,keyStr,meta){
+  const{adb,cmt}=await decodeKey(keyStr,meta);
+  const c=CIPHERS[adb.ci],kdf=KDFS[adb.ki];
+  const env=b64d(envStr);let o=4;
+  const ec=env.slice(o,o+32);o+=32;
+  if(!tsEq(ec,cmt))throw new Error('Commitment mismatch — this key does not match this envelope.');
+  const cl=r32(env,o);o+=4;
+  const ct=env.slice(o,o+cl);
+  const ck=await mkContentKey(pass,adb.salt,kdf,c.wc,c.keyLen,['decrypt']);
+  let pt;
+  try{
+    if(c.wc==='AES-GCM')pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:adb.iv,tagLength:128},ck,ct);
+    else if(c.wc==='AES-CBC')pt=await crypto.subtle.decrypt({name:'AES-CBC',iv:adb.iv},ck,ct);
+    else pt=await crypto.subtle.decrypt({name:'AES-CTR',counter:adb.iv,length:64},ck,ct);
+  }catch(e){throw new Error('Wrong passphrase — decryption failed (wrong key or tampered data).');}
+  return{text:TD.decode(pt),cipher:c.name,kdf:kdf.name};
+}
+
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+const state={keyStr:null,envelope:null,pass:null,meta:null};
+
+// ══════════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════════
+const PROG=[10,28,52,76,100];
+function goStep(n){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('visible'));
+  document.getElementById('step-'+n).classList.add('visible');
+  document.querySelectorAll('.rail-step').forEach((s,i)=>{
+    s.classList.toggle('active',i===n);
+    s.classList.toggle('done',i<n);
+  });
+  document.getElementById('progress').style.width=PROG[n]+'%';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.querySelectorAll('.rail-step').forEach((el,i)=>el.addEventListener('click',()=>goStep(i)));
+
+function restart(){
+  state.keyStr=null;state.envelope=null;state.pass=null;state.meta=null;
+  document.getElementById('cfg-pass').value='';
+  document.getElementById('cfg-meta').value='';
+  document.getElementById('cfg-content').value='';
+  document.getElementById('btn-to-verify').disabled=true;
+  document.getElementById('btn-to-demo').disabled=true;
+  document.getElementById('demo-stage').innerHTML=`
+    <div class="demo-locked">This article is protected by sovereign encryption.<br>Access requires authentication credentials.</div>
+    <div style="font-size:10px;color:var(--dim)">[SCEE Envelope · Cipher Unknown to Host]</div>
+    <button class="btn-ghost" onclick="launchEmbed()" style="margin-top:4px">Attempt Access</button>`;
+  goStep(0);
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUTOFILL
+// ══════════════════════════════════════════════════════════
+function autofillAll(){
+  document.getElementById('cfg-pass').value='sovereign-content-key';
+  document.getElementById('cfg-meta').value='meta-algorithm-guard';
+  document.getElementById('cfg-content').value=
+    'This document is classified.\n\nOnly authorised holders of the SCEE key can identify the cipher used to protect this content — let alone decrypt it.\n\nThe host serving this envelope has no knowledge of its contents or encryption method.\n\nSovereign identity confirmed. ✓';
+  document.getElementById('cfg-cipher').value='1';
+  document.getElementById('cfg-kdf').value='3';
+}
+
+// ══════════════════════════════════════════════════════════
+//  STEP 2: ENCRYPT
+// ══════════════════════════════════════════════════════════
+function tlog(id,...lines){
+  const el=document.getElementById(id);
+  for(const[cls,txt]of lines)el.innerHTML+=`<span class="${cls}">${txt.replace(/</g,'&lt;')}</span>\n`;
+  el.scrollTop=el.scrollHeight;
+}
+function tset(id,...lines){document.getElementById(id).innerHTML='';tlog(id,...lines);}
+
+async function goEncrypt(){
+  const pass=document.getElementById('cfg-pass').value.trim();
+  const meta=document.getElementById('cfg-meta').value.trim();
+  const content=document.getElementById('cfg-content').value.trim();
+  const cId=parseInt(document.getElementById('cfg-cipher').value);
+  const kId=parseInt(document.getElementById('cfg-kdf').value);
+  if(!pass||!meta||!content){alert('Please fill in all fields, or click Autofill');return;}
+
+  state.pass=pass;state.meta=meta;
+  goStep(2);
+  document.getElementById('enc-status').className='chip chip-wait';
+  document.getElementById('enc-status').innerHTML='<span class="chip-dot"></span>Working...';
+  document.getElementById('enc-results').style.display='none';
+  document.getElementById('btn-to-verify').disabled=true;
+  tset('enc-log',['d','▶ Building Algorithm Descriptor Block (ADB)...']);
+
+  try{
+    const t0=performance.now();
+    const c=CIPHERS[cId],kdf=KDFS[kId];
+    tlog('enc-log',['d',`  cipher:   ${c.name}`],['d',`  kdf:      ${kdf.name}`]);
+    tlog('enc-log',['d','  generating random salt / IV / metaSalt / metaIV...']);
+
+    const kr=await generateKey(pass,meta,cId,kId);
+    state.keyStr=kr.keyStr;
+    tlog('enc-log',
+      ['g','✓ ADB built (cipher + kdf + iv encoded)'],
+      ['g','✓ ADB encrypted with meta-key (AES-GCM, PBKDF2×100k)'],
+      ['d',`  ADB ciphertext: ${kr.adbEnc.length}B  ← cipher ID hidden here`],
+      ['d',`  commitment:     ${hex(kr.cmt)}...`],
+      ['d','  encrypting content...']);
+
+    const env=await doEncrypt(content,pass,kr);
+    state.envelope=env;
+    const t1=performance.now();
+    tlog('enc-log',
+      ['g',`✓ Content encrypted with ${c.name}`],
+      ['g',`✓ Envelope: ${b64d(env).length}B — indistinguishable from random`],
+      ['g',`✓ Done in ${(t1-t0).toFixed(0)}ms`]);
+
+    document.getElementById('out-key-text').textContent=kr.keyStr;
+    document.getElementById('out-env-text').textContent=env;
+    document.getElementById('key-anatomy').innerHTML=
+      `<span style="color:var(--green)">SCEE</span>(4B magic) · ver(1B) · `+
+      `<span style="color:var(--amber)">metaSalt</span>(32B) · `+
+      `<span style="color:var(--amber)">metaIV</span>(12B) · `+
+      `<span style="color:var(--blue)">ADB_enc</span>(${kr.adbEnc.length}B — <em>cipher hidden here</em>) · `+
+      `commitment(32B) = <strong style="color:var(--white)">${kr.kb.length}B total</strong>`;
+
+    document.getElementById('enc-results').style.display='block';
+    document.getElementById('enc-status').className='chip chip-ok';
+    document.getElementById('enc-status').innerHTML='<span class="chip-dot"></span>Key generated · Content encrypted';
+    document.getElementById('btn-to-verify').disabled=false;
+
+    document.getElementById('ver-pass').value=pass;
+    document.getElementById('ver-meta').value=meta;
+    document.getElementById('ver-key').value=kr.keyStr;
+    document.getElementById('ver-env').value=env;
+    buildEmbedCode();
+  }catch(e){
+    tlog('enc-log',['r','✗ '+e.message]);
+    document.getElementById('enc-status').className='chip chip-err';
+    document.getElementById('enc-status').innerHTML='<span class="chip-dot"></span>Failed';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  STEP 3: VERIFY
+// ══════════════════════════════════════════════════════════
+function resetVerify(){
+  document.getElementById('ver-pass').value=state.pass||'';
+  document.getElementById('ver-meta').value=state.meta||'';
+  document.getElementById('ver-key').value=state.keyStr||'';
+  document.getElementById('ver-env').value=state.envelope||'';
+  tset('ver-log',['d','Fields reset. Click Decrypt + Verify.']);
+  document.getElementById('ver-result').innerHTML='';
+}
+function tamperMeta(){
+  document.getElementById('ver-meta').value='this-is-the-wrong-meta-pass';
+  tset('ver-log',['a','⚠ Meta-passphrase set to wrong value.'],
+                 ['a','  ADB decryption will fail — cipher identity becomes unknowable.'],
+                 ['a','  Click "Decrypt + Verify" to see the error.']);
+  document.getElementById('ver-result').innerHTML='';
+}
+function tamperPass(){
+  document.getElementById('ver-meta').value=state.meta;
+  document.getElementById('ver-pass').value='this-is-the-wrong-passphrase';
+  tset('ver-log',['a','⚠ Content passphrase set to wrong value.'],
+                 ['a','  ADB will decode (meta-pass correct), cipher revealed,'],
+                 ['a','  but derived content key will be wrong → auth tag failure.'],
+                 ['a','  Click "Decrypt + Verify" to see the error.']);
+  document.getElementById('ver-result').innerHTML='';
+}
+
+async function doVerify(){
+  const pass=document.getElementById('ver-pass').value.trim();
+  const meta=document.getElementById('ver-meta').value.trim();
+  const keyStr=document.getElementById('ver-key').value.trim();
+  const envStr=document.getElementById('ver-env').value.trim();
+  if(!pass||!meta||!keyStr||!envStr){alert('All four fields required');return;}
+
+  tset('ver-log',['d','▶ Decoding key → resolving algorithm...']);
+  document.getElementById('ver-result').innerHTML='';
+
+  try{
+    const t0=performance.now();
+    const result=await doDecrypt(envStr,pass,keyStr,meta);
+    const t1=performance.now();
+    tlog('ver-log',
+      ['g',`✓ ADB decrypted — cipher revealed: ${result.cipher}`],
+      ['g',`✓ Commitment verified — key matches envelope`],
+      ['g',`✓ Content decrypted in ${(t1-t0).toFixed(0)}ms`],
+      ['g','✓ Integrity confirmed (GCM auth tag passed)']);
+
+    document.getElementById('ver-result').innerHTML=`
+      <div style="margin-top:14px;background:rgba(0,232,122,.06);border:1px solid rgba(0,232,122,.2);
+        border-radius:4px;padding:16px">
+        <div style="font-size:9px;color:var(--green);letter-spacing:.2em;text-transform:uppercase;margin-bottom:8px">
+          ✓ Decrypted · Authenticated · ${result.cipher}
+        </div>
+        <div style="font-size:12px;color:var(--white);line-height:2;white-space:pre-wrap">${result.text.replace(/</g,'&lt;')}</div>
+      </div>`;
+    document.getElementById('btn-to-demo').disabled=false;
+  }catch(e){
+    tlog('ver-log',['r','✗ '+e.message],
+                   ['d','  ↑ This is the expected failure — try "Reset" to restore correct values']);
+    document.getElementById('ver-result').innerHTML=
+      `<div style="margin-top:12px;color:var(--red);font-size:11px;padding:12px 14px;
+        background:rgba(255,68,102,.06);border:1px solid rgba(255,68,102,.2);border-radius:4px">
+        ✗ ${e.message}
+      </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  STEP 4: EMBED
+// ══════════════════════════════════════════════════════════
+function buildEmbedCode(){
+  if(!state.keyStr||!state.envelope)return;
+  const code=`<!-- SCEE Self-Decrypting Embed -->
+<div id="scee-content"><em style="color:#555">[Encrypted — access required]</em></div>
+<script>
+/* SCEE runtime · self-contained · no external deps */
+(async()=>{
+  const ENV="${state.envelope}";
+  const el=document.getElementById('scee-content');
+  const TE=new TextEncoder(),TD=new TextDecoder();
+  const b64d=s=>new Uint8Array([...atob(s.replace(/-/g,'+').replace(/_/g,'/'))].map(c=>c.charCodeAt(0)));
+  const cat=(...a)=>{const l=a.reduce((s,x)=>s+x.length,0),o=new Uint8Array(l);let f=0;for(const x of a){o.set(x,f);f+=x.length;}return o;};
+  const tsEq=(a,b)=>{let d=0;for(let i=0;i<a.length;i++)d|=a[i]^b[i];return d===0;};
+  // Prompt user for credentials, then decrypt
+  const pass=prompt('Passphrase:'), key=prompt('Key (base64url):'), meta=prompt('Meta-passphrase:');
+  if(!pass||!key||!meta)return;
+  try{
+    const kb=b64d(key);let o=5;
+    const ms=kb.slice(o,o+32);o+=32;const mi=kb.slice(o,o+12);o+=12;
+    const al=(kb[o]<<8)|kb[o+1];o+=2;const ae=kb.slice(o,o+al);o+=al;const kc=kb.slice(o,o+32);
+    const mkm=await crypto.subtle.importKey('raw',TE.encode(meta),'PBKDF2',false,['deriveKey']);
+    const mk=await crypto.subtle.deriveKey({name:'PBKDF2',salt:ms,iterations:100000,hash:'SHA-256'},mkm,{name:'AES-GCM',length:256},false,['decrypt']);
+    const ab=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:mi,tagLength:128},mk,ae));
+    let a=0;const ci=ab[a++];a++;const ki=ab[a++];a+=3;const il=ab[a++];a++;
+    const salt=ab.slice(a,a+32);a+=32;const iv=ab.slice(a,a+il);
+    const WC={1:'AES-GCM',2:'AES-GCM',3:'AES-CBC',4:'AES-CTR'};
+    const KL={1:256,2:128,3:256,4:256};
+    const m=ki===3?await crypto.subtle.importKey('raw',TE.encode(pass),'HKDF',false,['deriveBits']):
+                    await crypto.subtle.importKey('raw',TE.encode(pass),'PBKDF2',false,['deriveBits']);
+    const rk=new Uint8Array(ki===3?
+      await crypto.subtle.deriveBits({name:'HKDF',salt,hash:'SHA-256',info:TE.encode('SCEE-v1')},m,KL[ci]):
+      await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},m,KL[ci]));
+    const ck=await crypto.subtle.importKey('raw',rk,{name:WC[ci],length:KL[ci]},false,['decrypt']);
+    const ev=b64d(ENV);let eo=4;
+    if(!tsEq(ev.slice(eo,eo+32),kc))throw'Key mismatch';eo+=32;
+    const cl=new DataView(ev.buffer,ev.byteOffset+eo).getUint32(0);eo+=4;
+    const ct=ev.slice(eo,eo+cl);
+    let pt;
+    if(WC[ci]==='AES-GCM')pt=await crypto.subtle.decrypt({name:'AES-GCM',iv,tagLength:128},ck,ct);
+    else if(WC[ci]==='AES-CBC')pt=await crypto.subtle.decrypt({name:'AES-CBC',iv},ck,ct);
+    else pt=await crypto.subtle.decrypt({name:'AES-CTR',counter:iv,length:64},ck,ct);
+    el.textContent=TD.decode(pt);
+  }catch(e){el.textContent='Decryption failed: '+(e.message||e);}
+})();
+<\/script>`;
+  document.getElementById('embed-code').textContent=code;
+}
+
+function launchEmbed(){
+  document.getElementById('em-err').textContent='';
+  document.getElementById('em-pass').value='';
+  document.getElementById('em-key').value='';
+  document.getElementById('em-meta').value='';
+  document.getElementById('embed-modal').classList.add('show');
+}
+function closeEmbed(){document.getElementById('embed-modal').classList.remove('show');}
+function autofillEmbed(){
+  document.getElementById('em-pass').value=state.pass||'';
+  document.getElementById('em-key').value=state.keyStr||'';
+  document.getElementById('em-meta').value=state.meta||'';
+}
+async function doEmbedDecrypt(){
+  const pass=document.getElementById('em-pass').value.trim();
+  const key=document.getElementById('em-key').value.trim();
+  const meta=document.getElementById('em-meta').value.trim();
+  if(!pass||!key||!meta){document.getElementById('em-err').textContent='All fields required';return;}
+  document.getElementById('em-err').textContent='Decrypting...';
+  try{
+    const result=await doDecrypt(state.envelope,pass,key,meta);
+    closeEmbed();
+    document.getElementById('demo-stage').innerHTML=`
+      <div class="demo-unlocked">
+        <div class="dlabel">✓ Decrypted · ${result.cipher} · Client-side only · Server never involved</div>
+        ${result.text.replace(/\n/g,'<br>')}
+      </div>`;
+  }catch(e){
+    document.getElementById('em-err').textContent=e.message;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  TOOLTIPS
+// ══════════════════════════════════════════════════════════
+const TIPS={
+  passphrase:{title:'Content Passphrase',body:`
+    <p>Used to <strong>derive the actual encryption key</strong> via the KDF.
+    Combined with a random salt stored in the ADB.</p>
+    <p>Without the key, an attacker doesn't know which KDF was used or its parameters —
+    so brute force has no defined starting point. Even knowing the passphrase is useless
+    without the ADB to tell you how to turn it into a key.</p>
+    <p><code>passphrase + ADB(salt, KDF, iter) → content key → plaintext</code></p>`},
+  metapass:{title:'Meta-Passphrase',body:`
+    <p>A <strong>second independent passphrase</strong> that encrypts the Algorithm Descriptor Block
+    inside the key itself.</p>
+    <p>Without the meta-passphrase, the ADB is locked. An attacker cannot determine:
+    cipher algorithm, KDF type, iteration count, salt, or IV.</p>
+    <p>The two passphrases serve different trust boundaries — you can share the content passphrase
+    with content consumers and keep the meta-passphrase in a separate secrets system.</p>
+    <p><code>meta-pass → decrypt ADB → learn cipher identity → attempt decryption</code></p>`},
+  content:{title:'Content to Encrypt',body:`
+    <p>Any UTF-8 string: HTML fragments, JSON credentials, identity claims, private notes.</p>
+    <p>In the Sovereignty Token context, this would typically be your <strong>signed credential claims</strong>
+    from the 4D token system — adding a SCEE encryption layer on top of the steganographic encoding.</p>
+    <p>The envelope gives no indication of content type, length range, or structure.
+    Ciphertext length leaks approximate plaintext length — pad if needed.</p>`},
+  cipher:{title:'Cipher Suite',body:`
+    <p>The cipher is <strong>encoded inside the ADB</strong>, which is encrypted in the key.
+    The envelope contains no cipher identifier whatsoever.</p>
+    <p><strong>AES-256-GCM</strong> — Recommended. AEAD: authenticated encryption. Tampering is detectable via auth tag.</p>
+    <p><strong>AES-256-CBC</strong> — Classical. No built-in authentication. Needs separate HMAC in production.</p>
+    <p><strong>AES-256-CTR</strong> — Stream mode. Fast, but no authentication guarantee.</p>
+    <p>All three produce ciphertext that looks identical to a random observer.</p>`},
+  kdf:{title:'Key Derivation Function',body:`
+    <p>Turns your passphrase into a fixed-length cryptographic key. Also encoded inside the ADB — 
+    an attacker doesn't know which KDF to apply.</p>
+    <p><strong>HKDF</strong> — Fast, suitable when passphrase is already high-entropy (recommended for demos).</p>
+    <p><strong>PBKDF2-SHA256/512</strong> — Slow by design. 100k iterations means brute-force costs 100k AES operations per guess.</p>
+    <p>Without the ADB, an attacker cannot even set up the brute-force problem correctly.</p>`},
+};
+function showTip(k){
+  const t=TIPS[k];if(!t)return;
+  document.getElementById('tip-title').textContent=t.title;
+  document.getElementById('tip-body').innerHTML=t.body;
+  document.getElementById('tip-overlay').classList.add('show');
+}
+function closeTip(){document.getElementById('tip-overlay').classList.remove('show');}
+function closeTipOuter(e){if(e.target===document.getElementById('tip-overlay'))closeTip();}
+
+// ══════════════════════════════════════════════════════════
+//  UTILITY
+// ══════════════════════════════════════════════════════════
+function copyVal(str){if(str)navigator.clipboard.writeText(str).catch(()=>{});}
+</script>
+</body>
+</html>

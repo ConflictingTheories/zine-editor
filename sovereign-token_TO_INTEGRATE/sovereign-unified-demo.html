@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign · Unified Trust Layer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg: #030308;
+            --bg2: #080812;
+            --accent: #7c5cfc;
+            --accent2: #3ef0c0;
+            --glass: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.08);
+            --txt: #e8e4ff;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--txt);
+            font-family: 'Space Mono', monospace;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Noise Texture */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+            opacity: 0.04;
+            pointer-events: none;
+        }
+
+        /* Ambient Glows */
+        .orb {
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(124, 92, 252, 0.1) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
+        }
+
+        .orb-1 {
+            top: -200px;
+            right: -200px;
+        }
+
+        .orb-2 {
+            bottom: -200px;
+            left: -200px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 80px 40px;
+        }
+
+        header {
+            margin-bottom: 80px;
+        }
+
+        h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 0.9;
+            margin-bottom: 16px;
+        }
+
+        h1 span {
+            color: var(--accent);
+        }
+
+        .subtitle {
+            font-size: 18px;
+            opacity: 0.5;
+            max-width: 600px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        .card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 32px;
+            position: relative;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--accent2);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-label::before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            background: currentColor;
+            border-radius: 50%;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            background: #000;
+            border: 1px solid #222;
+            color: #fff;
+            padding: 16px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 14px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(124, 92, 252, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Identity Preview */
+        #tokenContainer {
+            width: 160px;
+            height: 160px;
+            margin: 24px auto;
+            border-radius: 50%;
+            background: #000;
+            border: 1px solid #333;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #tokenCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .empty-token {
+            opacity: 0.2;
+            font-size: 12px;
+        }
+
+        /* Live Output */
+        .live-area {
+            margin-top: 80px;
+            padding-top: 80px;
+            border-top: 1px solid var(--border);
+        }
+
+        .live-label {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 32px;
+            margin-bottom: 32px;
+        }
+
+        pre {
+            background: #000;
+            padding: 20px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+            border: 1px solid #111;
+            margin-top: 20px;
+            max-height: 200px;
+        }
+
+        @media (max-width: 800px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <div class="container">
+        <header>
+            <h1>Sovereign <span>Entity</span></h1>
+            <p class="subtitle">Unified Identity (4D PST) + Self-Coding Encryption (SCEE) + Distributed Access Control
+            </p>
+        </header>
+
+        <div class="grid">
+            <div class="section">
+                <form class="card" id="genForm" style="margin-bottom: 40px;" onsubmit="return false;">
+                    <div class="card-label">01 // Identity Generation</div>
+                    <input type="text" id="idInput" name="identity" placeholder="Sovereign Name (e.g. Satoshi)"
+                        value="Satoshi Nakamoto">
+                    <button type="submit" id="genBtn">Construct Personal Token</button>
+
+                    <div id="tokenContainer">
+                        <div class="empty-token">Awaiting Identity...</div>
+                        <canvas id="tokenCanvas" class="sov-hidden" width="128" height="128"></canvas>
+                    </div>
+                    <div id="idStatus" style="font-size: 11px; text-align: center; opacity: 0.4;">No soul-bound identity
+                        created yet.</div>
+                </form>
+
+                <form class="card" id="sealForm" onsubmit="return false;">
+                    <div class="card-label">02 // Content Publisher</div>
+                    <textarea id="msgInput" name="message" rows="4" placeholder="Confidential content to seal...">Dear world,
+
+Personal sovereignty is the only truth in a digital age. This message is sealed with my private 4D token.
+
+Regards,
+SN</textarea>
+                    <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 12px;">
+                        <input type="password" id="passInput" name="contentKey" placeholder="Content Key"
+                            value="secret123">
+                        <input type="password" id="metaInput" name="metaKey" placeholder="Meta Matrix Key"
+                            value="meta456">
+                    </div>
+                    <button type="submit" id="sealBtn" style="background: var(--txt); color: var(--bg);">Seal Gated
+                        Envelope</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="card" id="keychainCard">
+                <div class="card-label">03 // Keychain Data (Extension Sync)</div>
+                <div
+                    style="font-size: 11px; opacity: 0.6; margin-bottom: 16px; border-left: 2px solid var(--accent); padding-left: 12px;">
+                    <strong>IMPORTANT:</strong> Every time you seal new content, a unique commitment is generated. You
+                    MUST copy the new JSON below into your extension's keychain to allow auto-decoding.
+                </div>
+                <div id="keychainStatus" style="font-size: 12px; margin-bottom: 12px; color: var(--accent2);">Ready for
+                    construction...</div>
+                <pre id="keychainJson">{}</pre>
+                <button id="copyBtn"
+                    style="background: transparent; border: 1px solid var(--border); margin-top: 12px;">Copy JSON
+                    for Keychain</button>
+
+                <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid #1a1a25;">
+                    <div class="card-label">System State</div>
+                    <div style="font-size: 11px; opacity: 0.6; display: flex; flex-direction: column; gap: 8px;">
+                        <div id="stateToken">ID: <span>None</span></div>
+                        <div id="stateEnvelope">Envelope: <span>None</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="live-area">
+        <div class="live-label">Web Content Preview</div>
+        <div id="previewArea">
+            <p style="opacity: 0.2; font-style: italic;">Seal content to generate a live &lt;sovereign-content&gt;
+                component.</p>
+        </div>
+    </div>
+    </div>
+
+    <script type="module">
+        import { SovereignSDK, TokenRenderer } from './sovereign-sdk.js';
+        import './sovereign-content.js';
+
+        let currentToken = null;
+        let currentEnvelope = null;
+        let currentRenderer = null;
+        let gateId = 'sov-' + Math.random().toString(36).substr(2, 9);
+
+        const canvas = document.getElementById('tokenCanvas');
+        const display = document.querySelector('.empty-token');
+
+        // 01 Generate Identity
+        document.getElementById('genBtn').onclick = async () => {
+            const id = document.getElementById('idInput').value;
+            document.getElementById('idStatus').textContent = 'Constructing 4D Matrix...';
+
+            currentToken = await SovereignSDK.createToken({ id });
+
+            display.classList.add('sov-hidden');
+            canvas.classList.remove('sov-hidden');
+
+            if (currentRenderer) currentRenderer.stop();
+            currentRenderer = new TokenRenderer(canvas, currentToken.seed, currentToken.palette, 'unlocked');
+            currentRenderer.start();
+
+            document.getElementById('idStatus').textContent = `Identity Verified: ${id}`;
+            document.getElementById('stateToken').querySelector('span').textContent = currentToken.seed;
+            updateKeychain();
+        };
+
+        // 02 Seal Content
+        document.getElementById('sealBtn').onclick = async () => {
+            if (!currentToken) { alert('Construct an Identity first!'); return; }
+
+            const content = document.getElementById('msgInput').value;
+            const pass = document.getElementById('passInput').value;
+            const meta = document.getElementById('metaInput').value;
+
+            try {
+                const result = await SovereignSDK.encrypt(content, pass, meta);
+                currentEnvelope = result.envelope;
+
+                document.getElementById('stateEnvelope').querySelector('span').textContent = 'Sealed (Base64URL)';
+
+                // Inject Web Component
+                const preview = document.getElementById('previewArea');
+                preview.innerHTML = `
+          <sovereign-content 
+            label="${currentToken.claims.id}'s Private Dispatch" 
+            gate-id="${gateId}" 
+            envelope="${currentEnvelope}">
+          </sovereign-content>
+        `;
+
+                updateKeychain(result.key, pass, meta);
+            } catch (e) {
+                console.error(e);
+                alert('Sealing failed: ' + e.message);
+            }
+        };
+
+        function updateKeychain(key = '', pass = '', meta = '') {
+            const data = {
+                label: (currentToken?.claims.id || 'Default') + "'s Key",
+                gateId: gateId,
+                key: key,
+                passphrase: pass,
+                metaPassphrase: meta
+            };
+            document.getElementById('keychainJson').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('keychainStatus').textContent = 'Keychain Synced';
+        }
+
+        document.getElementById('copyBtn').onclick = () => {
+            const text = document.getElementById('keychainJson').textContent;
+            navigator.clipboard.writeText(text);
+            const btn = document.getElementById('copyBtn');
+            const original = btn.textContent;
+            btn.textContent = 'JSON Copied!';
+            btn.style.borderColor = 'var(--accent2)';
+            setTimeout(() => { btn.textContent = original; btn.style.borderColor = 'var(--border)'; }, 2000);
+        };
+    </script>
+</body>
+
+</html>
