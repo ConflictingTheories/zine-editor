@@ -64,6 +64,63 @@ input[type="submit"]:disabled {
     cursor: not-allowed;
 }
 
+/* Premium Button Style */
+.btn-premium {
+    background: linear-gradient(135deg, var(--vp-accent), #b8960c);
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+}
+
+.btn-premium:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e5c158, var(--vp-accent));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
+}
+
+.btn-premium:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* Secondary Button Style */
+.btn-secondary {
+    background: var(--vp-surface2);
+    color: var(--vp-text);
+    border: 1px solid var(--vp-border);
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--vp-surface);
+    border-color: var(--vp-accent);
+}
+
+/* Primary Button Style */
+.btn-primary {
+    background: var(--vp-accent2);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #7c3aed;
+    transform: translateY(-1px);
+}
+
 input[type="text"],
 input[type="email"],
 input[type="password"],

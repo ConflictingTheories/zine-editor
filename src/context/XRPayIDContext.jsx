@@ -40,19 +40,47 @@ const XRPayIDProvider = ({ children }) => {
         const headers = { 'Content-Type': 'application/json' }
         headers['Authorization'] = `Bearer ${token}`
 
-        const res = await fetch('/api' + endpoint, {
-            method,
-            headers,
-            body: body ? JSON.stringify(body) : null
-        })
+        try {
+            const res = await fetch('/api' + endpoint, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null
+            })
 
-        if (!res.ok) {
-            const error = await res.json().catch(() => ({ error: 'Request failed' }))
-            // If session expired, don't crash the context, let VPContext handle logout
-            throw new Error(error.error || 'Request failed')
+            // Handle 401/403 gracefully - return null instead of throwing
+            if (res.status === 401 || res.status === 403) {
+                console.warn(`Auth required for ${endpoint}: ${res.status}`)
+                return null
+            }
+
+            if (!res.ok) {
+                // Try to parse error as JSON, fallback to text
+                let errorMessage = 'Request failed'
+                try {
+                    const errorData = await res.json()
+                    errorMessage = errorData.error || errorData.message || `HTTP ${res.status}`
+                } catch (e) {
+                    try {
+                        const text = await res.text()
+                        errorMessage = text || `HTTP ${res.status}`
+                    } catch (textErr) {
+                        errorMessage = `HTTP ${res.status}`
+                    }
+                }
+                throw new Error(errorMessage)
+            }
+
+            // Handle empty responses
+            const contentType = res.headers.get('content-type')
+            if (!contentType || !contentType.includes('application/json')) {
+                return null
+            }
+
+            return res.json()
+        } catch (err) {
+            console.error(`API error for ${endpoint}:`, err)
+            throw err
         }
-
-        return res.json()
     }
 
     // Load initial data
@@ -76,35 +104,30 @@ const XRPayIDProvider = ({ children }) => {
 
         try {
             const [walletRes, creditsRes, tokensRes, trustLinesRes, subsRes, bidsRes, transactionsRes] = await Promise.all([
-                api('/wallet').catch(() => ({ xrp_address: null, payid: null, is_verified: false })),
-                api('/credits/balance').catch(() => ({ balance: 0 })),
-                api('/tokens').catch(() => []),
-                api('/trustlines').catch(() => []),
-                api('/subscriptions').catch(() => []),
-                api('/bids').catch(() => []),
-                api('/transactions').catch(() => [])
+                api('/wallet').catch(() => null),
+                api('/credits/balance').catch(() => null),
+                api('/tokens').catch(() => null),
+                api('/trustlines').catch(() => null),
+                api('/subscriptions').catch(() => null),
+                api('/bids').catch(() => null),
+                api('/transactions').catch(() => null)
             ])
-
-            // Get subscribers
-            let subscribersRes = []
-            try {
-                subscribersRes = await api('/subscriptions?type=subscribers')
-            } catch (e) { }
 
             setXrState(prev => ({
                 ...prev,
-                wallet: walletRes,
-                credits: creditsRes.balance || 0,
-                tokens: tokensRes,
-                trustLines: trustLinesRes,
-                subscriptions: subsRes,
-                subscribers: subscribersRes,
-                bids: bidsRes,
-                transactions: transactionsRes,
+                wallet: walletRes || null,
+                credits: creditsRes?.balance || 0,
+                tokens: Array.isArray(tokensRes) ? tokensRes : [],
+                trustLines: Array.isArray(trustLinesRes) ? trustLinesRes : [],
+                subscriptions: Array.isArray(subsRes) ? subsRes : [],
+                subscribers: [], // Would need separate endpoint
+                bids: Array.isArray(bidsRes) ? bidsRes : [],
+                transactions: Array.isArray(transactionsRes) ? transactionsRes : [],
                 isLoading: false,
                 error: null
             }))
         } catch (err) {
+            console.error('Failed to load XRPayID data:', err)
             setXrState(prev => ({
                 ...prev,
                 isLoading: false,
@@ -112,6 +135,7 @@ const XRPayIDProvider = ({ children }) => {
             }))
         }
     }
+
 
     useEffect(() => {
         loadData()
@@ -132,23 +156,34 @@ const XRPayIDProvider = ({ children }) => {
     }
 
     // Token functions
-    const createToken = async (tokenCode, tokenName, description, initialSupply, pricePerToken) => {
-        const result = await api('/tokens/create', 'POST', {
-            tokenCode,
-            tokenName,
-            description,
-            initialSupply,
-            pricePerToken
-        })
-        await loadData()
-        return result
+    const createToken = async (tokenData) => {
+        try {
+            const result = await api('/tokens/create', 'POST', tokenData)
+            if (result === null) {
+                throw new Error('Authentication required to create token')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to create token:', err)
+            throw err
+        }
     }
 
     const buyTokens = async (tokenId, amount) => {
-        const result = await api(`/tokens/${tokenId}/buy`, 'POST', { amount })
-        await loadData()
-        return result
+        try {
+            const result = await api(`/tokens/${tokenId}/buy`, 'POST', { amount })
+            if (result === null) {
+                throw new Error('Authentication required to buy tokens')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to buy tokens:', err)
+            throw err
+        }
     }
+
 
     // Trust line functions
     const createTrustLine = async (tokenId, limit) => {
@@ -159,58 +194,116 @@ const XRPayIDProvider = ({ children }) => {
 
     // Subscription functions
     const subscribe = async (creatorId, tokenId, amountPerPeriod) => {
-        const result = await api('/subscriptions/subscribe', 'POST', {
-            creatorId,
-            tokenId,
-            amountPerPeriod
-        })
-        await loadData()
-        return result
+        try {
+            const result = await api('/subscriptions/subscribe', 'POST', {
+                creatorId,
+                tokenId,
+                amountPerPeriod
+            })
+            if (result === null) {
+                throw new Error('Authentication required to subscribe')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to subscribe:', err)
+            throw err
+        }
     }
 
     const cancelSubscription = async (subscriptionId) => {
-        const result = await api('/subscriptions/cancel', 'POST', { subscriptionId })
-        await loadData()
-        return result
+        try {
+            const result = await api('/subscriptions/cancel', 'POST', { subscriptionId })
+            if (result === null) {
+                throw new Error('Authentication required to cancel subscription')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to cancel subscription:', err)
+            throw err
+        }
     }
 
     // Bid functions
     const placeBid = async (zineId, amount, message) => {
-        const result = await api('/bids/create', 'POST', { zineId, amount, message })
-        await loadData()
-        return result
+        try {
+            const result = await api('/bids/create', 'POST', { zineId, amount, message })
+            if (result === null) {
+                throw new Error('Authentication required to place bid')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to place bid:', err)
+            throw err
+        }
     }
 
     const acceptBid = async (bidId) => {
-        const result = await api(`/bids/${bidId}/accept`, 'POST', {})
-        await loadData()
-        return result
+        try {
+            const result = await api(`/bids/${bidId}/accept`, 'POST', {})
+            if (result === null) {
+                throw new Error('Authentication required to accept bid')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to accept bid:', err)
+            throw err
+        }
     }
 
     const rejectBid = async (bidId) => {
-        const result = await api(`/bids/${bidId}/reject`, 'POST', {})
-        await loadData()
-        return result
+        try {
+            const result = await api(`/bids/${bidId}/reject`, 'POST', {})
+            if (result === null) {
+                throw new Error('Authentication required to reject bid')
+            }
+            await loadData()
+            return result
+        } catch (err) {
+            console.error('Failed to reject bid:', err)
+            throw err
+        }
     }
 
     // Reputation functions
     const getReputation = async (userId) => {
-        const result = await api(`/reputation/${userId}`)
-        return result
+        try {
+            const result = await api(`/reputation/${userId}`)
+            return result
+        } catch (err) {
+            console.error('Failed to get reputation:', err)
+            return null
+        }
     }
 
     // Zine tokenization
     const setTokenGate = async (zineId, tokenPrice, isTokenGated) => {
-        const result = await api(`/zines/${zineId}/token-gate`, 'POST', {
-            tokenPrice,
-            isTokenGated
-        })
-        return result
+        try {
+            const result = await api(`/zines/${zineId}/token-gate`, 'POST', {
+                tokenPrice,
+                isTokenGated
+            })
+            if (result === null) {
+                throw new Error('Authentication required to set token gate')
+            }
+            return result
+        } catch (err) {
+            console.error('Failed to set token gate:', err)
+            throw err
+        }
     }
 
     const checkAccess = async (zineId) => {
-        const result = await api(`/zines/${zineId}/access`)
-        return result
+        try {
+            const result = await api(`/zines/${zineId}/access`)
+            return result
+        } catch (err) {
+            console.error('Failed to check access:', err)
+            return { hasAccess: false }
+        }
     }
 
     const value = {
@@ -249,4 +342,3 @@ const XRPayIDProvider = ({ children }) => {
 }
 
 export { XRPayIDContext, XRPayIDProvider }
-

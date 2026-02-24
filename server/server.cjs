@@ -79,10 +79,10 @@ app.get('/api/health', (req, res) => {
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.sendStatus(401);
+    if (!token) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication token required' });
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) return res.status(403).json({ error: 'Forbidden', message: 'Invalid or expired token' });
         req.user = user;
         next();
     });

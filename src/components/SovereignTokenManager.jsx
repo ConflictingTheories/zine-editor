@@ -26,10 +26,16 @@ export default function SovereignTokenManager({ userId, onTokenCreated }) {
 
     const loadTokens = async () => {
         setLoading(true);
+        setError(null);
         try {
             const result = await getUserSovereignTokens();
-            if (result && Array.isArray(result)) {
+            if (result === null) {
+                // User not authenticated - show empty state
+                setTokens([]);
+            } else if (Array.isArray(result)) {
                 setTokens(result);
+            } else {
+                setTokens([]);
             }
         } catch (err) {
             console.error('Failed to load tokens:', err);
@@ -51,7 +57,9 @@ export default function SovereignTokenManager({ userId, onTokenCreated }) {
                 platform: 'void-press'
             });
 
-            if (result && result.tokenId) {
+            if (result === null) {
+                setError('Please log in to create a sovereign token');
+            } else if (result && result.tokenId) {
                 setSuccess('Token created successfully!');
                 setNewTokenIdentity('');
                 setShowCreateForm(false);
@@ -59,6 +67,8 @@ export default function SovereignTokenManager({ userId, onTokenCreated }) {
                 if (onTokenCreated) {
                     onTokenCreated(result);
                 }
+            } else if (result && result.error) {
+                setError(result.error);
             }
         } catch (err) {
             console.error('Failed to create token:', err);
@@ -131,7 +141,7 @@ export default function SovereignTokenManager({ userId, onTokenCreated }) {
                 {tokens.length === 0 ? (
                     <div style={styles.empty}>
                         <p>No sovereign tokens yet.</p>
-                        <p>Create one to sign and verify your content.</p>
+                        <p>{error ? 'Please log in to view your tokens.' : 'Create one to sign and verify your content.'}</p>
                     </div>
                 ) : (
                     tokens.map((token) => (
@@ -340,4 +350,3 @@ const styles = {
         marginTop: '12px',
     },
 };
-

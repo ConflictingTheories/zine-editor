@@ -75,12 +75,12 @@ function TopNav() {
                     {vpState.user ? (
                         <div style={styles.userProfile}>
                             <div className="topnav-avatar">{vpState.user.username[0]}</div>
-                            <button onClick={logout}>
+                            <button onClick={logout} className="btn-secondary" style={{ padding: '4px 12px', fontSize: '12px' }}>
                                 Logout
                             </button>
                         </div>
                     ) : (
-                        <button onClick={handleAuth} className="btn-primary" style={styles.loginBtn}>
+                        <button onClick={handleAuth} className="btn-premium" style={styles.loginBtn}>
                             Login
                         </button>
                     )}

@@ -14,9 +14,34 @@ async function request(endpoint, method = 'GET', body = null) {
         body: body ? JSON.stringify(body) : null,
     });
 
+    // Handle 401/403 gracefully - return null instead of throwing
+    if (response.status === 401 || response.status === 403) {
+        console.warn(`Auth required for ${endpoint}: ${response.status}`);
+        return null;
+    }
+
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'API request failed');
+        // Try to parse error as JSON, fallback to text
+        let errorMessage = 'API request failed';
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || `HTTP ${response.status}`;
+        } catch (e) {
+            // If JSON parsing fails, try to get text
+            try {
+                const text = await response.text();
+                errorMessage = text || `HTTP ${response.status}`;
+            } catch (textErr) {
+                errorMessage = `HTTP ${response.status}`;
+            }
+        }
+        throw new Error(errorMessage);
+    }
+
+    // Handle empty responses
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        return null;
     }
 
     return response.json();
