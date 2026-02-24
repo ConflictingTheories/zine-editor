@@ -1,5 +1,6 @@
 import React from 'react'
 import ShaderElement from './ShaderElement.jsx'
+import AudioViz from './AudioViz.jsx'
 
 const BALLOON_PROPS = {
     dialog: { background: '#fff', border: '2px solid #000', borderRadius: '20px' },
@@ -156,18 +157,19 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
                 <div style={styles.video}>VIDEO: {el.src || 'No Source'}</div>
             )
         case 'audio-log':
+        case 'audio-viz':
             return (
-                <div style={styles.audioLog}>
-                    <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
-                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▶</div>
-                        <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
-                    </div>
-                    <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[VISUALIZER: {el.vizTheme}]</div>
-                </div>
+                <AudioViz
+                    src={el.src}
+                    color={el.color || 'var(--vp-accent)'}
+                    width={el.width}
+                    height={el.height}
+                />
             )
         default:
             return null
     }
 }
+
 
 export default ElementContent
