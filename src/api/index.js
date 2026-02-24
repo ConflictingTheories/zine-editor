@@ -44,6 +44,10 @@ export async function getZineContributors(zineId) {
     return request(`/zines/${zineId}/contributors`);
 }
 
+export async function getZineProducers(zineId) {
+    return request(`/zines/${zineId}/producers`);
+}
+
 export async function checkZineAccess(zineId) {
     return request(`/zines/${zineId}/access`);
 }

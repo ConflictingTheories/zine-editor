@@ -53,14 +53,18 @@ app.use((req, res, next) => {
 });
 
 const dbEnv = NODE_ENV === 'production' ? 'production' : 'development';
-const db = knex(knexConfig[dbEnv]);
+const knexEnvConfig = {
+    ...knexConfig[dbEnv],
+    connection: {
+        filename: DB_PATH
+    }
+};
+const db = knex(knexEnvConfig);
 
-// Run migrations on startup (optional, but good for professional setup)
-if (dbEnv === 'production') {
-    db.migrate.latest()
-        .then(() => console.log('Database migrations completed'))
-        .catch(err => console.error('Database migration failed:', err));
-}
+// Run migrations on startup
+db.migrate.latest()
+    .then(() => console.log('Database migrations completed'))
+    .catch(err => console.error('Database migration failed:', err));
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -1681,44 +1685,39 @@ app.get('/api/wallet', authenticateToken, (req, res) => {
 // ---- Tokens API ----
 
 // Create new token (creator issues their own currency)
-app.post('/api/tokens/create', authenticateToken, (req, res) => {
-    const { tokenCode, tokenName, description, initialSupply, pricePerToken, iconUrl } = req.body;
+app.post('/api/tokens/create', authenticateToken, async (req, res) => {
+    const { tokenCode, tokenName, description, iconUrl, initialSupply, pricePerToken } = req.body;
 
     if (!tokenCode || !tokenName) {
         return res.status(400).json({ error: 'Token code and name required' });
     }
 
     // Generate XRPL-compatible currency code (max 20 chars, uppercase)
-    const xrpCurrencyCode = tokenCode.toUpperCase().slice(0, 20);
+    const xrpCurrencyCode = tokenCode.length === 3 ? tokenCode.toUpperCase() : Buffer.from(tokenCode).toString('hex').padEnd(40, '0').toUpperCase();
 
-    app.post('/api/tokens/create', authenticateToken, async (req, res) => {
-        const { tokenCode, tokenName, description, iconUrl, initialSupply, pricePerToken } = req.body;
-        const xrpCurrencyCode = tokenCode.length === 3 ? tokenCode.toUpperCase() : Buffer.from(tokenCode).toString('hex').padEnd(40, '0').toUpperCase();
+    try {
+        const [tokenId] = await db('tokens').insert({
+            creator_id: req.user.id,
+            token_code: tokenCode.toUpperCase(),
+            token_name: tokenName,
+            description: description || '',
+            icon_url: iconUrl || null,
+            initial_supply: initialSupply || 1000000,
+            current_supply: initialSupply || 1000000,
+            price_per_token: pricePerToken || 0.01,
+            xrp_currency_code: xrpCurrencyCode
+        });
 
-        try {
-            const [tokenId] = await db('tokens').insert({
-                creator_id: req.user.id,
-                token_code: tokenCode.toUpperCase(),
-                token_name: tokenName,
-                description: description || '',
-                icon_url: iconUrl || null,
-                initial_supply: initialSupply || 1000000,
-                current_supply: initialSupply || 1000000,
-                price_per_token: pricePerToken || 0.01,
-                xrp_currency_code: xrpCurrencyCode
-            });
+        // Initialize reputation for creator
+        await db('reputation')
+            .insert({ user_id: req.user.id, score: 0, level: 'creator' })
+            .onConflict('user_id')
+            .ignore();
 
-            // Initialize reputation for creator
-            await db('reputation')
-                .insert({ user_id: req.user.id, score: 0, level: 'creator' })
-                .onConflict('user_id')
-                .ignore();
-
-            res.json({ success: true, tokenId, tokenCode: xrpCurrencyCode, tokenName });
-        } catch (err) {
-            res.status(500).json({ error: err.message });
-        }
-    });
+        res.json({ success: true, tokenId, tokenCode: xrpCurrencyCode, tokenName });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Get all active tokens (marketplace)
@@ -2605,6 +2604,53 @@ app.get('/api/zines/:id/contributors', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// Get producers (contributors with aggregated data and tiers) for a zine
+app.get('/api/zines/:id/producers', async (req, res) => {
+    try {
+        // Get aggregated producer data - group by user and show their total contribution and tier
+        const producers = await db('contributions as c')
+            .join('users as u', 'c.user_id', 'u.id')
+            .select(
+                'c.user_id',
+                'u.username',
+                db.raw('SUM(c.amount) as total_contributed'),
+                db.raw('MAX(c.credit_tier) as credit_tier'),
+                db.raw('COUNT(*) as contribution_count'),
+                db.raw('MAX(c.created_at) as latest_contribution')
+            )
+            .where('c.zine_id', req.params.id)
+            .groupBy('c.user_id', 'u.username')
+            .orderBy('total_contributed', 'desc');
+
+        // Format the credit tier for display
+        const formattedProducers = producers.map(p => ({
+            user_id: p.user_id,
+            username: p.username,
+            total_contributed: parseFloat(p.total_contributed) || 0,
+            credit_tier: p.credit_tier || 'supporter',
+            tier_display: formatCreditTier(p.credit_tier),
+            contribution_count: p.contribution_count,
+            latest_contribution: p.latest_contribution
+        }));
+
+        res.json(formattedProducers);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Helper function to format credit tier for display
+function formatCreditTier(tier) {
+    if (!tier) return 'Supporter';
+    const tierMap = {
+        'executive_producer': 'Executive Producer',
+        'associate_producer': 'Associate Producer',
+        'supporter': 'Supporter',
+        'contributor': 'Contributor'
+    };
+    return tierMap[tier] || tier.charAt(0).toUpperCase() + tier.slice(1).replace(/_/g, ' ');
+}
 
 // Process crowdfunding payment (after Stripe success)
 app.post('/api/zines/:id/fund', authenticateToken, async (req, res) => {

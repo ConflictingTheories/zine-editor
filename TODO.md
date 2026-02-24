@@ -1,61 +1,107 @@
-# Integration Plan - Void Press (Zine Publishing Platform)
+# Void Press - TODO
 
-## Current Status
-✅ Frontend builds successfully (vite build)
-✅ Backend server loads without errors  
-✅ Docker builds for both frontend and backend work
-✅ Core features exist: Auth, Zine CRUD, MCP, Economy, Sovereign Tokens, Crowdfunding
+## Current Status: CRITICAL FIXES IN PROGRESS
 
-## TODO List
+### 🚨 CRITICAL: Auth & API Routing Issues (IN PROGRESS)
 
-### Phase 1: Database Schema Fixes (Critical)
-- [ ] 1.1 Add missing columns to zines table for crowdfunding and token gating
-- [ ] 1.2 Ensure all migrations run correctly
-- [ ] 1.3 Verify database schema integrity
+**Problem**: Login/Register completely broken, premium modal pushed into corner
 
-### Phase 2: Sovereign Token Client Integration
-- [ ] 2.1 Copy sovereign-token.js to src/lib/
-- [ ] 2.2 Copy sovereign-gate.js to src/lib/
-- [ ] 2.3 Copy self-coding-encryption.js to src/lib/
-- [ ] 2.4 Integrate with SovereignTokenManager component
-- [ ] 2.5 Add visual token rendering to frontend
+**Root Causes Identified**:
+1. ✅ API_BASE_URL in constants.js defaults to '/api' (correct for dev with proxy)
+2. ✅ VPContext.jsx api() function uses hardcoded '/api' - needs consistency
+3. ✅ Error handling added to login/register functions
+4. ❌ Need to verify CORS configuration on backend
+5. ❌ Need to check modal CSS/styling issues
 
-### Phase 3: Producer Credits System
-- [ ] 3.1 Add contribution tier tracking
-- [ ] 3.2 Add producer credits UI component
-- [ ] 3.3 Connect to crowdfunding endpoints
+**Files Modified**:
+- `src/constants.js` - API_BASE_URL set to '/api' for dev proxy
+- `src/context/VPContext.jsx` - Added error handling, logging, and improved error messages
 
-### Phase 4: Docker Configuration Fixes
-- [ ] 4.1 Fix docker-compose.yml context paths
-- [ ] 4.2 Ensure proper environment variable handling
-- [ ] 4.3 Test full docker-compose build
+**Next Steps**:
+1. Test login/register with browser
+2. Fix modal CSS if still broken
+3. Verify backend CORS allows frontend origin
 
-### Phase 5: Final Verification
-- [ ] 5.1 Verify npm run build succeeds
-- [ ] 5.2 Verify node server loads without errors
-- [ ] 5.3 Verify docker builds succeed
+---
 
-## Implementation Notes
+## Routing Architecture (COMPLETED)
 
-### Database Migration Strategy
-The zines table needs additional columns for:
-- `funding_goal` - decimal for crowdfunding target
-- `amount_raised` - decimal for current funding
-- `funding_currency` - string (USD, etc)
-- `funding_deadline` - timestamp
-- `is_funded` - boolean
-- `access_level` - string (public, private, token_gated)
-- `monetization_type` - string (free, crowdfund, subscription, one_time)
-- `premium_price` - decimal
-- `requires_token` - boolean
-- `gate_id` - string
+### Development Mode (yarn dev + yarn server)
+- Frontend: http://localhost:5173 (Vite dev server)
+- Backend: http://localhost:3000 (Express server)
+- API calls: `/api/*` → Vite proxy → localhost:3000
+- Vite config handles proxy automatically
 
-### Sovereign Token Integration
-The PoC files in `sovereign-token_TO_INTEGRATE/` need to be:
-1. Copied to `src/lib/sovereign/` directory
-2. Imported in components that need them
-3. Connected to the API endpoints already in place
+### Docker Mode
+- Nginx: http://localhost:5173 (port mapped to 80)
+- Frontend: Served as static files by Nginx
+- Backend: http://backend:3000 (internal Docker network)
+- API calls: `/api/*` → Nginx reverse proxy → backend:3000
 
-### Docker Issues
-The docker-compose.yml references context "." but Dockerfile copies from ".." - needs fixing
+**Files**:
+- `vite.config.js` - Dev proxy configuration
+- `loadbalancer/nginx.conf` - Docker reverse proxy
+- `docker/docker-compose.yml` - Service orchestration
+- `docker/Dockerfile.frontend` - Frontend build + nginx
 
+---
+
+## Completed Tasks
+
+### ✅ Routing Fix (COMPLETED)
+- Fixed vite.config.js proxy to point to localhost:3000
+- Updated nginx.conf for Docker deployment
+- Set API_BASE_URL to '/api' for relative path routing
+- Docker compose configures frontend with VITE_API_BASE_URL=/api
+
+### ✅ Auth Error Handling (COMPLETED)
+- Added try-catch to login() function
+- Added try-catch to register() function
+- Added toast notifications for errors
+- Added console logging for debugging
+
+---
+
+## Remaining Issues
+
+### 🔴 HIGH PRIORITY
+1. **Modal Display** - Premium modal pushed into corner
+   - Check CSS for modal positioning
+   - Verify z-index and transform properties
+   
+2. **CORS Verification** - Ensure backend accepts requests
+   - Test with browser dev tools
+   - Check preflight OPTIONS requests
+
+### 🟡 MEDIUM PRIORITY
+3. **API Consistency** - Ensure all API calls use proper base URL
+   - Check src/api/index.js
+   - Verify no hardcoded URLs remain
+
+4. **Testing** - Full auth flow test
+   - Register new user
+   - Login existing user
+   - Verify token persistence
+
+---
+
+## Testing Checklist
+
+- [ ] Start backend: `cd server && node server.cjs`
+- [ ] Start frontend: `yarn dev`
+- [ ] Open browser to http://localhost:5173
+- [ ] Try to register new account
+- [ ] Check browser console for errors
+- [ ] Check network tab for API requests
+- [ ] Verify modal displays correctly
+- [ ] Test login with existing account
+
+---
+
+## Notes
+
+**Last Updated**: 2024 (Current Session)
+
+**Current Branch**: main
+
+**Next Action**: Test in browser and fix any remaining issues

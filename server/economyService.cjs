@@ -1,4 +1,10 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+// Stripe initialization - handle missing API key gracefully
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+    stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+} else {
+    console.warn('WARNING: STRIPE_SECRET_KEY not set - Stripe payments will be simulated');
+}
 const xrpl = require('xrpl');
 const xrpService = require('./xrpService.cjs');
 const { encrypt, decrypt } = require('./encryption.cjs');
@@ -10,8 +16,8 @@ const CREDITS_PER_USD = 100;
  * Initialize Stripe with API key
  */
 function initStripe() {
-    if (!process.env.STRIPE_SECRET_KEY) {
-        console.warn('WARNING: STRIPE_SECRET_KEY not set - Stripe payments will be simulated');
+    if (!stripe) {
+        console.warn('WARNING: Stripe not initialized - payments will be simulated');
         return null;
     }
     return stripe;

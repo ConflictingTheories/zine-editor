@@ -6,7 +6,7 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { createPaymentIntent, getZineFunding, contributeToZine } from "../api/index.js";
+import { createPaymentIntent, getZineFunding, contributeToZine, getZineProducers } from "../api/index.js";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
@@ -88,6 +88,8 @@ export default function FundingPanel({ zine, onFunded, onContribute }) {
   const [error, setError] = useState(null);
   const [fundingInfo, setFundingInfo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [producers, setProducers] = useState([]);
+  const [showProducers, setShowProducers] = useState(false);
 
   // Load funding info
   useEffect(() => {
@@ -105,6 +107,24 @@ export default function FundingPanel({ zine, onFunded, onContribute }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load producers (contributors with tiers)
+  const loadProducers = async () => {
+    try {
+      const producerData = await getZineProducers(zine.id);
+      setProducers(producerData);
+    } catch (err) {
+      console.error('Failed to load producers:', err);
+    }
+  };
+
+  // Toggle producers display
+  const toggleProducers = () => {
+    if (!showProducers && producers.length === 0) {
+      loadProducers();
+    }
+    setShowProducers(!showProducers);
   };
 
   // Calculate remaining based on funding info
@@ -325,6 +345,75 @@ export default function FundingPanel({ zine, onFunded, onContribute }) {
             onCancel={() => setStep("input")}
           />
         </Elements>
+      )}
+
+      {/* Producer Credits Section */}
+      {fundingInfo?.amountRaised > 0 && (
+        <div style={{ marginTop: 20, borderTop: '1px solid #E8D5A8', paddingTop: 16 }}>
+          <button
+            onClick={toggleProducers}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6B5E52',
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: 0,
+              fontFamily: "'DM Sans', sans-serif"
+            }}
+          >
+            <span style={{ transform: showProducers ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>▶</span>
+            {showProducers ? 'Hide' : 'Show'} Producer Credits ({producers.length || fundingInfo?.contributorCount?.count || 0})
+          </button>
+
+          {showProducers && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {producers.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#6B5E52', fontStyle: 'italic' }}>No producers yet. Be the first!</p>
+              ) : (
+                producers.slice(0, 5).map((producer, idx) => (
+                  <div
+                    key={producer.user_id || idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      background: 'white',
+                      borderRadius: 6,
+                      border: producer.credit_tier === 'executive_producer' ? '1px solid #C8862A' : '1px solid #E8D5A8'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        background: producer.credit_tier === 'executive_producer' ? '#C8862A' : '#4b2c5e',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: 10,
+                        fontSize: 10,
+                        fontWeight: 'bold'
+                      }}>
+                        {producer.tier_display}
+                      </span>
+                      <span style={{ fontSize: 13, color: '#1A1410' }}>@{producer.username}</span>
+                    </div>
+                    <span style={{ fontSize: 12, color: '#6B5E52' }}>
+                      ${producer.total_contributed?.toFixed(2)}
+                    </span>
+                  </div>
+                ))
+              )}
+              {producers.length > 5 && (
+                <p style={{ fontSize: 11, color: '#6B5E52', textAlign: 'center' }}>
+                  +{producers.length - 5} more producers
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

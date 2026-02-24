@@ -6,38 +6,39 @@
  * Sensitive keys like JWT_SECRET, STRIPE_SECRET_KEY stay backend-only
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 export const APP_NAME = import.meta.env.VITE_APP_NAME || 'Void Press'
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0'
 
 // API Endpoints (derived from base URL)
+// Note: API_BASE_URL already includes '/api' prefix
 export const API = {
     AUTH: {
-        REGISTER: `${API_BASE_URL}/api/auth/register`,
-        LOGIN: `${API_BASE_URL}/api/auth/login`,
-        LOGOUT: `${API_BASE_URL}/api/auth/logout`,
-        VERIFY: `${API_BASE_URL}/api/auth/verify`,
+        REGISTER: `${API_BASE_URL}/auth/register`,
+        LOGIN: `${API_BASE_URL}/auth/login`,
+        LOGOUT: `${API_BASE_URL}/auth/logout`,
+        VERIFY: `${API_BASE_URL}/auth/verify`,
     },
     ZINES: {
-        LIST: `${API_BASE_URL}/api/zines`,
-        CREATE: `${API_BASE_URL}/api/zines`,
-        GET: (id) => `${API_BASE_URL}/api/zines/${id}`,
-        UPDATE: (id) => `${API_BASE_URL}/api/zines/${id}`,
-        DELETE: (id) => `${API_BASE_URL}/api/zines/${id}`,
-        PUBLISH: (id) => `${API_BASE_URL}/api/zines/${id}/publish`,
-        PUBLISHED: `${API_BASE_URL}/api/published`,
+        LIST: `${API_BASE_URL}/zines`,
+        CREATE: `${API_BASE_URL}/zines`,
+        GET: (id) => `${API_BASE_URL}/zines/${id}`,
+        UPDATE: (id) => `${API_BASE_URL}/zines/${id}`,
+        DELETE: (id) => `${API_BASE_URL}/zines/${id}`,
+        PUBLISH: (id) => `${API_BASE_URL}/zines/${id}/publish`,
+        PUBLISHED: `${API_BASE_URL}/published`,
     },
     CREDITS: {
-        GET_BALANCE: `${API_BASE_URL}/api/credits/balance`,
-        GET_TRANSACTIONS: `${API_BASE_URL}/api/credits/transactions`,
+        GET_BALANCE: `${API_BASE_URL}/credits/balance`,
+        GET_TRANSACTIONS: `${API_BASE_URL}/credits/transactions`,
     },
     PAYMENT: {
-        INITIATE: `${API_BASE_URL}/api/payment/initiate`,
-        CONFIRM: `${API_BASE_URL}/api/payment/confirm`,
+        INITIATE: `${API_BASE_URL}/payment/initiate`,
+        CONFIRM: `${API_BASE_URL}/payment/confirm`,
     },
     WALLET: {
-        GET: `${API_BASE_URL}/api/wallet`,
-        CREATE: `${API_BASE_URL}/api/wallet/create`,
+        GET: `${API_BASE_URL}/wallet`,
+        CREATE: `${API_BASE_URL}/wallet/create`,
     },
 }
 

@@ -139,34 +139,61 @@ const VPProvider = ({ children }) => {
         if (!vpState.isOnline) throw new Error('Offline')
         const headers = { 'Content-Type': 'application/json' }
         if (vpState.token) headers['Authorization'] = `Bearer ${vpState.token}`
-        const res = await fetch('/api' + endpoint, { method, headers, body: body ? JSON.stringify(body) : null })
+
+        // Import API_BASE_URL from constants - use dynamic import to avoid circular deps
+        const baseUrl = '/api'
+        const url = baseUrl + endpoint
+
+        console.log(`API ${method}:`, url)
+
+        const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : null })
         if (!res.ok) {
+            const errorText = await res.text()
+            console.error(`API Error ${res.status}:`, errorText)
             if (res.status === 401 || res.status === 403) {
                 setVpState(prev => ({ ...prev, user: null, token: null }))
                 localStorage.removeItem('vp_token')
                 localStorage.removeItem('vp_user')
             }
-            throw new Error(await res.text())
+            throw new Error(errorText || `HTTP ${res.status}`)
         }
         return res.json()
     }
 
     const login = async (email, password) => {
-        const res = await api('/auth/login', 'POST', { email, password })
-        setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
-        localStorage.setItem('vp_token', res.token)
-        localStorage.setItem('vp_user', JSON.stringify(res.user))
-        closeModal('authModal')
-        toast(`Welcome, ${res.user.username}!`, 'success')
+        try {
+            const res = await api('/auth/login', 'POST', { email, password })
+            if (!res.token) {
+                throw new Error('Invalid response from server')
+            }
+            setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
+            localStorage.setItem('vp_token', res.token)
+            localStorage.setItem('vp_user', JSON.stringify(res.user))
+            closeModal('authModal')
+            toast(`Welcome, ${res.user.username}!`, 'success')
+        } catch (err) {
+            console.error('Login error:', err)
+            toast('Login failed: ' + (err.message || 'Please check your credentials'), 'error')
+            throw err
+        }
     }
 
     const register = async (email, password, username) => {
-        const res = await api('/auth/register', 'POST', { email, password, username })
-        setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
-        localStorage.setItem('vp_token', res.token)
-        localStorage.setItem('vp_user', JSON.stringify(res.user))
-        closeModal('authModal')
-        toast(`Welcome, ${res.user.username}!`, 'success')
+        try {
+            const res = await api('/auth/register', 'POST', { email, password, username })
+            if (!res.token) {
+                throw new Error('Invalid response from server')
+            }
+            setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
+            localStorage.setItem('vp_token', res.token)
+            localStorage.setItem('vp_user', JSON.stringify(res.user))
+            closeModal('authModal')
+            toast(`Welcome, ${res.user.username}!`, 'success')
+        } catch (err) {
+            console.error('Register error:', err)
+            toast('Registration failed: ' + (err.message || 'Please try again'), 'error')
+            throw err
+        }
     }
 
     const logout = () => {

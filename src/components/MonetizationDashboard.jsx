@@ -6,6 +6,7 @@ import TokenMarketplace from './TokenMarketplace'
 import TokenIssuance from './TokenIssuance'
 import SubscriptionManager from './SubscriptionManager'
 import CreatorMonetization from './CreatorMonetization'
+import SovereignTokenManager from './SovereignTokenManager'
 import WalletModal from './WalletModal'
 
 const MonetizationDashboard = () => {
@@ -25,6 +26,8 @@ const MonetizationDashboard = () => {
                 return <SubscriptionManager />
             case 'creator':
                 return <CreatorMonetization />
+            case 'sovereign':
+                return <SovereignTokenManager userId={xrState.user?.id} />
             default:
                 return (
                     <div className="overview-dashboard">
@@ -63,6 +66,11 @@ const MonetizationDashboard = () => {
                                 <span className="action-icon">💎</span>
                                 <span className="action-title">Creator Tools</span>
                                 <span className="action-desc">Monetize your content</span>
+                            </button>
+                            <button className="action-card" onClick={() => setActiveView('sovereign')}>
+                                <span className="action-icon">🔐</span>
+                                <span className="action-title">Sovereign Tokens</span>
+                                <span className="action-desc">Identity & content gating</span>
                             </button>
                         </div>
 
@@ -131,6 +139,12 @@ const MonetizationDashboard = () => {
                     onClick={() => setActiveView('creator')}
                 >
                     Creator Tools
+                </button>
+                <button
+                    className={`nav-btn ${activeView === 'sovereign' ? 'active' : ''}`}
+                    onClick={() => setActiveView('sovereign')}
+                >
+                    🔐 Sovereign
                 </button>
             </div>
 

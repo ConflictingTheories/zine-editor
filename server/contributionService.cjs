@@ -3,7 +3,13 @@ const Stripe = require('stripe');
 const knex = require('./knexfile.cjs');
 const CONFIG = require('./config.cjs');
 
-const stripe = new Stripe(CONFIG.payment.stripeSecretKey);
+// Lazy initialize Stripe - only create instance if API key is available
+let stripe = null;
+if (CONFIG.payment.stripeSecretKey) {
+  stripe = new Stripe(CONFIG.payment.stripeSecretKey);
+} else {
+  console.warn('WARNING: STRIPE_SECRET_KEY not set - Stripe payments will be simulated');
+}
 
 async function createContributionIntent(zine_id, amount_dollars, user_id) {
   if (!zine_id) throw new Error("zine_id is required");
@@ -24,6 +30,15 @@ async function createContributionIntent(zine_id, amount_dollars, user_id) {
 
   const amountCents = Math.round(chargeAmount * 100);
 
+  // If Stripe not configured, return mock response
+  if (!stripe) {
+    return {
+      clientSecret: "mock_" + Date.now(),
+      amountCharged: chargeAmount,
+      mock: true
+    };
+  }
+
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: "usd",
@@ -38,6 +53,12 @@ async function createContributionIntent(zine_id, amount_dollars, user_id) {
 }
 
 async function handleStripeWebhook(body, signature) {
+  // If Stripe not configured, skip webhook processing
+  if (!stripe) {
+    console.warn('Stripe not configured - skipping webhook processing');
+    return { received: true, mock: true };
+  }
+
   let event;
   try {
     event = stripe.webhooks.constructEvent(

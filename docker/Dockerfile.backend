@@ -1,4 +1,4 @@
-# Use LTS Alpine version for small footprint
+# Use Node Alpine for smaller footprint
 FROM node:18-alpine
 
 WORKDIR /app
@@ -6,23 +6,21 @@ WORKDIR /app
 # Copy package files first to leverage Docker cache
 COPY package*.json ./
 
-# Install dependencies
-# Install dependencies
-# Using npm install with --legacy-peer-deps to handle conflicts
+# Install dependencies - using npm with --legacy-peer-deps
 RUN npm install --legacy-peer-deps
 
-# Copy source code
-COPY . .
+# Copy server source code and config
+COPY server ./server
 
-# Create data directory for SQLite persistence
-RUN mkdir -p data
+# Create data directory for SQLite persistence  
+RUN mkdir -p server/data
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV DB_PATH=/app/data/database.sqlite
+ENV DB_PATH=/app/server/data/database.sqlite
 
 EXPOSE 3000
 
 # Start the server
-CMD ["npm", "run", "server"]
+CMD ["node", "server/server.cjs"]

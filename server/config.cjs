@@ -38,9 +38,10 @@ const CONFIG = {
 
     // CORS
     cors: {
-        origins: (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:5175')
+        origins: (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:80')
             .split(',')
-            .map(o => o.trim()),
+            .map(o => o.trim())
+            .filter(o => o.length > 0),
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
     },

@@ -12,15 +12,15 @@ export default defineConfig(({ command, mode }) => {
             __APP_VERSION__: JSON.stringify(env.VITE_APP_VERSION || '1.0.0'),
         },
         server: {
-            port: 5174,
+            port: 5173,
             proxy: {
                 '/api': {
-                    target: env.VITE_API_BASE_URL || 'http://localhost:3000',
+                    target: 'http://localhost:3000',
                     changeOrigin: true,
                     secure: false,
                 },
                 '/mcp': {
-                    target: env.VITE_API_BASE_URL || 'http://localhost:3000',
+                    target: 'http://localhost:3000',
                     changeOrigin: true,
                     secure: false,
                 }
