@@ -22,23 +22,23 @@ function App() {
     // If not logged in and trying to access protected view, redirect to dashboard
     let viewToRender = vpState.currentView
     if (!isLoggedIn && !isPublicView) {
-        viewToRender = 'dashboard'
+        viewToRender = 'discover'
     }
 
     const renderView = () => {
         switch (viewToRender) {
             case 'dashboard':
-                return isLoggedIn ? <Dashboard /> : <Dashboard />
+                return isLoggedIn ? <Dashboard /> : <Discover />
             case 'editor':
-                return isLoggedIn ? <Editor /> : <Dashboard />
+                return isLoggedIn ? <Editor /> : <Discover />
             case 'discover':
                 return <Discover />
             case 'reader':
                 return <Reader />
             case 'monetization':
-                return isLoggedIn ? <MonetizationDashboard /> : <Dashboard />
+                return isLoggedIn ? <MonetizationDashboard /> : <Discover />
             default:
-                return <Dashboard />
+                return isLoggedIn ? <Dashboard /> : <Discover />
         }
     }
 
