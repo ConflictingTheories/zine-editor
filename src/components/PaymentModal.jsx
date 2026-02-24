@@ -60,11 +60,11 @@ const PaymentModal = ({ credits, onSuccess, onCancel }) => {
     }
 
     return (
-        <div className="premium-modal-overlay active">
-            <div className="premium-modal-box" style={{ maxWidth: '450px' }}>
-                <button className="premium-modal-close" onClick={onCancel}>✕</button>
+        <div className="modal-overlay active">
+            <div className="modal-box" style={{ maxWidth: '450px' }}>
+                <button className="modal-close" onClick={onCancel}>✕</button>
 
-                <h2 className="premium-modal-h2">💳 Payment Details</h2>
+                <h2 className="modal-h2">💳 Payment Details</h2>
 
                 <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--vp-border)', borderRadius: '12px', padding: '1.25rem', marginBottom: '2rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>

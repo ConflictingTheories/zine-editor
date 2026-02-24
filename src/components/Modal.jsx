@@ -71,10 +71,10 @@ function Modal() {
     }
 
     const renderAuthModal = () => (
-        <div className="premium-modal-overlay active" id="authModal">
-            <div className="premium-modal-box" style={{ maxWidth: '400px' }}>
-                <button className="premium-modal-close" onClick={() => closeModal('authModal')}>✕</button>
-                <h2 className="premium-modal-h2" style={{ textAlign: 'center' }}>
+        <div className="modal-overlay active" id="authModal">
+            <div className="modal-box" style={{ maxWidth: '400px' }}>
+                <button className="modal-close" onClick={() => closeModal('authModal')}>✕</button>
+                <h2 className="modal-h2" style={{ textAlign: 'center' }}>
                     {authMode === 'login' ? 'Welcome Back' : 'Join Void Press'}
                 </h2>
                 <form onSubmit={handleAuthSubmit}>
@@ -129,10 +129,10 @@ function Modal() {
     )
 
     const renderPublishModal = () => (
-        <div className="premium-modal-overlay active" id="publishModal">
-            <div className="premium-modal-box" style={{ maxWidth: '600px' }}>
-                <button className="premium-modal-close" onClick={() => closeModal('publishModal')}>✕</button>
-                <h2 className="premium-modal-h2">Publish Your Zine</h2>
+        <div className="modal-overlay active" id="publishModal">
+            <div className="modal-box" style={{ maxWidth: '600px' }}>
+                <button className="modal-close" onClick={() => closeModal('publishModal')}>✕</button>
+                <h2 className="modal-h2">Publish Your Zine</h2>
                 <form onSubmit={handlePublishSubmit}>
                     <div className="form-row">
                         <label>Title</label>
@@ -261,10 +261,10 @@ function Modal() {
     )
 
     const renderThemePickerModal = () => (
-        <div className="premium-modal-overlay active" id="themePickerModal">
-            <div className="premium-modal-box" style={{ maxWidth: '800px' }}>
-                <button className="premium-modal-close" onClick={() => closeModal('themePicker')}>✕</button>
-                <h2 className="premium-modal-h2">Choose Aesthetic</h2>
+        <div className="modal-overlay active" id="themePickerModal">
+            <div className="modal-box" style={{ maxWidth: '800px' }}>
+                <button className="modal-close" onClick={() => closeModal('themePicker')}>✕</button>
+                <h2 className="modal-h2">Choose Aesthetic</h2>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                     {THEME_OPTIONS.map(theme => (
                         <div
@@ -299,10 +299,10 @@ function Modal() {
     )
 
     const renderHelpModal = () => (
-        <div className="premium-modal-overlay active" id="helpModal">
-            <div className="premium-modal-box" style={{ maxWidth: '900px' }}>
-                <button className="premium-modal-close" onClick={() => closeModal('helpModal')}>✕</button>
-                <h2 className="premium-modal-h2">Voyagers&apos; Reference Guide</h2>
+        <div className="modal-overlay active" id="helpModal">
+            <div className="modal-box" style={{ maxWidth: '900px' }}>
+                <button className="modal-close" onClick={() => closeModal('helpModal')}>✕</button>
+                <h2 className="modal-h2">Voyagers&apos; Reference Guide</h2>
                 <div className="help-layout" style={{ display: 'flex', gap: '2rem' }}>
                     <div className="help-sidebar" style={{ width: '200px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         <button className={`filter-tag ${helpTab === 'shortcuts' ? 'active' : ''}`} onClick={() => setHelpTab('shortcuts')} style={{ width: '100%', textAlign: 'left' }}>⌨ Shortcuts</button>
@@ -337,10 +337,10 @@ function Modal() {
     )
 
     const renderPremiumModal = () => (
-        <div className="premium-modal-overlay active" id="premiumModal">
-            <div className="premium-modal-box" style={{ maxWidth: '750px' }}>
-                <button className="premium-modal-close" onClick={() => closeModal('premiumModal')}>✕</button>
-                <h2 className="premium-modal-h2" style={{ textAlign: 'center' }}>Elevate Your Creaton</h2>
+        <div className="modal-overlay active" id="premiumModal">
+            <div className="modal-box" style={{ maxWidth: '750px' }}>
+                <button className="modal-close" onClick={() => closeModal('premiumModal')}>✕</button>
+                <h2 className="modal-h2" style={{ textAlign: 'center' }}>Elevate Your Creaton</h2>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginTop: '2rem' }}>
                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--vp-border)' }}>
                         <h3 style={{ margin: 0, opacity: 0.6 }}>Standard Voyager</h3>

@@ -39,10 +39,10 @@ const WalletModal = ({ isOpen, onClose }) => {
     }
 
     return (
-        <div className="premium-modal-overlay active" onClick={onClose}>
-            <div className="premium-modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
-                <button className="premium-modal-close" onClick={onClose}>✕</button>
-                <h2 className="premium-modal-h2">🔗 Connect XRP Wallet</h2>
+        <div className="modal-overlay active" onClick={onClose}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+                <button className="modal-close" onClick={onClose}>✕</button>
+                <h2 className="modal-h2">🔗 Connect XRP Wallet</h2>
 
                 {xrState.wallet?.xrp_address ? (
                     <div style={{ textAlign: 'center' }}>
