@@ -12,7 +12,17 @@ const VPProvider = ({ children }) => {
         currentProject: null,
         isPremium: false,
         selectedTheme: 'classic',
-        user: JSON.parse(localStorage.getItem('vp_user')),
+        // Parse user and ensure ID is numeric
+        user: (() => {
+            const stored = localStorage.getItem('vp_user')
+            if (!stored) return null
+            try {
+                const parsed = JSON.parse(stored)
+                return { ...parsed, id: Number(parsed.id) }
+            } catch {
+                return null
+            }
+        })(),
         token: localStorage.getItem('vp_token'),
         isOnline: navigator.onLine,
         isSyncing: false,

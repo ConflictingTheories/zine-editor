@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 import { useVP } from '../context/VPContext'
+import { setZineFunding } from '../api/index.js'
 
 const CreatorMonetization = () => {
     const { xrState, getReputation, setTokenGate } = useXRPayID()
@@ -15,6 +16,14 @@ const CreatorMonetization = () => {
         tokenPrice: 0,
         isTokenGated: false
     })
+    const [crowdfundingSettings, setCrowdfundingSettings] = useState({
+        zineId: '',
+        fundingGoal: '',
+        minContribution: '',
+        deadline: '',
+        currency: 'USD'
+    })
+    const [savingCrowdfunding, setSavingCrowdfunding] = useState(false)
 
     useEffect(() => {
         loadReputation()
@@ -45,6 +54,39 @@ const CreatorMonetization = () => {
             alert('Token gating updated!')
         } catch (err) {
             alert('Error: ' + err.message)
+        }
+    }
+
+    const handleSaveCrowdfunding = async () => {
+        if (!crowdfundingSettings.zineId) {
+            alert('Please enter a Zine ID')
+            return
+        }
+        if (!crowdfundingSettings.fundingGoal || crowdfundingSettings.fundingGoal <= 0) {
+            alert('Please enter a valid funding goal')
+            return
+        }
+
+        setSavingCrowdfunding(true)
+        try {
+            await setZineFunding(
+                parseInt(crowdfundingSettings.zineId),
+                parseFloat(crowdfundingSettings.fundingGoal),
+                crowdfundingSettings.currency,
+                crowdfundingSettings.deadline || null
+            )
+            alert('Crowdfunding settings saved! Your zine is now set to crowdfund mode.')
+            setCrowdfundingSettings({
+                zineId: '',
+                fundingGoal: '',
+                minContribution: '',
+                deadline: '',
+                currency: 'USD'
+            })
+        } catch (err) {
+            alert('Error saving crowdfunding settings: ' + err.message)
+        } finally {
+            setSavingCrowdfunding(false)
         }
     }
 
@@ -453,4 +495,3 @@ const CreatorMonetization = () => {
 }
 
 export default CreatorMonetization
-

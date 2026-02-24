@@ -414,51 +414,71 @@ async function checkAccess(db, zineId, userId) {
     const zine = await db('zines').where({ id: zineId }).first();
     if (!zine) return { hasAccess: false, reason: 'not_found' };
 
-    // Check if zine is free
-    if (zine.access_level === 'public' || zine.monetization_type === 'free') {
-        return { hasAccess: true };
+    // DEBUG: Log access check details
+    console.log('Sovereign checkAccess:', {
+        zineId: zine.id,
+        zineUserId: zine.user_id,
+        zineMonetization: zine.monetization_type,
+        zineAccessLevel: zine.access_level,
+        requestUserId: userId,
+        requestUserType: userId ? typeof userId : 'none'
+    });
+
+    // 1. FREE CONTENT: Always accessible to everyone (logged in or not)
+    if (zine.monetization_type === 'free' || zine.access_level === 'public') {
+        console.log('Sovereign access granted: free/public content');
+        return { hasAccess: true, reason: 'free' };
     }
 
-    // Check if user is owner
-    if (zine.user_id === userId) {
-        return { hasAccess: true, reason: 'owner' };
-    }
-
-    // Check funding status for crowdfunded content
+    // 2. FUNDED CROWDFUND: Free for everyone once funded
     if (zine.monetization_type === 'crowdfund' && zine.is_funded) {
+        console.log('Sovereign access granted: crowdfunded content is funded');
         return { hasAccess: true, reason: 'funded' };
     }
 
-    // Check if user has contributed
+    // 3. AUTHOR: Always has full access
+    // Fix: Ensure type-safe comparison (convert both to numbers)
+    const isAuthor = userId && Number(zine.user_id) === Number(userId);
+    if (isAuthor) {
+        console.log('Sovereign access granted: user is author');
+        return { hasAccess: true, reason: 'owner' };
+    }
+
+    // 4. Check if user has contributed
     if (zine.monetization_type === 'crowdfund' || zine.monetization_type === 'one_time') {
         const contribution = await db('contributions')
             .where({ zine_id: zineId, user_id: userId })
             .first();
         if (contribution) {
+            console.log('Sovereign access granted: user has contribution');
             return { hasAccess: true, reason: 'contributor' };
         }
     }
 
-    // Check subscription
+    // 5. Check subscription
     if (zine.monetization_type === 'subscription') {
         const subscription = await db('subscriptions')
             .where({ creator_id: zine.user_id, subscriber_id: userId, is_active: 1 })
             .first();
         if (subscription) {
+            console.log('Sovereign access granted: user has subscription');
             return { hasAccess: true, reason: 'subscriber' };
         }
     }
 
-    // Check token gate
+    // 6. Check token gate
     if (zine.requires_token && zine.gate_id) {
         const delegation = await db('delegated_tokens')
             .where({ gate_id: zine.gate_id, delegate_user_id: userId, is_active: 1 })
             .first();
         if (delegation) {
+            console.log('Sovereign access granted: user has token delegation');
             return { hasAccess: true, reason: 'token_holder' };
         }
     }
 
+    // Access denied - return appropriate reason
+    console.log('Sovereign access denied:', zine.monetization_type);
     return {
         hasAccess: false,
         reason: zine.monetization_type,
@@ -483,4 +503,3 @@ module.exports = {
     FRAME_SIZE,
     MAX_PAYLOAD_BYTES
 };
-

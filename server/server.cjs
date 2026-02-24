@@ -220,26 +220,62 @@ app.get('/api/zines/:id', async (req, res) => {
         const isFunded = zine.funding_goal > 0 && zine.amount_raised >= zine.funding_goal;
 
         const applyAccessControl = async (zine, user) => {
-            const isAuthor = user && zine.user_id === user.id;
+            // DEBUG: Log access check details
+            console.log('Access check:', {
+                zineId: zine.id,
+                zineUserId: zine.user_id,
+                zineMonetization: zine.monetization_type,
+                zineAccessLevel: zine.access_level,
+                requestUserId: user?.id,
+                requestUserType: user?.id ? typeof user.id : 'none'
+            });
+
+            // 1. FREE CONTENT: Always accessible to everyone (logged in or not)
+            if (zine.monetization_type === 'free' || zine.access_level === 'public') {
+                console.log('Access granted: free/public content');
+                return { ...zine, data: JSON.parse(zine.data) };
+            }
+
+            // 2. FUNDED CROWDFUND: Free for everyone once funded
+            if (zine.monetization_type === 'crowdfund' && isFunded) {
+                console.log('Access granted: crowdfunded content is funded');
+                return { ...zine, data: JSON.parse(zine.data) };
+            }
+
+            // 3. AUTHOR: Always has full access
+            // Fix: Ensure type-safe comparison (convert both to numbers)
+            const isAuthor = user && Number(zine.user_id) === Number(user.id);
+            if (isAuthor) {
+                console.log('Access granted: user is author');
+                return { ...zine, data: JSON.parse(zine.data) };
+            }
+
+            // 4. CHECK IF USER HAS PAID/CONTRIBUTED
             let hasPaid = false;
             if (user) {
-                const contribution = await db('contributions').where({ user_id: user.id, zine_id: zine.id }).first();
+                const contribution = await db('contributions')
+                    .where({ user_id: user.id, zine_id: zine.id })
+                    .first();
                 if (contribution) {
                     hasPaid = true;
+                    console.log('Access granted: user has contribution');
                 }
             }
 
-            const canReadFully = isFunded || isAuthor || hasPaid;
+            const canReadFully = hasPaid;
 
             if (canReadFully) {
                 return { ...zine, data: JSON.parse(zine.data) };
             } else {
+                // Preview: only first page
                 const zineData = JSON.parse(zine.data);
                 const firstPage = zineData.pages.length > 0 ? [zineData.pages[0]] : [];
                 return {
                     ...zine,
                     data: { pages: firstPage },
                     locked: true,
+                    preview: true,
+                    reason: zine.monetization_type === 'crowdfund' ? 'funding_required' : 'payment_required'
                 };
             }
         };
@@ -1030,526 +1066,432 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
 
 // Tool handlers
 async function handleCreateZine(userId, args) {
-    return new Promise((resolve, reject) => {
-        const pages = [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }];
-
-        db.run(`INSERT INTO zines (user_id, title, data) VALUES (?, ?, ?)`,
-            [userId, args.title, JSON.stringify(pages)],
-            function (err) {
-                if (err) return reject(err);
-                resolve({ zineId: this.lastID, message: 'Zine created successfully' });
-            }
-        );
+    const pages = [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }];
+    const [zineId] = await db('zines').insert({
+        user_id: userId,
+        title: args.title,
+        data: JSON.stringify(pages)
     });
+    return { zineId, message: 'Zine created successfully' };
 }
 
 async function handleGetZine(userId, zineId) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT * FROM zines WHERE id = ? AND user_id = ?`, [zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            resolve({ ...zine, data: JSON.parse(zine.data) });
-        });
-    });
+    const zine = await db('zines').where({ id: zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    return { ...zine, data: JSON.parse(zine.data) };
 }
 
 async function handleAddPage(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const newPage = {
-                id: Date.now(),
-                elements: [],
-                background: args.background || '#ffffff',
-                texture: args.texture || null
-            };
-            data.pages.push(newPage);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ pageId: newPage.id, pageIdx: data.pages.length - 1 });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const newPage = {
+        id: Date.now(),
+        elements: [],
+        background: args.background || '#ffffff',
+        texture: args.texture || null
+    };
+    data.pages.push(newPage);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { pageId: newPage.id, pageIdx: data.pages.length - 1 };
 }
 
 async function handleAddTextElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'text',
-                content: args.content,
-                x: args.x || 80,
-                y: args.y || 80,
-                width: 220,
-                height: 50,
-                fontSize: args.fontSize || 18,
-                fontFamily: 'Crimson Text',
-                color: args.color || '#0a0a0a',
-                align: 'left',
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'text',
+        content: args.content,
+        x: args.x || 80,
+        y: args.y || 80,
+        width: 220,
+        height: 50,
+        fontSize: args.fontSize || 18,
+        fontFamily: 'Crimson Text',
+        color: args.color || '#0a0a0a',
+        align: 'left',
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleAddImageElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'image',
-                src: args.src,
-                x: args.x || 80,
-                y: args.y || 80,
-                width: args.width || 200,
-                height: args.height || 200,
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'image',
+        src: args.src,
+        x: args.x || 80,
+        y: args.y || 80,
+        width: args.width || 200,
+        height: args.height || 200,
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleAddPanelElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'panel',
-                x: args.x || 40,
-                y: args.y || 40,
-                width: args.width || 220,
-                height: args.height || 160,
-                panelBorderWidth: 4,
-                panelBorderColor: '#0a0a0a',
-                panelBorderStyle: 'solid',
-                fill: 'transparent',
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'panel',
+        x: args.x || 40,
+        y: args.y || 40,
+        width: args.width || 220,
+        height: args.height || 160,
+        panelBorderWidth: 4,
+        panelBorderColor: '#0a0a0a',
+        panelBorderStyle: 'solid',
+        fill: 'transparent',
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleAddBalloonElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'balloon',
-                content: args.content,
-                balloonType: args.balloonType || 'dialog',
-                x: args.x || 80,
-                y: args.y || 80,
-                width: 200,
-                height: 80,
-                fontSize: 14,
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'balloon',
+        content: args.content,
+        balloonType: args.balloonType || 'dialog',
+        x: args.x || 80,
+        y: args.y || 80,
+        width: 200,
+        height: 80,
+        fontSize: 14,
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleUpdateElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const el = data.pages[args.pageIdx]?.elements.find(e => e.id === args.elementId);
-            if (!el) return reject(new Error('Element not found'));
-            Object.assign(el, args.updates);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ status: 'updated' });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const el = data.pages[args.pageIdx]?.elements.find(e => e.id === args.elementId);
+    if (!el) throw new Error('Element not found');
+    Object.assign(el, args.updates);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { status: 'updated' };
 }
 
 async function handleApplyTheme(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            // Apply theme colors - simplified version
-            const themeColors = {
-                classic: { background: '#fdfaf1', text: '#1a1a1a', accent: '#d4af37' },
-                fantasy: { background: '#f5f5dc', text: '#0a0a0a', accent: '#ffd700' },
-                cyberpunk: { background: '#f0f0f0', text: '#050505', accent: '#ff003c' },
-                conspiracy: { background: '#e8e4d9', text: '#000000', accent: '#c5b358' },
-                worldbuilding: { background: '#ecf0f1', text: '#2c3e50', accent: '#f1c40f' },
-                comics: { background: '#ffffff', text: '#000000', accent: '#ffd700' },
-                arcane: { background: '#f8f1ff', text: '#0f041b', accent: '#ff9e00' }
-            };
-            const colors = themeColors[args.theme] || themeColors.classic;
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    // Apply theme colors - simplified version
+    const themeColors = {
+        classic: { background: '#fdfaf1', text: '#1a1a1a', accent: '#d4af37' },
+        fantasy: { background: '#f5f5dc', text: '#0a0a0a', accent: '#ffd700' },
+        cyberpunk: { background: '#f0f0f0', text: '#050505', accent: '#ff003c' },
+        conspiracy: { background: '#e8e4d9', text: '#000000', accent: '#c5b358' },
+        worldbuilding: { background: '#ecf0f1', text: '#2c3e50', accent: '#f1c40f' },
+        comics: { background: '#ffffff', text: '#000000', accent: '#ffd700' },
+        arcane: { background: '#f8f1ff', text: '#0f041b', accent: '#ff9e00' }
+    };
+    const colors = themeColors[args.theme] || themeColors.classic;
 
-            data.pages.forEach(page => {
-                if (page.background === '#ffffff') page.background = colors.background;
-                page.elements.forEach(el => {
-                    if (el.color && ['#000000', '#333333', '#666666'].includes(el.color)) el.color = colors.text;
-                    if (el.fill && ['#000000', '#333333', '#666666'].includes(el.fill)) el.fill = colors.accent;
-                });
-            });
-
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ status: 'theme applied' });
-            });
+    data.pages.forEach(page => {
+        if (page.background === '#ffffff') page.background = colors.background;
+        page.elements.forEach(el => {
+            if (el.color && ['#000000', '#333333', '#666666'].includes(el.color)) el.color = colors.text;
+            if (el.fill && ['#000000', '#333333', '#666666'].includes(el.fill)) el.fill = colors.accent;
         });
     });
+
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { status: 'theme applied' };
 }
 
 async function handleApplyTemplate(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
 
-            const templates = {
-                cover: {
-                    background: '#1a1a1a',
-                    elements: [
-                        { type: 'text', content: 'ZINE TITLE', x: 50, y: 150, width: 428, height: 100, fontSize: 64, color: '#d4af37', align: 'center', bold: true },
-                        { type: 'text', content: 'Issue No. 01', x: 50, y: 260, width: 428, height: 40, fontSize: 24, color: '#fdfaf1', align: 'center' },
-                        { type: 'panel', x: 40, y: 40, width: 448, height: 736, panelBorderWidth: 8, panelBorderColor: '#d4af37' }
-                    ]
-                },
-                content: {
-                    background: '#fdfaf1',
-                    elements: [
-                        { type: 'text', content: 'CHAPTER NAME', x: 50, y: 50, width: 428, height: 60, fontSize: 32, color: '#1a1a1a', bold: true },
-                        { type: 'text', content: 'Start your story here...', x: 50, y: 120, width: 428, height: 600, fontSize: 16, color: '#1a1a1a' }
-                    ]
-                },
-                back: {
-                    background: '#1a1a1a',
-                    elements: [
-                        { type: 'text', content: 'THE END', x: 50, y: 380, width: 428, height: 60, fontSize: 48, color: '#fdfaf1', align: 'center', bold: true }
-                    ]
-                }
-            };
+    const templates = {
+        cover: {
+            background: '#1a1a1a',
+            elements: [
+                { type: 'text', content: 'ZINE TITLE', x: 50, y: 150, width: 428, height: 100, fontSize: 64, color: '#d4af37', align: 'center', bold: true },
+                { type: 'text', content: 'Issue No. 01', x: 50, y: 260, width: 428, height: 40, fontSize: 24, color: '#fdfaf1', align: 'center' },
+                { type: 'panel', x: 40, y: 40, width: 448, height: 736, panelBorderWidth: 8, panelBorderColor: '#d4af37' }
+            ]
+        },
+        content: {
+            background: '#fdfaf1',
+            elements: [
+                { type: 'text', content: 'CHAPTER NAME', x: 50, y: 50, width: 428, height: 60, fontSize: 32, color: '#1a1a1a', bold: true },
+                { type: 'text', content: 'Start your story here...', x: 50, y: 120, width: 428, height: 600, fontSize: 16, color: '#1a1a1a' }
+            ]
+        },
+        back: {
+            background: '#1a1a1a',
+            elements: [
+                { type: 'text', content: 'THE END', x: 50, y: 380, width: 428, height: 60, fontSize: 48, color: '#fdfaf1', align: 'center', bold: true }
+            ]
+        }
+    };
 
-            const template = templates[args.template];
-            if (!template) return reject(new Error('Template not found'));
+    const template = templates[args.template];
+    if (!template) throw new Error('Template not found');
 
-            data.pages[args.pageIdx].background = template.background;
-            data.pages[args.pageIdx].elements = template.elements.map(el => ({
-                ...el,
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                zIndex: 0
-            }));
+    data.pages[args.pageIdx].background = template.background;
+    data.pages[args.pageIdx].elements = template.elements.map(el => ({
+        ...el,
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        zIndex: 0
+    }));
 
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ status: 'template applied' });
-            });
-        });
-    });
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { status: 'template applied' };
 }
 
 async function handleExportHTML(userId, zineId) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT * FROM zines WHERE id = ? AND user_id = ?`, [zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const project = { title: zine.title, pages: JSON.parse(zine.data) };
+    const zine = await db('zines').where({ id: zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const project = { title: zine.title, pages: JSON.parse(zine.data) };
 
-            // Basic HTML export - in full implementation, use the client-side exportToHTML logic
-            let html = `<!DOCTYPE html><html><head><title>${project.title}</title></head><body>`;
-            project.pages.forEach((p, i) => {
-                html += `<div>Page ${i + 1}</div>`;
-            });
-            html += `</body></html>`;
-
-            resolve({ html });
-        });
+    // Basic HTML export - in full implementation, use the client-side exportToHTML logic
+    let html = `<!DOCTYPE html><html><head><title>${project.title}</title></head><body>`;
+    project.pages.forEach((p, i) => {
+        html += `<div>Page ${i + 1}</div>`;
     });
+    html += `</body></html>`;
+
+    return { html };
 }
 
 async function handlePublishZine(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.run(`UPDATE zines SET is_published = 1, published_at = CURRENT_TIMESTAMP, author_name = ?, genre = ?, tags = ? WHERE id = ? AND user_id = ?`,
-            [args.author || 'Anonymous', args.genre || 'classic', args.tags || '', args.zineId, userId],
-            function (err) {
-                if (err) return reject(err);
-                if (this.changes === 0) return reject(new Error('Zine not found'));
-                resolve({ status: 'published' });
-            }
-        );
-    });
+    const changes = await db('zines')
+        .where({ id: args.zineId, user_id: userId })
+        .update({
+            is_published: 1,
+            published_at: db.fn.now(),
+            author_name: args.author || 'Anonymous',
+            genre: args.genre || 'classic',
+            tags: args.tags || ''
+        });
+    if (changes === 0) throw new Error('Zine not found');
+    return { status: 'published' };
 }
 
 async function handleDeletePage(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const pageIdx = parseInt(args.pageIdx);
-            if (data.pages.length <= 1) return reject(new Error('Cannot delete last page'));
-            if (!data.pages[pageIdx]) return reject(new Error('Page not found'));
-            data.pages.splice(pageIdx, 1);
-            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), args.zineId],
-                function (err) {
-                    if (err) return reject(err);
-                    resolve({ status: 'deleted' });
-                }
-            );
-        });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const pageIdx = parseInt(args.pageIdx);
+    if (data.pages.length <= 1) throw new Error('Cannot delete last page');
+    if (!data.pages[pageIdx]) throw new Error('Page not found');
+    data.pages.splice(pageIdx, 1);
+    await db('zines').where({ id: args.zineId }).update({
+        data: JSON.stringify(data),
+        updated_at: db.fn.now()
     });
+    return { status: 'deleted' };
 }
 
 async function handleDuplicatePage(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const pageIdx = parseInt(args.pageIdx);
-            if (!data.pages[pageIdx]) return reject(new Error('Page not found'));
-            const newPage = JSON.parse(JSON.stringify(data.pages[pageIdx]));
-            newPage.id = Date.now();
-            if (newPage.elements) newPage.elements.forEach(e => { e.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) });
-            data.pages.splice(pageIdx + 1, 0, newPage);
-            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), args.zineId],
-                function (err) {
-                    if (err) return reject(err);
-                    resolve({ pageId: newPage.id, pageIdx: pageIdx + 1 });
-                }
-            );
-        });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const pageIdx = parseInt(args.pageIdx);
+    if (!data.pages[pageIdx]) throw new Error('Page not found');
+    const newPage = JSON.parse(JSON.stringify(data.pages[pageIdx]));
+    newPage.id = Date.now();
+    if (newPage.elements) newPage.elements.forEach(e => { e.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) });
+    data.pages.splice(pageIdx + 1, 0, newPage);
+    await db('zines').where({ id: args.zineId }).update({
+        data: JSON.stringify(data),
+        updated_at: db.fn.now()
     });
+    return { pageId: newPage.id, pageIdx: pageIdx + 1 };
 }
 
 async function handleAddShapeElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const shapes = { circle: { shape: 'circle', width: 100, height: 100 }, square: { shape: 'rect', width: 100, height: 100 }, triangle: { shape: 'triangle', width: 100, height: 100 }, diamond: { shape: 'diamond', width: 80, height: 100 }, line_h: { shape: 'line_h', width: 200, height: 4 }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } };
-            const shapeConfig = shapes[args.shape] || shapes.circle;
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: shapeConfig.type || 'shape',
-                shape: shapeConfig.shape,
-                x: args.x || 80,
-                y: args.y || 80,
-                width: args.width || shapeConfig.width,
-                height: args.height || shapeConfig.height,
-                fill: args.fill || '#0a0a0a',
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            if (shapeConfig.content) element.content = shapeConfig.content;
-            if (shapeConfig.fontSize) element.fontSize = shapeConfig.fontSize;
-            if (shapeConfig.color) element.color = shapeConfig.color;
-            if (shapeConfig.fontFamily) element.fontFamily = shapeConfig.fontFamily;
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const shapes = { circle: { shape: 'circle', width: 100, height: 100 }, square: { shape: 'rect', width: 100, height: 100 }, triangle: { shape: 'triangle', width: 100, height: 100 }, diamond: { shape: 'diamond', width: 80, height: 100 }, line_h: { shape: 'line_h', width: 200, height: 4 }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } };
+    const shapeConfig = shapes[args.shape] || shapes.circle;
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: shapeConfig.type || 'shape',
+        shape: shapeConfig.shape,
+        x: args.x || 80,
+        y: args.y || 80,
+        width: args.width || shapeConfig.width,
+        height: args.height || shapeConfig.height,
+        fill: args.fill || '#0a0a0a',
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    if (shapeConfig.content) element.content = shapeConfig.content;
+    if (shapeConfig.fontSize) element.fontSize = shapeConfig.fontSize;
+    if (shapeConfig.color) element.color = shapeConfig.color;
+    if (shapeConfig.fontFamily) element.fontFamily = shapeConfig.fontFamily;
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleAddSFXElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const sfx = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', pow: 'POW!', whoosh: 'WHOOSH!', splat: 'SPLAT!' };
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'text',
-                content: sfx[args.sfxType] || 'BAM!',
-                x: args.x || 80,
-                y: args.y || 80,
-                fontSize: 52,
-                fontFamily: 'Bangers',
-                color: '#0a0a0a',
-                width: 180,
-                height: 70,
-                strokeWidth: 2,
-                strokeColor: '#ffffff',
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const sfx = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', pow: 'POW!', whoosh: 'WHOOSH!', splat: 'SPLAT!' };
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'text',
+        content: sfx[args.sfxType] || 'BAM!',
+        x: args.x || 80,
+        y: args.y || 80,
+        fontSize: 52,
+        fontFamily: 'Bangers',
+        color: '#0a0a0a',
+        width: 180,
+        height: 70,
+        strokeWidth: 2,
+        strokeColor: '#ffffff',
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleAddSymbolElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const symbols = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', biohazard: '☣', radiation: '☢', compass: '🧭', rune: 'ᚱ', ankh: '☥', omega: 'Ω', infinity: '∞', trident: '🔱' };
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'text',
-                content: symbols[args.symbol] || '✦',
-                x: args.x || 80,
-                y: args.y || 80,
-                fontSize: 56,
-                color: '#d4af37',
-                width: 80,
-                height: 80,
-                fontFamily: 'sans-serif',
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const symbols = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', biohazard: '☣', radiation: '☢', compass: '🧭', rune: 'ᚱ', ankh: '☥', omega: 'Ω', infinity: '∞', trident: '🔱' };
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'text',
+        content: symbols[args.symbol] || '✦',
+        x: args.x || 80,
+        y: args.y || 80,
+        fontSize: 56,
+        color: '#d4af37',
+        width: 80,
+        height: 80,
+        fontFamily: 'sans-serif',
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleAddShaderElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            if (!data.pages[args.pageIdx]) return reject(new Error('Page not found'));
-            const element = {
-                id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                type: 'shader',
-                shaderPreset: args.shaderPreset || 'plasma',
-                x: args.x || 80,
-                y: args.y || 80,
-                width: args.width || 220,
-                height: args.height || 220,
-                opacity: 1,
-                zIndex: data.pages[args.pageIdx].elements.length
-            };
-            data.pages[args.pageIdx].elements.push(element);
-            db.run(`UPDATE zines SET data = ? WHERE id = ?`, [JSON.stringify(data), args.zineId], function (err) {
-                if (err) return reject(err);
-                resolve({ elementId: element.id });
-            });
-        });
-    });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    if (!data.pages[args.pageIdx]) throw new Error('Page not found');
+    const element = {
+        id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'shader',
+        shaderPreset: args.shaderPreset || 'plasma',
+        x: args.x || 80,
+        y: args.y || 80,
+        width: args.width || 220,
+        height: args.height || 220,
+        opacity: 1,
+        zIndex: data.pages[args.pageIdx].elements.length
+    };
+    data.pages[args.pageIdx].elements.push(element);
+    await db('zines').where({ id: args.zineId }).update({ data: JSON.stringify(data) });
+    return { elementId: element.id };
 }
 
 async function handleDeleteElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const pageIdx = parseInt(args.pageIdx);
-            const elements = data.pages[pageIdx]?.elements;
-            if (!elements) return reject(new Error('Page not found'));
-            const idx = elements.findIndex(e => e.id === args.elementId);
-            if (idx === -1) return reject(new Error('Element not found'));
-            elements.splice(idx, 1);
-            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), args.zineId],
-                function (err) {
-                    if (err) return reject(err);
-                    resolve({ status: 'deleted' });
-                }
-            );
-        });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const pageIdx = parseInt(args.pageIdx);
+    const elements = data.pages[pageIdx]?.elements;
+    if (!elements) throw new Error('Page not found');
+    const idx = elements.findIndex(e => e.id === args.elementId);
+    if (idx === -1) throw new Error('Element not found');
+    elements.splice(idx, 1);
+    await db('zines').where({ id: args.zineId }).update({
+        data: JSON.stringify(data),
+        updated_at: db.fn.now()
     });
+    return { status: 'deleted' };
 }
 
 async function handleDuplicateElement(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const pageIdx = parseInt(args.pageIdx);
-            const el = data.pages[pageIdx]?.elements.find(e => e.id === args.elementId);
-            if (!el) return reject(new Error('Element not found'));
-            const newEl = JSON.parse(JSON.stringify(el));
-            newEl.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            newEl.x += 20;
-            newEl.y += 20;
-            data.pages[pageIdx].elements.push(newEl);
-            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), args.zineId],
-                function (err) {
-                    if (err) return reject(err);
-                    resolve({ elementId: newEl.id });
-                }
-            );
-        });
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const pageIdx = parseInt(args.pageIdx);
+    const el = data.pages[pageIdx]?.elements.find(e => e.id === args.elementId);
+    if (!el) throw new Error('Element not found');
+    const newEl = JSON.parse(JSON.stringify(el));
+    newEl.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    newEl.x += 20;
+    newEl.y += 20;
+    data.pages[pageIdx].elements.push(newEl);
+    await db('zines').where({ id: args.zineId }).update({
+        data: JSON.stringify(data),
+        updated_at: db.fn.now()
     });
+    return { elementId: newEl.id };
 }
 
 async function handleMoveLayer(userId, args) {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT data FROM zines WHERE id = ? AND user_id = ?`, [args.zineId, userId], (err, zine) => {
-            if (err || !zine) return reject(new Error('Zine not found'));
-            const data = JSON.parse(zine.data);
-            const pageIdx = parseInt(args.pageIdx);
-            const elements = data.pages[pageIdx]?.elements;
-            if (!elements) return reject(new Error('Page not found'));
-            const idx = elements.findIndex(e => e.id === args.elementId);
-            if (idx === -1) return reject(new Error('Element not found'));
+    const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
+    if (!zine) throw new Error('Zine not found');
+    const data = JSON.parse(zine.data);
+    const pageIdx = parseInt(args.pageIdx);
+    const elements = data.pages[pageIdx]?.elements;
+    if (!elements) throw new Error('Page not found');
+    const idx = elements.findIndex(e => e.id === args.elementId);
+    if (idx === -1) throw new Error('Element not found');
 
-            if (args.direction === 'up' && idx < elements.length - 1) {
-                [elements[idx], elements[idx + 1]] = [elements[idx + 1], elements[idx]];
-            } else if (args.direction === 'down' && idx > 0) {
-                [elements[idx], elements[idx - 1]] = [elements[idx - 1], elements[idx]];
-            } else if (args.direction === 'top') {
-                const el = elements.splice(idx, 1)[0];
-                elements.push(el);
-            } else if (args.direction === 'bottom') {
-                const el = elements.splice(idx, 1)[0];
-                elements.unshift(el);
-            }
+    if (args.direction === 'up' && idx < elements.length - 1) {
+        [elements[idx], elements[idx + 1]] = [elements[idx + 1], elements[idx]];
+    } else if (args.direction === 'down' && idx > 0) {
+        [elements[idx], elements[idx - 1]] = [elements[idx - 1], elements[idx]];
+    } else if (args.direction === 'top') {
+        const el = elements.splice(idx, 1)[0];
+        elements.push(el);
+    } else if (args.direction === 'bottom') {
+        const el = elements.splice(idx, 1)[0];
+        elements.unshift(el);
+    }
 
-            // Update all zIndex
-            elements.forEach((e, i) => e.zIndex = i);
-            db.run(`UPDATE zines SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), args.zineId],
-                function (err) {
-                    if (err) return reject(err);
-                    resolve({ status: 'moved' });
-                }
-            );
-        });
+    // Update all zIndex
+    elements.forEach((e, i) => e.zIndex = i);
+    await db('zines').where({ id: args.zineId }).update({
+        data: JSON.stringify(data),
+        updated_at: db.fn.now()
     });
+    return { status: 'moved' };
 }
 
 // Additional MCP endpoints for export and other features
@@ -1577,110 +1519,121 @@ app.post('/mcp/export/pdf', authenticateToken, (req, res) => {
 // ---- Credits API ----
 
 // Purchase credits (simulated fiat purchase)
-app.post('/api/credits/purchase', authenticateToken, (req, res) => {
+app.post('/api/credits/purchase', authenticateToken, async (req, res) => {
     const { amount, paymentMethod } = req.body;
     if (!amount || amount <= 0) {
         return res.status(400).json({ error: 'Invalid amount' });
     }
 
-    // In production, this would integrate with a payment processor (Stripe, etc.)
-    // For now, we simulate the purchase
-    db.get(`SELECT * FROM credits WHERE user_id = ?`, [req.user.id], (err, creditRow) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        // In production, this would integrate with a payment processor (Stripe, etc.)
+        // For now, we simulate the purchase
+        const creditRow = await db('credits').where({ user_id: req.user.id }).first();
 
         if (creditRow) {
-            db.run(`UPDATE credits SET balance = balance + ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
-                [amount, amount, req.user.id],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
+            await db('credits')
+                .where({ user_id: req.user.id })
+                .update({
+                    balance: creditRow.balance + amount,
+                    total_spent: creditRow.total_spent + amount,
+                    updated_at: db.fn.now()
+                });
 
-                    // Record transaction
-                    db.run(`INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
-                        [req.user.id, null, amount, 'credit_purchase', `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`],
-                        (err) => { if (err) console.error('Transaction log error:', err); }
-                    );
+            // Record transaction
+            await db('transactions').insert({
+                from_user_id: req.user.id,
+                to_user_id: null,
+                amount: amount,
+                type: 'credit_purchase',
+                description: `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`
+            });
 
-                    res.json({ success: true, newBalance: creditRow.balance + amount, amount });
-                }
-            );
+            res.json({ success: true, newBalance: creditRow.balance + amount, amount });
         } else {
-            db.run(`INSERT INTO credits (user_id, balance, total_spent) VALUES (?, ?, ?)`,
-                [req.user.id, amount, amount],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
+            await db('credits').insert({
+                user_id: req.user.id,
+                balance: amount,
+                total_spent: amount
+            });
 
-                    // Record transaction
-                    db.run(`INSERT INTO transactions (from_user_id, to_user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)`,
-                        [req.user.id, null, amount, 'credit_purchase', `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`],
-                        (err) => { if (err) console.error('Transaction log error:', err); }
-                    );
+            // Record transaction
+            await db('transactions').insert({
+                from_user_id: req.user.id,
+                to_user_id: null,
+                amount: amount,
+                type: 'credit_purchase',
+                description: `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`
+            });
 
-                    res.json({ success: true, newBalance: amount, amount });
-                }
-            );
+            res.json({ success: true, newBalance: amount, amount });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Get credit balance
-app.get('/api/credits/balance', authenticateToken, (req, res) => {
-    db.get(`SELECT balance FROM credits WHERE user_id = ?`, [req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/credits/balance', authenticateToken, async (req, res) => {
+    try {
+        const row = await db('credits').where({ user_id: req.user.id }).first();
         res.json({ balance: row ? row.balance : 0 });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ---- Wallet API ----
 
 // Helper to get or create wallet
 const getOrCreateWallet = async (userId, providedAddress, providedPayId) => {
-    return new Promise((resolve, reject) => {
-        db.get(`SELECT * FROM wallets WHERE user_id = ?`, [userId], async (err, existing) => {
-            if (err) return reject(err);
+    try {
+        const existing = await db('wallets').where({ user_id: userId }).first();
 
-            if (existing) {
-                return resolve(existing);
-            }
+        if (existing) {
+            return existing;
+        }
 
-            // Create new wallet if not exists
-            try {
-                // If address provided, use it (non-custodial view), else generate (custodial)
-                const walletData = providedAddress ? { address: providedAddress, seed: null } : await xrpService.createWallet();
-                const encryptedSecret = walletData.seed ? encrypt(walletData.seed) : null;
+        // Create new wallet if not exists
+        // If address provided, use it (non-custodial view), else generate (custodial)
+        const walletData = providedAddress ? { address: providedAddress, seed: null } : await xrpService.createWallet();
+        const encryptedSecret = walletData.seed ? encrypt(walletData.seed) : null;
 
-                db.run(`INSERT INTO wallets (user_id, xrp_address, xrp_secret_encrypted, payid, is_verified) VALUES (?, ?, ?, ?, ?)`,
-                    [userId, walletData.address, encryptedSecret, providedPayId || null, 1],
-                    function (err) {
-                        if (err) return reject(err);
-                        resolve({ xrp_address: walletData.address, xrp_secret_encrypted: walletData.seed });
-                    }
-                );
-            } catch (e) { reject(e); }
+        await db('wallets').insert({
+            user_id: userId,
+            xrp_address: walletData.address,
+            xrp_secret_encrypted: encryptedSecret,
+            payid: providedPayId || null,
+            is_verified: 1
         });
-    });
+
+        return { xrp_address: walletData.address, xrp_secret_encrypted: walletData.seed };
+    } catch (e) {
+        throw e;
+    }
 };
 
 // Create new XRP wallet for user
-app.post('/api/wallet/create', authenticateToken, (req, res) => {
+app.post('/api/wallet/create', authenticateToken, async (req, res) => {
     const { xrpAddress, payid } = req.body;
 
-    if (!xrpAddress) {
-        // If no address provided, generate one (Custodial)
-        // Proceed to creation logic below
+    try {
+        const wallet = await getOrCreateWallet(req.user.id, xrpAddress, payid);
+        res.json({ success: true, xrpAddress: wallet.xrp_address, payid: wallet.payid });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    getOrCreateWallet(req.user.id, xrpAddress, payid)
-        .then(wallet => res.json({ success: true, xrpAddress: wallet.xrp_address, payid: wallet.payid }))
-        .catch(err => res.status(500).json({ error: err.message }));
 });
 
 // Get user's wallet info
-app.get('/api/wallet', authenticateToken, (req, res) => {
-    db.get(`SELECT xrp_address, payid, is_verified, created_at FROM wallets WHERE user_id = ?`, [req.user.id], (err, wallet) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/wallet', authenticateToken, async (req, res) => {
+    try {
+        const wallet = await db('wallets').where({ user_id: req.user.id }).first();
         res.json(wallet || { xrp_address: null, payid: null, is_verified: false });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
+
 
 // ---- Tokens API ----
 
@@ -2261,21 +2214,24 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 // ---- Zine Tokenization ----
 
 // Set token price for zine (token gating)
-app.post('/api/zines/:id/token-gate', authenticateToken, (req, res) => {
+app.post('/api/zines/:id/token-gate', authenticateToken, async (req, res) => {
     const { tokenPrice, tokenId, isTokenGated } = req.body;
     const zineId = req.params.id;
 
-    db.get(`SELECT * FROM zines WHERE id = ? AND user_id = ?`, [zineId, req.user.id], (err, zine) => {
-        if (err || !zine) return res.status(404).json({ error: 'Zine not found or not owned' });
+    try {
+        const zine = await db('zines').where({ id: zineId, user_id: req.user.id }).first();
+        if (!zine) return res.status(404).json({ error: 'Zine not found or not owned' });
 
-        db.run(`UPDATE zines SET token_price = ?, is_token_gated = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [tokenPrice || 0, isTokenGated ? 1 : 0, zineId],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ success: true, tokenPrice, isTokenGated: !!isTokenGated });
-            }
-        );
-    });
+        await db('zines').where({ id: zineId }).update({
+            token_price: tokenPrice || 0,
+            is_token_gated: isTokenGated ? 1 : 0,
+            updated_at: db.fn.now()
+        });
+
+        res.json({ success: true, tokenPrice, isTokenGated: !!isTokenGated });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Get zine with token access check
