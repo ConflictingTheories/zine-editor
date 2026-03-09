@@ -8,33 +8,35 @@
 }
 
 :root {
-    --vp-bg: #0a0a0f;
-    --vp-surface: #13131a;
-    --vp-surface2: #1c1c28;
-    --vp-border: #2a2a3a;
-    --vp-text: #e8e6f0;
-    --vp-text-dim: #8a889a;
+    /* Titanium Theme (Native Engineering + Nuclear Boilerplate) */
+    --vp-bg: #010101;
+    --vp-surface: #0a0a0a;
+    --vp-surface2: #141414;
+    --vp-border: #333333;
+    --vp-text: #e0e0e0;
+    --vp-text-dim: #737373;
     --vp-accent: #d4af37;
-    --vp-accent2: #8b5cf6;
+    --vp-accent2: #b18f27;
     --vp-danger: #ef4444;
     --vp-success: #22c55e;
     --vp-info: #3b82f6;
     --vp-crimson: #5c0a0a;
     --vp-gold: #d4af37;
-    --font-ui: 'Inter', sans-serif;
-    --font-display: 'Cinzel', serif;
-    --radius: 8px;
-    --radius-lg: 12px;
-    --shadow: 0 4px 24px rgba(0, 0, 0, .5);
+    --font-ui: 'SF Pro Display', -apple-system, sans-serif;
+    --font-display: 'SF Pro Display', -apple-system, sans-serif;
+    --font-mono: 'Menlo', monospace;
+    --radius: 0px;
+    --radius-lg: 0px;
+    --shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 4px 24px rgba(0, 0, 0, 1);
     /* Editor theme vars */
-    --ed-black: #1a1a1a;
+    --ed-black: #000000;
     --ed-crimson: #5c0a0a;
-    --ed-white: #fdfaf1;
+    --ed-white: #f5f5f5;
     --ed-purple: #4b2c5e;
     --ed-green: #2ecc71;
     --ed-gold: #d4af37;
-    --ed-silver: #bdc3c7;
-    --ed-gray: #34495e;
+    --ed-silver: #8e8e93;
+    --ed-gray: #1a1a1a;
     --ed-font: 'EB Garamond', serif;
     --ed-display: 'Playfair Display', serif;
     --ed-accent: 'Crimson Text', serif;
@@ -537,13 +539,13 @@ textarea {
 }
 
 .ed-tool {
-    padding: 6px 12px;
+    padding: 4px 10px;
     background: transparent;
     border: 1px solid transparent;
     color: var(--vp-text-dim);
-    font-size: .78em;
+    font-size: .75em;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius);
     transition: all .15s;
     white-space: nowrap;
     font-family: var(--font-ui);
@@ -551,13 +553,14 @@ textarea {
 
 .ed-tool:hover {
     background: var(--vp-surface2);
-    color: var(--vp-text)
+    color: var(--vp-text);
+    border-color: var(--vp-border);
 }
 
 .ed-tool.active {
-    background: var(--vp-accent2);
-    color: #fff;
-    border-color: var(--vp-accent2)
+    background: var(--vp-surface2);
+    color: var(--vp-accent);
+    border-color: var(--vp-accent2);
 }
 
 .ed-tool-sep {
@@ -581,26 +584,26 @@ textarea {
 }
 
 .ed-panel-section h4 {
-    font-size: .75em;
+    font-size: .65em;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--vp-accent);
-    margin-bottom: 10px;
-    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--vp-text-dim);
+    margin-bottom: 8px;
+    font-weight: 700;
 }
 
 .ed-panel-btn {
     display: block;
     width: 100%;
-    padding: 8px 12px;
-    margin-bottom: 4px;
+    padding: 6px 10px;
+    margin-bottom: 2px;
     background: var(--vp-surface2);
     border: 1px solid var(--vp-border);
     color: var(--vp-text);
     cursor: pointer;
-    font-size: .82em;
+    font-size: .80em;
     text-align: left;
-    border-radius: 4px;
+    border-radius: var(--radius);
     transition: all .15s;
     font-family: var(--font-ui);
 }
@@ -613,24 +616,24 @@ textarea {
 .page-thumbs {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
+    gap: 4px;
     margin-top: 8px
 }
 
 .page-thumb {
     aspect-ratio: 5.5/8.5;
     background: #fff;
-    border: 2px solid var(--vp-border);
+    border: 1px solid var(--vp-border);
     cursor: pointer;
     position: relative;
-    border-radius: 3px;
+    border-radius: var(--radius);
     overflow: hidden;
-    transition: all .2s;
+    transition: all .1s;
 }
 
 .page-thumb.active {
-    border-color: var(--vp-accent);
-    box-shadow: 0 0 8px rgba(212, 175, 55, .3)
+    border: 2px solid var(--vp-accent);
+    box-shadow: none;
 }
 
 .page-thumb:hover {
@@ -984,7 +987,8 @@ textarea {
 
 .prop-row input[type=checkbox] {
     width: auto;
-    margin-right: 6px
+    margin-right: 6px;
+    accent-color: var(--vp-accent);
 }
 
 .prop-row-inline {
@@ -1019,7 +1023,6 @@ textarea {
     color: var(--vp-danger)
 }
 
-/* Enhanced panel styling from old version */
 .property-panel {
     background: var(--vp-surface);
     color: var(--vp-text);
@@ -1028,21 +1031,21 @@ textarea {
 }
 
 .property-panel h4 {
-    font-size: .75em;
+    font-size: .70em;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--vp-accent);
-    margin-bottom: 10px;
-    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--vp-text-dim);
+    margin-bottom: 8px;
+    font-weight: 700;
 }
 
 .prop-section h4 {
-    font-size: .75em;
+    font-size: .70em;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--vp-accent);
-    margin-bottom: 10px;
-    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--vp-text-dim);
+    margin-bottom: 8px;
+    font-weight: 700;
 }
 
 .form-row {
@@ -1062,12 +1065,12 @@ textarea {
 .form-row input,
 .form-row select {
     width: 100%;
-    padding: 8px 10px;
+    padding: 6px 8px;
     background: var(--vp-surface2);
     border: 1px solid var(--vp-border);
     color: var(--vp-text);
-    font-size: .85em;
-    border-radius: 4px;
+    font-size: .82em;
+    border-radius: var(--radius);
     font-family: var(--font-ui);
     transition: border-color .2s;
 }

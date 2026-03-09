@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getTutorialData } from '../data/tutorialData.js'
+import { request as apiRequest, setTokens, clearTokens } from '../api/index.js'
+import { SovereignSDK } from '../lib/sovereign-sdk.js'
 
 const VPContext = createContext()
 
@@ -7,7 +9,11 @@ export const useVP = () => useContext(VPContext)
 
 const VPProvider = ({ children }) => {
     const [vpState, setVpState] = useState({
-        projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
+        projects: (() => {
+            try {
+                return JSON.parse(localStorage.getItem('vp_projects') || '[]')
+            } catch { return [] }
+        })(),
         published: [],
         currentProject: null,
         isPremium: false,
@@ -15,15 +21,15 @@ const VPProvider = ({ children }) => {
         // Parse user and ensure ID is numeric
         user: (() => {
             const stored = localStorage.getItem('vp_user')
-            if (!stored) return null
+            if (!stored || stored === 'undefined') return null
             try {
                 const parsed = JSON.parse(stored)
-                return { ...parsed, id: Number(parsed.id) }
+                return { ...parsed, id: parsed?.id ? Number(parsed.id) : null }
             } catch {
                 return null
             }
         })(),
-        token: localStorage.getItem('vp_token'),
+        token: localStorage.getItem('token'),
         isOnline: navigator.onLine,
         isSyncing: false,
         toasts: [],
@@ -147,37 +153,40 @@ const VPProvider = ({ children }) => {
 
     const api = async (endpoint, method = 'GET', body = null) => {
         if (!vpState.isOnline) throw new Error('Offline')
-        const headers = { 'Content-Type': 'application/json' }
-        if (vpState.token) headers['Authorization'] = `Bearer ${vpState.token}`
-
-        // Import API_BASE_URL from constants - use dynamic import to avoid circular deps
-        const baseUrl = '/api'
-        const url = baseUrl + endpoint
-
-        console.log(`API ${method}:`, url)
-
-        const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : null })
-        if (!res.ok) {
-            const errorText = await res.text()
-            console.error(`API Error ${res.status}:`, errorText)
-            if (res.status === 401 || res.status === 403) {
+        try {
+            const res = await apiRequest(endpoint, method, body);
+            return res;
+        } catch (error) {
+            if (error.message.includes('Session expired') || error.message.includes('HTTP 401')) {
                 setVpState(prev => ({ ...prev, user: null, token: null }))
-                localStorage.removeItem('vp_token')
+                clearTokens()
                 localStorage.removeItem('vp_user')
             }
-            throw new Error(errorText || `HTTP ${res.status}`)
+            throw error;
         }
-        return res.json()
     }
 
     const login = async (email, password) => {
         try {
             const res = await api('/auth/login', 'POST', { email, password })
-            if (!res.token) {
+            if (!res.accessToken) {
                 throw new Error('Invalid response from server')
             }
-            setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
-            localStorage.setItem('vp_token', res.token)
+            // Hydrate Sovereign Identity from local/seed if available
+            // For now, if the user has a sovereign_id, regenerate the local identity object.
+            // (In a production flow, we'd prompt for the identity passphrase/seed)
+            if (res.user.sovereign_id) {
+                try {
+                    const token = await SovereignSDK.createToken({ id: res.user.sovereign_id })
+                    window._sovereign_identity = token
+                } catch (e) {
+                    console.error("Sovereign Identity initialization failed:", e)
+                    // Continue without sovereign identity if it fails
+                }
+            }
+
+            setTokens(res.accessToken, res.refreshToken)
+            setVpState(prev => ({ ...prev, token: res.accessToken, user: res.user }))
             localStorage.setItem('vp_user', JSON.stringify(res.user))
             closeModal('authModal')
             toast(`Welcome, ${res.user.username}!`, 'success')
@@ -191,11 +200,21 @@ const VPProvider = ({ children }) => {
     const register = async (email, password, username) => {
         try {
             const res = await api('/auth/register', 'POST', { email, password, username })
-            if (!res.token) {
+            if (!res.accessToken) {
                 throw new Error('Invalid response from server')
             }
-            setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
-            localStorage.setItem('vp_token', res.token)
+
+            if (res.user.sovereign_id) {
+                try {
+                    const token = await SovereignSDK.createToken({ id: res.user.sovereign_id })
+                    window._sovereign_identity = token
+                } catch (e) {
+                    console.error("Sovereign Identity initialization failed:", e)
+                }
+            }
+
+            setTokens(res.accessToken, res.refreshToken)
+            setVpState(prev => ({ ...prev, token: res.accessToken, user: res.user }))
             localStorage.setItem('vp_user', JSON.stringify(res.user))
             closeModal('authModal')
             toast(`Welcome, ${res.user.username}!`, 'success')
@@ -207,8 +226,11 @@ const VPProvider = ({ children }) => {
     }
 
     const logout = () => {
+        // Attempt server logout, but clear local regardless
+        api('/auth/logout', 'POST', { refreshToken: localStorage.getItem('refreshToken') }).catch(() => { });
+        window._sovereign_identity = null;
         setVpState(prev => ({ ...prev, token: null, user: null }))
-        localStorage.removeItem('vp_token')
+        clearTokens()
         localStorage.removeItem('vp_user')
         toast('Logged out', 'info')
     }

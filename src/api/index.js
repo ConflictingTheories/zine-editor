@@ -1,44 +1,95 @@
+import { SovereignSDK } from '../lib/sovereign-sdk.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
-async function request(endpoint, method = 'GET', body = null) {
+export function setTokens(access, refresh) {
+    if (access) localStorage.setItem('token', access);
+    if (refresh) localStorage.setItem('refreshToken', refresh);
+}
+
+export function clearTokens() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+}
+
+async function refreshAccessToken() {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) throw new Error("No refresh token available");
+
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+        clearTokens();
+        throw new Error("Session expired — please log in again");
+    }
+
+    const data = await response.json();
+    setTokens(data.accessToken, data.refreshToken);
+    return data.accessToken;
+}
+
+export async function request(endpoint, method = 'GET', body = null, retry = true) {
     const headers = { 'Content-Type': 'application/json' };
     const token = localStorage.getItem('token');
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const fetchConfig = {
         method,
         headers,
         body: body ? JSON.stringify(body) : null,
-    });
+    };
 
-    // Handle 401/403 gracefully - return null instead of throwing
+    // Integrate Sovereign Token Identity (4D Steganographic Identity)
+    if (window._sovereign_identity && SovereignSDK) {
+        try {
+            await SovereignSDK.intercept(fetchConfig, window._sovereign_identity);
+        } catch (e) {
+            console.warn("Failed to attach Sovereign Signature:", e);
+        }
+    }
+
+    let response = await fetch(`${API_BASE_URL}${endpoint}`, fetchConfig);
+
+    // Handle 401 gracefully - attempt refresh
+    if (response.status === 401 && retry && localStorage.getItem('refreshToken')) {
+        console.warn(`Auth required for ${endpoint}. Attempting refresh...`);
+        try {
+            await refreshAccessToken();
+            return request(endpoint, method, body, false); // Retry exactly once
+        } catch (e) {
+            console.error("Refresh failed", e);
+            // Session is dead, clear it out.
+            window.dispatchEvent(new Event('session-expired'));
+            throw e;
+        }
+    }
+
     if (response.status === 401 || response.status === 403) {
-        console.warn(`Auth required for ${endpoint}: ${response.status}`);
-        return null;
+        let errorMessage = response.status === 401 ? 'Session expired' : 'Access denied';
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) { /* use default */ }
+        throw new Error(errorMessage);
     }
 
     if (!response.ok) {
-        // Try to parse error as JSON, fallback to text
         let errorMessage = 'API request failed';
         try {
             const errorData = await response.json();
             errorMessage = errorData.error || errorData.message || `HTTP ${response.status}`;
         } catch (e) {
-            // If JSON parsing fails, try to get text
-            try {
-                const text = await response.text();
-                errorMessage = text || `HTTP ${response.status}`;
-            } catch (textErr) {
-                errorMessage = `HTTP ${response.status}`;
-            }
+            errorMessage = `HTTP ${response.status}`;
         }
         throw new Error(errorMessage);
     }
 
-    // Handle empty responses
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
         return null;

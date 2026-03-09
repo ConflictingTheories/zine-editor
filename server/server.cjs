@@ -29,10 +29,24 @@ const app = express();
 const { server, jwt: jwtConfig, cors: corsConfig, database, payment, xrp } = CONFIG;
 const PORT = server.port;
 const NODE_ENV = server.env;
-const JWT_SECRET = jwtConfig.secret;
-const JWT_EXPIRY = jwtConfig.expiresIn;
+const JWT_SECRET = process.env.JWT_SECRET || jwtConfig.secret;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'super-secret-refresh-key-replace-in-production';
+const JWT_EXPIRY = jwtConfig.expiresIn || '15m';
 const STRIPE_SECRET_KEY = payment.stripeSecretKey;
 const DB_PATH = database.getPath();
+const crypto = require('crypto');
+
+// ─── Stripe Webhook (Must bypass JSON body parser) ───────────
+app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const sig = req.headers['stripe-signature'];
+        await economyService.handleStripeWebhook(sig, req.body, db);
+        res.json({ received: true });
+    } catch (err) {
+        console.error('Webhook Error:', err.message);
+        res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+});
 
 // Middleware
 app.use(cors({
@@ -75,6 +89,29 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Authentication Helper Functions
+function generateAccessToken(user) {
+    return jwt.sign(
+        { id: user.id || user.sub, email: user.email, username: user.username, name: user.name },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRY }
+    );
+}
+
+function generateRefreshToken() {
+    return crypto.randomBytes(64).toString('hex');
+}
+
+async function storeRefreshToken(userId, rawToken) {
+    const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    await db('refresh_tokens').insert({
+        user_id: userId,
+        token_hash: hash,
+        expires_at: expiresAt
+    });
+}
+
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -88,24 +125,80 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// Sovereign Signature Middleware (4D Identity)
+const requireSovereignSignature = async (req, res, next) => {
+    const signature = req.headers['x-sovereign-signature'];
+    const sovereignId = req.headers['x-sovereign-id'];
+    const timestamp = req.headers['x-sovereign-timestamp'];
+
+    if (!signature || !sovereignId || !timestamp) {
+        // Soft-fail: allow request but don't set sovereignId. 
+        // This unblocks bootstrap flows where the token isn't yet loaded in the SDK.
+        console.log('Sovereign Signature missing - continuing as non-sovereign requester');
+        return next();
+    }
+
+    // Require timestamp to be within 15 minutes (widened for clock skew)
+    if (Date.now() - parseInt(timestamp, 10) > 15 * 60 * 1000) {
+        console.warn('Sovereign Signature expired');
+        return next(); // Still continue, but won't have req.sovereignId
+    }
+
+    // Construct the payload to verify
+    const rawBody = Object.keys(req.body).length > 0 ? JSON.stringify(req.body) : '';
+    const payloadStr = timestamp + req.method + rawBody;
+
+    const isValid = await sovereignService.verifySignature(db, sovereignId, payloadStr, signature);
+
+    if (!isValid) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Invalid Sovereign Signature' });
+    }
+
+    req.sovereignId = sovereignId;
+    next();
+};
+
 // API Routes
 
 // Register
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password } = req.body;
     if (!username || !email || !password) return res.status(400).json({ error: 'Missing fields' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
     try {
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const passwordHash = await bcrypt.hash(password, 12);
+
+        // 1. Create the user
         const [userId] = await db('users').insert({
             username,
-            email,
-            password_hash: hashedPassword
+            email: email.toLowerCase().trim(),
+            password_hash: passwordHash
         });
 
-        const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-        res.json({ token, user: { id: userId, username, is_premium: 0 } });
+        // 2. Automatically generate their primary Sovereign Identity token
+        let sovereignIdentityId = null;
+        try {
+            const tokenResult = await sovereignService.createToken(db, userId, username);
+            sovereignIdentityId = tokenResult.tokenId;
+
+            // 3. Link the token back to the user record
+            await db('users').where({ id: userId }).update({
+                sovereign_id: sovereignIdentityId
+            });
+        } catch (e) {
+            console.error("Failed to provision Sovereign ID during registration:", e);
+            // Non-fatal, they can provision later
+        }
+
+        const userObj = { id: userId, email, username, sovereign_id: sovereignIdentityId };
+        const accessToken = generateAccessToken(userObj);
+        const refreshToken = generateRefreshToken();
+        await storeRefreshToken(userId, refreshToken);
+
+        res.status(201).json({ accessToken, refreshToken, user: { id: userId, username, email, is_premium: 0, sovereign_id: sovereignIdentityId } });
     } catch (err) {
+        console.error("Register Error:", err);
         res.status(400).json({ error: 'User already exists or registration failed' });
     }
 });
@@ -113,17 +206,71 @@ app.post('/api/auth/register', async (req, res) => {
 // Login
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+
     try {
-        const user = await db('users').where({ email }).first();
-        if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+        const user = await db('users').where({ email: email.toLowerCase().trim() }).first();
 
-        const validPassword = await bcrypt.compare(password, user.password_hash);
-        if (!validPassword) return res.status(400).json({ error: 'Invalid credentials' });
+        // Constant-time comparison to resist timing attacks
+        const validPassword = user
+            ? await bcrypt.compare(password, user.password_hash)
+            : await bcrypt.compare(password, "$2b$12$invalidhashforcomparison12345678");
 
-        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-        res.json({ token, user: { id: user.id, username: user.username, is_premium: user.is_premium } });
+        if (!user || !validPassword) return res.status(401).json({ error: 'Invalid credentials' });
+
+        const userObj = { id: user.id, email: user.email, username: user.username, sovereign_id: user.sovereign_id };
+        const accessToken = generateAccessToken(userObj);
+        const refreshToken = generateRefreshToken();
+        await storeRefreshToken(user.id, refreshToken);
+
+        res.json({ accessToken, refreshToken, user: { id: user.id, username: user.username, email: user.email, is_premium: user.is_premium, sovereign_id: user.sovereign_id } });
     } catch (err) {
+        console.error("Login Error:", err);
         res.status(500).json({ error: 'Login failed' });
+    }
+});
+
+// Refresh Token
+app.post('/api/auth/refresh', async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: 'RefreshToken is required' });
+
+    try {
+        const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        const stored = await db('refresh_tokens')
+            .join('users', 'refresh_tokens.user_id', 'users.id')
+            .select('refresh_tokens.user_id', 'refresh_tokens.expires_at', 'users.id', 'users.email', 'users.username')
+            .where('refresh_tokens.token_hash', hash)
+            .first();
+
+        if (!stored || new Date(stored.expires_at) < new Date()) {
+            return res.status(401).json({ error: 'Invalid or expired refresh token' });
+        }
+
+        // Rotate token
+        await db('refresh_tokens').where('token_hash', hash).del();
+        const newRefreshToken = generateRefreshToken();
+        await storeRefreshToken(stored.user_id, newRefreshToken);
+
+        const accessToken = generateAccessToken({ id: stored.id, email: stored.email, username: stored.username });
+        res.json({ accessToken, refreshToken: newRefreshToken });
+    } catch (err) {
+        console.error("Refresh Error:", err);
+        res.status(500).json({ error: 'Token refresh failed' });
+    }
+});
+
+// Logout
+app.post('/api/auth/logout', authenticateToken, async (req, res) => {
+    const { refreshToken } = req.body;
+    try {
+        if (refreshToken) {
+            const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+            await db('refresh_tokens').where('token_hash', hash).del();
+        }
+        res.json({ message: 'Logged out successfully' });
+    } catch (err) {
+        res.status(500).json({ error: 'Logout failed' });
     }
 });
 
@@ -187,6 +334,7 @@ app.get('/api/published', async (req, res) => {
         const rows = await query.orderBy('published_at', 'desc').limit(50);
         res.json(rows);
     } catch (err) {
+        console.error("Published Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -217,54 +365,10 @@ app.get('/api/zines/:id', async (req, res) => {
         const zine = await db('zines').where({ id: req.params.id }).first();
         if (!zine) return res.status(404).json({ error: 'Not found' });
 
-        const isFunded = zine.funding_goal > 0 && zine.amount_raised >= zine.funding_goal;
-
         const applyAccessControl = async (zine, user) => {
-            // DEBUG: Log access check details
-            console.log('Access check:', {
-                zineId: zine.id,
-                zineUserId: zine.user_id,
-                zineMonetization: zine.monetization_type,
-                zineAccessLevel: zine.access_level,
-                requestUserId: user?.id,
-                requestUserType: user?.id ? typeof user.id : 'none'
-            });
+            const access = await sovereignService.checkAccess(db, zine.id, user ? user.id : null);
 
-            // 1. FREE CONTENT: Always accessible to everyone (logged in or not)
-            if (zine.monetization_type === 'free' || zine.access_level === 'public') {
-                console.log('Access granted: free/public content');
-                return { ...zine, data: JSON.parse(zine.data) };
-            }
-
-            // 2. FUNDED CROWDFUND: Free for everyone once funded
-            if (zine.monetization_type === 'crowdfund' && isFunded) {
-                console.log('Access granted: crowdfunded content is funded');
-                return { ...zine, data: JSON.parse(zine.data) };
-            }
-
-            // 3. AUTHOR: Always has full access
-            // Fix: Ensure type-safe comparison (convert both to numbers)
-            const isAuthor = user && Number(zine.user_id) === Number(user.id);
-            if (isAuthor) {
-                console.log('Access granted: user is author');
-                return { ...zine, data: JSON.parse(zine.data) };
-            }
-
-            // 4. CHECK IF USER HAS PAID/CONTRIBUTED
-            let hasPaid = false;
-            if (user) {
-                const contribution = await db('contributions')
-                    .where({ user_id: user.id, zine_id: zine.id })
-                    .first();
-                if (contribution) {
-                    hasPaid = true;
-                    console.log('Access granted: user has contribution');
-                }
-            }
-
-            const canReadFully = hasPaid;
-
-            if (canReadFully) {
+            if (access.hasAccess) {
                 return { ...zine, data: JSON.parse(zine.data) };
             } else {
                 // Preview: only first page
@@ -275,7 +379,7 @@ app.get('/api/zines/:id', async (req, res) => {
                     data: { pages: firstPage },
                     locked: true,
                     preview: true,
-                    reason: zine.monetization_type === 'crowdfund' ? 'funding_required' : 'payment_required'
+                    reason: access.reason
                 };
             }
         };
@@ -301,7 +405,7 @@ app.get('/api/zines/:id', async (req, res) => {
             if (!token) return res.status(403).json({ error: 'Private zine' });
 
             jwt.verify(token, JWT_SECRET, (err, user) => {
-                if (err || user.id !== zine.user_id) return res.status(403).json({ error: 'Forbidden' });
+                if (err || Number(user.id) !== Number(zine.user_id)) return res.status(403).json({ error: 'Forbidden' });
                 res.json({ ...zine, data: JSON.parse(zine.data) });
             });
         }
@@ -1518,6 +1622,19 @@ app.post('/mcp/export/pdf', authenticateToken, (req, res) => {
 
 // ---- Credits API ----
 
+// Stripe Checkout for Credits
+app.post('/api/checkout', authenticateToken, async (req, res) => {
+    const { amountUSD } = req.body;
+    if (!amountUSD || amountUSD < 5) return res.status(400).json({ error: 'Minimum amount is $5' });
+
+    try {
+        const session = await economyService.createCheckoutSession(req.user.id, amountUSD, req.user.email);
+        res.json(session);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Purchase credits (simulated fiat purchase)
 app.post('/api/credits/purchase', authenticateToken, async (req, res) => {
     const { amount, paymentMethod } = req.body;
@@ -2234,37 +2351,7 @@ app.post('/api/zines/:id/token-gate', authenticateToken, async (req, res) => {
     }
 });
 
-// Get zine with token access check
-app.get('/api/zines/:id/access', authenticateToken, async (req, res) => {
-    const zineId = req.params.id;
 
-    try {
-        const zine = await db('zines').where({ id: zineId }).first();
-        if (!zine) return res.status(404).json({ error: 'Not found' });
-
-        if (!zine.is_token_gated || zine.token_price === 0 || zine.user_id === req.user.id) {
-            return res.json({ hasAccess: true });
-        }
-
-        const sub = await db('subscriptions')
-            .where({ subscriber_id: req.user.id, creator_id: zine.user_id, is_active: 1 })
-            .first();
-        if (sub) return res.json({ hasAccess: true, via: 'subscription' });
-
-        const bid = await db('bids')
-            .where({ bidder_id: req.user.id, zine_id: zineId, status: 'accepted' })
-            .first();
-        if (bid) return res.json({ hasAccess: true, via: 'bid' });
-
-        res.json({
-            hasAccess: false,
-            tokenPrice: zine.token_price,
-            creatorId: zine.user_id
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // Static Files
 // Serve root folder, but exclude backend files
