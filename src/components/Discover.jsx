@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
-const styles = {
-    loading: { gridColumn: '1/-1', textAlign: 'center' },
-    empty: { color: 'var(--vp-text-dim)', gridColumn: '1/-1', textAlign: 'center', padding: '60px 0', fontSize: '1.1em' }
-}
+// Styling handled via index.css and designer-tool classes
+
 
 function Discover() {
     const { vpState, api, showView, updateVpState } = useVP()
@@ -102,27 +100,29 @@ function Discover() {
                 </button>
             </div>
             <div className="discover-grid" id="discoverGrid">
-                {loading ? <p style={styles.loading}>Loading...</p> :
+                {loading ? <p className="discover-status">Loading Reality...</p> :
                     zines.length === 0 ? (
-                        <p style={styles.empty}>
-                            No zines found. Be the first to publish!
+                        <p className="discover-status">
+                            No active zines found. Be the first to publish a new reality.
                         </p>
                     ) : (
                         zines.map((zine) => (
                             <div key={zine.id} className="discover-card" onClick={() => handleRead(zine.id)}>
                                 <div className="discover-card-cover">
-                                    <div className="cover-bg" style={{ fontSize: '3em' }}>{themeIcons[zine.genre] || '📖'}</div>
+                                    <span className="cover-icon">{themeIcons[zine.genre] || '📖'}</span>
                                 </div>
                                 <div className="discover-card-body">
-                                    <h3>{zine.title}</h3>
-                                    <div className="author">by {zine.author_name}</div>
-                                    <div className="meta">
-                                        <span>Published {new Date(zine.published_at).toLocaleDateString()}</span>
-                                        <span>👁 {zine.read_count ?? zine.reads ?? 0} reads</span>
+                                    <div className="card-top">
+                                        <h3>{zine.title}</h3>
+                                        <div className="author-tag">by {zine.author_name}</div>
+                                    </div>
+                                    <div className="card-meta">
+                                        <span className="meta-item">Published {new Date(zine.published_at).toLocaleDateString()}</span>
+                                        <span className="meta-item">👁 {zine.read_count ?? zine.reads ?? 0}</span>
                                     </div>
                                     <div className="discover-card-tags">
-                                        {(zine.tags || '').split(',').map((tag, i) => (
-                                            <span key={i}>{tag.trim()}</span>
+                                        {(zine.tags || '').split(',').map((tag, i) => tag.trim() && (
+                                            <span key={i} className="tag-blob">{tag.trim()}</span>
                                         ))}
                                     </div>
                                 </div>

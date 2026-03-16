@@ -276,7 +276,7 @@ app.post('/api/auth/logout', authenticateToken, async (req, res) => {
 
 // Sync / Save Zine
 app.post('/api/zines', authenticateToken, async (req, res) => {
-    const { title, data, serverId } = req.body;
+    const { title, data, serverId, theme, monetization_type, funding_goal, token_price, is_premium } = req.body;
 
     try {
         if (serverId) {
@@ -285,6 +285,11 @@ app.post('/api/zines', authenticateToken, async (req, res) => {
                 .update({
                     title,
                     data: JSON.stringify(data),
+                    theme,
+                    monetization_type,
+                    funding_goal,
+                    token_price,
+                    is_premium,
                     updated_at: db.fn.now()
                 });
             res.json({ id: serverId, status: 'updated' });
@@ -292,7 +297,12 @@ app.post('/api/zines', authenticateToken, async (req, res) => {
             const [id] = await db('zines').insert({
                 user_id: req.user.id,
                 title,
-                data: JSON.stringify(data)
+                data: JSON.stringify(data),
+                theme,
+                monetization_type,
+                funding_goal,
+                token_price,
+                is_premium
             });
             res.json({ id, status: 'created' });
         }
@@ -341,19 +351,73 @@ app.get('/api/published', async (req, res) => {
 
 // Publish Zine
 app.post('/api/publish/:id', authenticateToken, async (req, res) => {
-    const { author_name, genre, tags } = req.body;
+    const { author_name, genre, tags, description, monetization_type, funding_goal, is_premium, requires_token } = req.body;
+    try {
+        const updateData = {
+            is_published: 1,
+            published_at: db.fn.now(),
+            author_name,
+            genre,
+            tags
+        };
+        if (description !== undefined) updateData.description = description;
+        if (monetization_type !== undefined) updateData.monetization_type = monetization_type || 'free';
+        if (funding_goal !== undefined) updateData.funding_goal = funding_goal;
+        if (is_premium !== undefined) updateData.is_premium = is_premium;
+        if (requires_token !== undefined) updateData.requires_token = requires_token;
+
+        const changes = await db('zines')
+            .where({ id: req.params.id, user_id: req.user.id })
+            .update(updateData);
+        if (changes === 0) return res.status(404).json({ error: 'Zine not found or not owned' });
+        res.json({ status: 'published' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Token Gating — Set/unset token gate on a zine
+app.post('/api/zines/:id/token-gate', authenticateToken, async (req, res) => {
+    const { tokenPrice, isTokenGated } = req.body;
     try {
         const changes = await db('zines')
             .where({ id: req.params.id, user_id: req.user.id })
             .update({
-                is_published: 1,
-                published_at: db.fn.now(),
-                author_name,
-                genre,
-                tags
+                requires_token: isTokenGated ? 1 : 0,
+                token_price: tokenPrice || 0,
+                monetization_type: isTokenGated ? 'token' : 'free'
             });
         if (changes === 0) return res.status(404).json({ error: 'Zine not found or not owned' });
-        res.json({ status: 'published' });
+        res.json({ status: 'updated', isTokenGated, tokenPrice });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// My Subscribers — who is subscribed to the current user (creator)
+app.get('/api/subscriptions/my-subscribers', authenticateToken, async (req, res) => {
+    try {
+        const subscribers = await db('subscriptions as s')
+            .join('users as u', 's.subscriber_id', 'u.id')
+            .select(
+                's.id', 's.amount_per_period', 's.started_at as created_at',
+                'u.id as subscriber_id', 'u.username as subscriber_name'
+            )
+            .where({ 's.creator_id': req.user.id, 's.is_active': 1 })
+            .orderBy('s.started_at', 'desc');
+        res.json(subscribers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Credits Checkout — Create Stripe Checkout Session for credit purchase
+app.post('/api/credits/checkout', authenticateToken, async (req, res) => {
+    const { amountUSD } = req.body;
+    if (!amountUSD || amountUSD <= 0) return res.status(400).json({ error: 'Invalid amount' });
+    try {
+        const result = await economyService.createCheckoutSession(req.user.id, amountUSD, req.user.email);
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

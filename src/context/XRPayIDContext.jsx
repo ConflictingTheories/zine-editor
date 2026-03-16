@@ -103,14 +103,15 @@ const XRPayIDProvider = ({ children }) => {
         }
 
         try {
-            const [walletRes, creditsRes, tokensRes, trustLinesRes, subsRes, bidsRes, transactionsRes] = await Promise.all([
+            const [walletRes, creditsRes, tokensRes, trustLinesRes, subsRes, bidsRes, transactionsRes, subscribersRes] = await Promise.all([
                 api('/wallet').catch(() => null),
                 api('/credits/balance').catch(() => null),
                 api('/tokens').catch(() => null),
                 api('/trustlines').catch(() => null),
                 api('/subscriptions').catch(() => null),
                 api('/bids').catch(() => null),
-                api('/transactions').catch(() => null)
+                api('/transactions').catch(() => null),
+                api('/subscriptions/my-subscribers').catch(() => [])
             ])
 
             setXrState(prev => ({
@@ -120,7 +121,7 @@ const XRPayIDProvider = ({ children }) => {
                 tokens: Array.isArray(tokensRes) ? tokensRes : [],
                 trustLines: Array.isArray(trustLinesRes) ? trustLinesRes : [],
                 subscriptions: Array.isArray(subsRes) ? subsRes : [],
-                subscribers: [], // Would need separate endpoint
+                subscribers: Array.isArray(subscribersRes) ? subscribersRes : [],
                 bids: Array.isArray(bidsRes) ? bidsRes : [],
                 transactions: Array.isArray(transactionsRes) ? transactionsRes : [],
                 isLoading: false,

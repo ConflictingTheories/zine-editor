@@ -1,6 +1,10 @@
 import React from 'react'
 import ShaderElement from './ShaderElement.jsx'
 import AudioViz from './AudioViz.jsx'
+import AudioLog from './AudioLog.jsx'
+import WidgetRegistry from '../lib/WidgetRegistry.jsx'
+import { SovereignSDK } from '../lib/sovereign-sdk.js'
+import { useState, useEffect } from 'react'
 
 const BALLOON_PROPS = {
     dialog: { background: '#fff', border: '2px solid #000', borderRadius: '20px' },
@@ -96,76 +100,133 @@ const styles = {
 }
 
 const ElementContent = ({ el, pageIdx, updateElement }) => {
+    const [decrypted, setDecrypted] = useState(null)
+    const [isDecrypting, setIsDecrypting] = useState(false)
+
+    useEffect(() => {
+        if (el.sealedContent && window._sovereign_identity && !decrypted) {
+            handleDecrypt()
+        }
+    }, [el.sealedContent, window._sovereign_identity])
+
+    const handleDecrypt = async () => {
+        if (!el.sealedContent || !el.sealEnvelope) return
+        setIsDecrypting(true)
+        try {
+            const pt = await SovereignSDK.decrypt(
+                el.sealedContent,
+                el.sealEnvelope,
+                el.sealKey || 'default',
+                window._sovereign_identity.id
+            )
+            setDecrypted(pt)
+        } catch (e) {
+            console.warn("SCEE: Decryption failed", e)
+        } finally {
+            setIsDecrypting(false)
+        }
+    }
+
     const handleBlur = (e) => {
         if (e.target.textContent !== el.content && updateElement) {
             updateElement(pageIdx, el.id, { content: e.target.textContent })
         }
     }
 
-    switch (el.type) {
+    // Use decrypted content if available
+    const displayEl = decrypted ? {
+        ...el, ...{
+            text: el.type === 'text' ? decrypted : el.text,
+            src: el.type === 'image' || el.type === 'video' ? decrypted : el.src,
+            rssUrl: el.type === 'widget' ? decrypted : el.rssUrl,
+            content: el.type === 'text' || el.type === 'balloon' ? decrypted : el.content
+        }
+    } : el
+
+    if (el.sealedContent && !decrypted) {
+        return (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', border: '1px dashed var(--vp-accent)', color: 'var(--vp-accent)', fontSize: '10px', textAlign: 'center' }}>
+                {isDecrypting ? 'DECRYPTING...' : 'PROTECTED_BY_SCEE'}
+            </div>
+        )
+    }
+
+    switch (displayEl.type) {
         case 'text':
             return (
                 <div
                     className="el-text"
                     contentEditable
                     suppressContentEditableWarning
-                    style={styles.text(el)}
+                    style={styles.text(displayEl)}
                     onBlur={handleBlur}
                 >
-                    {el.content}
+                    {displayEl.content || displayEl.text}
                 </div>
             )
         case 'image':
             return (
                 <div className="el-img" style={styles.imageContainer}>
                     <img
-                        src={el.src}
+                        src={displayEl.src}
                         alt=""
-                        style={styles.image(el)}
+                        style={styles.image(displayEl)}
                     />
                 </div>
             )
         case 'panel':
-            return <div className="el-panel" style={styles.panel(el)} />
+            return <div className="el-panel" style={styles.panel(displayEl)} />
         case 'shape':
-            return <div className="el-shape" style={styles.shape(el)} />
+            return <div className="el-shape" style={styles.shape(displayEl)} />
         case 'balloon':
             return (
                 <div
                     className="el-text"
                     contentEditable
                     suppressContentEditableWarning
-                    style={styles.balloon(el)}
+                    style={styles.balloon(displayEl)}
                     onBlur={handleBlur}
                 >
-                    {el.content}
+                    {displayEl.content}
                 </div>
             )
         case 'shader':
             return (
                 <div style={styles.shaderContainer}>
                     <ShaderElement
-                        preset={el.shaderPreset || 'plasma'}
-                        customCode={el.customCode}
-                        width={el.width}
-                        height={el.height}
+                        preset={displayEl.shaderPreset || 'plasma'}
+                        customCode={displayEl.customCode}
+                        width={displayEl.width}
+                        height={displayEl.height}
                     />
                 </div>
             )
         case 'video':
             return (
-                <div style={styles.video}>VIDEO: {el.src || 'No Source'}</div>
+                <div style={styles.video}>VIDEO: {displayEl.src || 'No Source'}</div>
             )
         case 'audio-log':
+            return (
+                <AudioLog
+                    src={displayEl.src}
+                    color={displayEl.color || 'var(--vp-accent)'}
+                    width={displayEl.width}
+                    height={displayEl.height}
+                    seed={displayEl.seed || 123}
+                />
+            )
         case 'audio-viz':
             return (
                 <AudioViz
-                    src={el.src}
-                    color={el.color || 'var(--vp-accent)'}
-                    width={el.width}
-                    height={el.height}
+                    src={displayEl.src}
+                    color={displayEl.color || 'var(--vp-accent)'}
+                    width={displayEl.width}
+                    height={displayEl.height}
                 />
             )
+        case 'widget':
+            const Widget = WidgetRegistry[displayEl.widgetType]
+            return Widget ? <Widget {...displayEl} /> : <div style={{ background: '#f00', color: '#fff', fontSize: '10px' }}>MISSING_WIDGET: {displayEl.widgetType}</div>
         default:
             return null
     }

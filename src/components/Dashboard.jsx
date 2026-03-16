@@ -1,9 +1,8 @@
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
-const styles = {
-    statusIcon: { fontSize: '12px' }
-}
+// Dashboard styles reconstructed in index.css
+
 
 function Dashboard() {
     const { vpState, updateVpState, showView, showModal, createProject, openProject, saveLocal } = useVP()
@@ -32,7 +31,6 @@ function Dashboard() {
         if (confirm('Delete this zine permanently?')) {
             const updatedProjects = vpState.projects.filter((_, i) => i !== index)
             updateVpState({ projects: updatedProjects })
-            localStorage.setItem('vp_projects', JSON.stringify(updatedProjects))
         }
     }
 
@@ -65,38 +63,32 @@ function Dashboard() {
                     <div className="stat-label">Publish Slots ({vpState.user?.is_premium ? 'Premium' : 'Free'})</div>
                 </div>
             </div>
-            <div className="zine-grid">
-                <div className="zine-card create-card" onClick={handleCreateZine}>
-                    <div className="zine-card-cover">
+            <div className="project-grid">
+                <div className="project-card new-zine" onClick={handleCreateZine}>
+                    <div className="card-top">
                         <div className="cover-icon">+</div>
-                    </div>
-                    <div className="zine-card-body">
                         <h3>Create New Zine</h3>
-                        <p>Start a new project</p>
+                        <p className="author-tag">Start a new project</p>
                     </div>
                 </div>
                 {projects.map((project, index) => {
                     const isPub = project._published || false
                     const isSyncing = project._dirty && vpState.isSyncing
                     const badge = isPub ? 'badge-published' : 'badge-draft'
-                    const syncStatus = isSyncing ? '☁️↻' : (project._dirty ? '☁️⃠' : '☁️✓')
                     return (
-                        <div key={project.id} className="zine-card" onClick={() => handleOpenProject(index)}>
-                            <div className="zine-card-cover">
-                                <span className={`zine-card-badge ${badge}`}>{isPub ? '✓ Published' : isPub === null ? 'Syncing...' : 'Draft'}</span>
-                                <div className="cover-icon">📖</div>
-                            </div>
-                            <div className="zine-card-body">
+                        <div key={project.id} className="project-card" onClick={() => handleOpenProject(index)}>
+                            <div className="card-top">
+                                <span className={`zine-card-badge ${badge}`}>{isPub ? 'Published' : 'Draft'}</span>
                                 <h3>{project.title || 'Untitled Zine'}</h3>
-                                <div style={{ fontSize: '0.85em', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
+                                <div className="author-tag">
                                     {project.pages?.length || 0} pages · {project.theme || 'classic'}
                                     {isSyncing && ' (syncing...)'}
                                 </div>
-                                <div className="zine-card-actions">
-                                    <button onClick={() => handleOpenProject(index)}>Edit</button>
-                                    <button onClick={(e) => handleRenameProject(e, index)}>Rename</button>
-                                    <button className="del" onClick={(e) => handleDeleteProject(e, index)}>Delete</button>
-                                </div>
+                            </div>
+                            <div className="zine-card-actions">
+                                <button className="btn-ghost" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }} onClick={() => handleOpenProject(index)}>Edit</button>
+                                <button className="btn-ghost" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }} onClick={(e) => handleRenameProject(e, index)}>Rename</button>
+                                <button className="btn-ghost" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', color: 'var(--vp-accent)' }} onClick={(e) => handleDeleteProject(e, index)}>Delete</button>
                             </div>
                         </div>
                     )

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 import ContentGate from './ContentGate.jsx'
+import WidgetRegistry from '../lib/WidgetRegistry.jsx'
 
 const ANIMATION_MAP = {
     'flash-in': 'reader-flash-in',
@@ -29,7 +30,7 @@ const styles = {
     texture: (page) => ({
         position: 'absolute', inset: 0,
         backgroundImage: `url(${page.texture})`,
-        backgroundSize: 'cover', opacity: 0.2,
+        backgroundSize: 'cover', opacity: 0.1,
         pointerEvents: 'none'
     }),
     element: (el, hidden) => {
@@ -45,7 +46,7 @@ const styles = {
             mixBlendMode: el.blendMode || 'normal',
             cursor: el.action ? 'pointer' : 'default',
             display: hidden ? 'none' : undefined,
-            // Visual effects (were missing)
+            // Visual effects
             boxShadow: el.shadow || 'none',
             filter: el.blur ? `blur(${el.blur}px)` : el.filter || 'none',
             border: el.borderWidth ? `${el.borderWidth}px solid ${el.borderColor || '#000'}` : 'none',
@@ -102,7 +103,18 @@ const styles = {
         }
     },
     video: { width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' },
-    audioLog: { width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', border: '1px solid #d4af37', padding: 10, color: '#fff', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' },
+    audioLog: {
+        width: '100%',
+        height: '100%',
+        background: 'var(--vp-surface2)',
+        border: '1px solid var(--vp-border)',
+        borderRadius: 'var(--radius)',
+        padding: '12px',
+        color: 'var(--vp-text)',
+        display: 'flex',
+        flexDirection: 'column',
+        boxSizing: 'border-box'
+    },
     modalControls: {
         display: 'flex', gap: '10px', marginTop: '15px'
     }
@@ -115,6 +127,7 @@ function Reader() {
     const [unlockedPages, setUnlockedPages] = useState(new Set())
     const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
     const [toggledLabels, setToggledLabels] = useState(new Set())
+    const [variables, setVariables] = useState({})
     const [contentUnlocked, setContentUnlocked] = useState(false)
     const [gateType, setGateType] = useState(null)
 
@@ -154,7 +167,7 @@ function Reader() {
         if (page?.bgm) playBGM(page.bgm)
         else stopBGM()
         return () => stopBGM()
-    }, [pageIdx, page])
+    }, [pageIdx, page, playBGM, stopBGM])
 
     const handleNext = () => {
         let nextIdx = pageIdx + 1
@@ -181,8 +194,14 @@ function Reader() {
     }
 
     const handleInteraction = (el) => {
-        const { action, actionVal } = el
-        if (!action) return
+        const { action, actionVal, varName, varVal } = el
+        if (!action && !varName) return
+
+        // Handle Variable Setting
+        if (action === 'setVar' && varName) {
+            setVariables(prev => ({ ...prev, [varName]: varVal || true }))
+            console.log(`[Narrative] Variable Set: ${varName} = ${varVal || true}`)
+        }
 
         switch (action) {
             case 'goto': {
@@ -196,20 +215,21 @@ function Reader() {
                 }
                 break
             }
-            case 'unlock':
+            case 'unlock': {
                 const unlockIdx = parseInt(actionVal) - 1
                 if (!isNaN(unlockIdx)) {
                     setUnlockedPages(prev => new Set(prev).add(unlockIdx))
                 }
                 break
-            case 'password':
+            }
+            case 'password': {
                 const passIdx = parseInt(actionVal) - 1
                 if (!isNaN(passIdx)) {
                     setPasswordModal({ active: true, targetIdx: passIdx, value: '' })
                 }
                 break
+            }
             case 'vfx':
-                // fallback to "flash" when actionVal is missing so older elements still trigger
                 triggerVfx(actionVal || 'flash')
                 break
             case 'sfx':
@@ -238,7 +258,8 @@ function Reader() {
             setPageIdx(passwordModal.targetIdx)
             setPasswordModal({ active: false, targetIdx: -1, value: '' })
         } else {
-            alert('Incorrect Password')
+            console.error('Incorrect password attempt')
+            setError('Incorrect password — try again.')
         }
     }
 
@@ -256,11 +277,8 @@ function Reader() {
             {/* Content Gate for monetized content */}
             {gateType && !contentUnlocked && (
                 <ContentGate
-                    gateType={gateType}
-                    title={project.title}
-                    fundingGoal={project.funding_goal}
-                    amountRaised={project.amount_raised}
-                    onUnlock={handleGateUnlock}
+                    zine={project}
+                    onUnlocked={handleGateUnlock}
                 />
             )}
 
@@ -270,6 +288,14 @@ function Reader() {
                         <div style={styles.texture(page)} />
                     )}
                     {page.elements.filter(e => !e.hidden).map(el => {
+                        // Narrative Condition Check
+                        if (el.condVar) {
+                            const currentVal = variables[el.condVar]
+                            const targetVal = el.condVal || true
+                            // If condition not met, hide element
+                            if (String(currentVal) !== String(targetVal)) return null
+                        }
+
                         const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
                         return (
                             <div
@@ -304,13 +330,38 @@ function Reader() {
                                 )}
                                 {el.type === 'audio-log' && (
                                     <div style={styles.audioLog}>
-                                        <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
-                                            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                            <div style={{
+                                                width: 28, height: 28, borderRadius: '50%',
+                                                background: 'var(--vp-accent)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                cursor: 'pointer', color: '#fff', fontSize: 10
+                                            }}
                                                 onClick={(e) => { e.stopPropagation(); if (el.src) { const a = new Audio(el.src); a.play().catch(() => { }) } }}
-                                            >▶</div>
-                                            <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
+                                            >PLAY</div>
+                                            <span style={{ fontSize: 12, fontWeight: 600 }}>{el.label || 'Audio Stream'}</span>
                                         </div>
-                                        <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[{el.vizTheme || 'bars'}]</div>
+                                        <div style={{
+                                            flex: 1,
+                                            background: 'var(--vp-bg-input)',
+                                            borderRadius: 'var(--radius)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: 10,
+                                            color: 'var(--vp-text-dim)',
+                                            border: '1px solid var(--vp-border)'
+                                        }}>
+                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>
+                                                <div style={{ width: '40%', height: 2, background: 'var(--vp-accent)' }} />
+                                                <div style={{ flex: 1, height: 2, background: 'var(--vp-border)' }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {el.type === 'widget' && (
+                                    <div className="reader-widget-wrap" style={{ width: '100%', height: '100%' }}>
+                                        {WidgetRegistry[el.widgetType] ? React.createElement(WidgetRegistry[el.widgetType], el) : <div>WIDGET_NOT_FOUND</div>}
                                     </div>
                                 )}
                             </div>

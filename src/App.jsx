@@ -8,6 +8,7 @@ import Reader from './components/Reader.jsx'
 import VfxSystem from './components/VfxSystem.jsx'
 import Toast from './components/Toast.jsx'
 import MonetizationDashboard from './components/MonetizationDashboard.jsx'
+import Profile from './components/Profile.jsx'
 import { useVP } from './context/VPContext.jsx'
 import { useStripeConfirm } from './hooks/useStripeConfirm.js'
 
@@ -37,6 +38,8 @@ function App() {
                 return <Reader />
             case 'monetization':
                 return isLoggedIn ? <MonetizationDashboard /> : <Discover />
+            case 'profile':
+                return isLoggedIn ? <Profile /> : <Discover />
             default:
                 return isLoggedIn ? <Dashboard /> : <Discover />
         }

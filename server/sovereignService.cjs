@@ -169,13 +169,8 @@ async function createToken(db, userId, identity, claims = {}) {
         user_id: userId,
         token_id: tokenId,
         identity: identity,
-        public_key_jwk: JSON.stringify({ // Simplified JWK representation
-            kty: 'EC',
-            crv: 'P-256',
-            x: publicKey.toString('base64'),
-            y: '' // Would need proper JWK conversion
-        }),
-        private_key_jwk: encrypt(privateKey), // Encrypt the private key
+        public_key_jwk: JSON.stringify(publicKey.export({ format: 'jwk' })),
+        private_key_jwk: encrypt(JSON.stringify(privateKey.export({ format: 'jwk' }))),
         claims: JSON.stringify(claims),
         token_data: toBase64Url(packet), // Store the full token data
         palette_h1: palette[0].toString(),
@@ -477,9 +472,26 @@ async function verifyDelegation(db, delegationId) {
  * Get user's sovereign tokens
  */
 async function getUserTokens(db, userId) {
-    return db('sovereign_tokens')
+    const tokens = await db('sovereign_tokens')
         .where({ user_id: userId, is_active: 1 })
-        .select('id', 'token_id', 'identity', 'claims', 'palette_h1', 'palette_h2', 'palette_h3', 'created_at');
+        .select('id', 'token_id', 'identity', 'claims', 'palette_h1', 'palette_h2', 'palette_h3', 'created_at', 'public_key_jwk', 'private_key_jwk');
+
+    return tokens.map(t => {
+        try {
+            const privateJwk = t.private_key_jwk ? JSON.parse(decrypt(t.private_key_jwk)) : null;
+            const publicJwk = t.public_key_jwk ? JSON.parse(t.public_key_jwk) : null;
+            return {
+                ...t,
+                publicJwk,
+                privateJwk,
+                public_key_jwk: undefined,
+                private_key_jwk: undefined
+            };
+        } catch (e) {
+            console.error('Error decorating user token:', e);
+            return t;
+        }
+    });
 }
 
 /**

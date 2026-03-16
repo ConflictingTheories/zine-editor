@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
 import { getGateInfo, unlockContent, checkZineAccess } from '../api/index.js';
+import { TokenRenderer } from '../lib/sovereign-sdk.js';
+import { useRef } from 'react';
 
 /**
  * ContentGate - Component for displaying gated content
@@ -22,6 +23,24 @@ export default function ContentGate({
     const [tokenInput, setTokenInput] = useState('');
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
+    const canvasRef = useRef(null);
+    const rendererRef = useRef(null);
+
+    useEffect(() => {
+        if (gateInfo?.gate_type === 'token' && canvasRef.current && !rendererRef.current) {
+            const renderer = new TokenRenderer(canvasRef.current, 12345, [220, 180, 255]);
+            rendererRef.current = renderer;
+            renderer.start();
+        }
+    }, [gateInfo, canvasRef.current]);
+
+    useEffect(() => {
+        if (rendererRef.current) {
+            if (unlocking) rendererRef.current.setState('unlocking');
+            else if (success) rendererRef.current.setState('unlocked');
+            else rendererRef.current.setState('locked');
+        }
+    }, [unlocking, success]);
 
     useEffect(() => {
         if (zine) {
@@ -153,6 +172,11 @@ export default function ContentGate({
             {/* Token Unlock Form */}
             {gateInfo?.gate_type === 'token' && (
                 <form onSubmit={handleUnlock} style={styles.unlockForm}>
+                    <div style={styles.tokenVisualContainer}>
+                        <canvas ref={canvasRef} width={128} height={128} style={styles.tokenCanvas} />
+                        <div style={styles.telemetry}>ID_VERIFICATION_LINK: ACTIVE</div>
+                    </div>
+
                     <p style={styles.unlockText}>
                         Enter your sovereign token to unlock this content:
                     </p>
@@ -173,7 +197,7 @@ export default function ContentGate({
                         disabled={unlocking}
                         style={styles.unlockButton}
                     >
-                        {unlocking ? 'Unlocking...' : 'Unlock with Token'}
+                        {unlocking ? 'Attaching Identity...' : 'Unlock with Token'}
                     </button>
                 </form>
             )}
@@ -373,5 +397,28 @@ const styles = {
         cursor: 'pointer',
         fontFamily: "'DM Sans', sans-serif",
     },
+    tokenVisualContainer: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#000',
+        padding: '20px',
+        borderRadius: '12px',
+        border: '1px solid #222',
+        marginBottom: '20px'
+    },
+    tokenCanvas: {
+        width: '80px',
+        height: '80px',
+        borderRadius: '50%',
+        boxShadow: '0 0 20px rgba(124, 92, 252, 0.3)'
+    },
+    telemetry: {
+        fontSize: '8px',
+        color: '#666',
+        marginTop: '10px',
+        fontFamily: 'monospace'
+    }
 };
 

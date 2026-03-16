@@ -519,14 +519,14 @@ export class TokenRenderer {
         ctx.save();
         ctx.translate(cx, cy);
         if (this.state === 'locked') {
-            ctx.fillStyle = `rgba(0,0,0,${0.4 * (1 - p)})`;
+            ctx.fillStyle = `rgba(0,0,0,${0.2 * (1 - p)})`;
             ctx.fillRect(-cx, -cy, S, S);
         } else if (this.state === 'unlocking') {
             ctx.beginPath(); ctx.arc(0, 0, 10, this.t * 0.1, this.t * 0.1 + Math.PI * 1.5);
-            ctx.strokeStyle = `rgba(255,200,80,${0.8 * p})`; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = `rgba(99, 102, 241,${0.8 * p})`; ctx.lineWidth = 2; ctx.stroke();
         } else if (this.state === 'unlocked') {
             ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-1, 5); ctx.lineTo(7, -5);
-            ctx.strokeStyle = `rgba(100,255,160,${p})`; ctx.lineWidth = 3; ctx.stroke();
+            ctx.strokeStyle = `rgba(16, 185, 129,${p})`; ctx.lineWidth = 3; ctx.stroke();
         }
         ctx.restore();
     }

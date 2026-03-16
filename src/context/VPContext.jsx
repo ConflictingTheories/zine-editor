@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getTutorialData } from '../data/tutorialData.js'
+import { getVisionOfMadnessData } from '../data/visionOfMadness.js'
 import { request as apiRequest, setTokens, clearTokens } from '../api/index.js'
 import { SovereignSDK } from '../lib/sovereign-sdk.js'
 
@@ -8,37 +9,59 @@ const VPContext = createContext()
 export const useVP = () => useContext(VPContext)
 
 const VPProvider = ({ children }) => {
-    const [vpState, setVpState] = useState({
-        projects: (() => {
+    const [vpState, setVpState] = useState(() => {
+        const storedUser = localStorage.getItem('vp_user')
+        let user = null
+        if (storedUser && storedUser !== 'undefined') {
             try {
-                return JSON.parse(localStorage.getItem('vp_projects') || '[]')
-            } catch { return [] }
-        })(),
-        published: [],
-        currentProject: null,
-        isPremium: false,
-        selectedTheme: 'classic',
-        // Parse user and ensure ID is numeric
-        user: (() => {
-            const stored = localStorage.getItem('vp_user')
-            if (!stored || stored === 'undefined') return null
+                const parsed = JSON.parse(storedUser)
+                user = { ...parsed, id: parsed?.id ? Number(parsed.id) : null }
+            } catch { }
+        }
+
+        const projectKey = user ? `vp_projects_${user.id}` : 'vp_projects_guest'
+        const projects = (() => {
             try {
-                const parsed = JSON.parse(stored)
-                return { ...parsed, id: parsed?.id ? Number(parsed.id) : null }
+                const stored = localStorage.getItem(projectKey)
+                let list = []
+                if (stored && stored !== '[]') {
+                    list = JSON.parse(stored)
+                }
+
+                // Ensure demo zines are ALWAYS present in the list
+                const demos = [getVisionOfMadnessData(), getTutorialData()]
+                demos.forEach(demo => {
+                    if (!list.find(p => p.id === demo.id || p.title === demo.title)) {
+                        list.push(demo)
+                    }
+                })
+
+                localStorage.setItem(projectKey, JSON.stringify(list))
+                return list
             } catch {
-                return null
+                return [getVisionOfMadnessData(), getTutorialData()]
             }
-        })(),
-        token: localStorage.getItem('token'),
-        isOnline: navigator.onLine,
-        isSyncing: false,
-        toasts: [],
-        modals: {},
-        currentView: 'dashboard',
-        readerMode: null,
-        selection: { type: null, id: null, pageIdx: 0 },
-        history: [],
-        historyIdx: -1
+        })()
+
+        return {
+            projects,
+            published: [],
+            currentProject: null,
+            isPremium: false,
+            selectedTheme: 'classic',
+            user,
+            token: localStorage.getItem('token'),
+            isOnline: navigator.onLine,
+            isSyncing: false,
+            toasts: [],
+            modals: {},
+            currentView: 'dashboard',
+            readerMode: null,
+            theme: localStorage.getItem('vp_theme') || 'dark',
+            selection: { type: null, id: null, pageIdx: 0 },
+            history: [],
+            historyIdx: -1
+        }
     })
 
     const updateVpState = (updates) => {
@@ -71,6 +94,10 @@ const VPProvider = ({ children }) => {
     const [clipboard, setClipboard] = useState(null)
     const [activeVfx, setActiveVfx] = useState(null)
     const bgmRef = useRef(null)
+
+    const toggleTheme = () => {
+        setVpState(prev => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }))
+    }
 
     const showView = (name) => {
         setVpState(prev => ({ ...prev, currentView: name, ...(name !== 'reader' ? { readerMode: null } : {}) }))
@@ -109,29 +136,50 @@ const VPProvider = ({ children }) => {
     }
 
     const saveLocal = () => {
-        setVpState(prev => {
-            try {
-                localStorage.setItem('vp_projects', JSON.stringify(prev.projects))
-            } catch (e) { }
-            return prev
-        })
+        const { user, projects } = vpState
+        const projectKey = user ? `vp_projects_${user.id}` : 'vp_projects_guest'
+        try {
+            localStorage.setItem(projectKey, JSON.stringify(projects))
+        } catch (e) { }
     }
 
+    // Single Source of Truth for Persistence
     useEffect(() => {
-        const stored = localStorage.getItem('vp_projects')
-        if (stored) return
-        const initial = [getTutorialData()]
-        setVpState(prev => ({ ...prev, projects: initial }))
-        localStorage.setItem('vp_projects', JSON.stringify(initial))
-    }, [])
+        const { user, projects, theme } = vpState
+        const projectKey = user ? `vp_projects_${user.id}` : 'vp_projects_guest'
 
-    useEffect(() => {
-        if (vpState.projects?.length > 0) {
+        // Save theme
+        localStorage.setItem('vp_theme', theme)
+        if (theme === 'light') {
+            document.body.classList.add('light-theme')
+        } else {
+            document.body.classList.remove('light-theme')
+        }
+
+        // Only save if we have projects (don't overwrite with empty list on boot)
+        if (projects && projects.length > 0) {
             try {
-                localStorage.setItem('vp_projects', JSON.stringify(vpState.projects))
+                localStorage.setItem(projectKey, JSON.stringify(projects))
             } catch (e) { }
         }
-    }, [vpState.projects])
+    }, [vpState.projects, vpState.user?.id, vpState.theme])
+
+    // Cross-tab Synchronization
+    useEffect(() => {
+        const handleStorageChange = (e) => {
+            if (e.key === 'token') {
+                if (!e.newValue) {
+                    // Logged out in another tab
+                    logout()
+                } else {
+                    // Logged in in another tab - refresh page to be safe
+                    window.location.reload()
+                }
+            }
+        }
+        window.addEventListener('storage', handleStorageChange)
+        return () => window.removeEventListener('storage', handleStorageChange)
+    }, [])
 
     // Auto-sync every 30 seconds when online
     useEffect(() => {
@@ -139,6 +187,8 @@ const VPProvider = ({ children }) => {
         const syncInterval = setInterval(() => sync(), 30000)
         // Also sync once on mount if online
         sync()
+        // And load identity
+        loadSovereignIdentity()
         return () => clearInterval(syncInterval)
     }, [vpState.isOnline, vpState.token])
 
@@ -166,28 +216,84 @@ const VPProvider = ({ children }) => {
         }
     }
 
+    const loadSovereignIdentity = async () => {
+        try {
+            const tokens = await api('/sovereign/tokens', 'GET')
+            if (tokens && tokens.length > 0) {
+                const token = tokens[0]
+
+                const parseJwk = (jwk) => typeof jwk === 'string' ? JSON.parse(jwk) : jwk
+                const priv = parseJwk(token.privateJwk || token.claims?.priv)
+                const pub = parseJwk(token.publicJwk || token.claims?.pub)
+                const claims = typeof token.claims === 'string' ? JSON.parse(token.claims) : token.claims
+
+                if (!priv || !pub) {
+                    console.warn('Skipping Sovereign Identity load: missing keys', { priv: !!priv, pub: !!pub })
+                    return
+                }
+
+                window._sovereign_identity = {
+                    id: token.id,
+                    seed: token.seed,
+                    claims: claims,
+                    keyPair: {
+                        privateKey: await crypto.subtle.importKey(
+                            'jwk',
+                            priv,
+                            { name: 'ECDSA', namedCurve: 'P-256' },
+                            true,
+                            ['sign']
+                        ),
+                        publicKey: await crypto.subtle.importKey(
+                            'jwk',
+                            pub,
+                            { name: 'ECDSA', namedCurve: 'P-256' },
+                            true,
+                            ['verify']
+                        )
+                    }
+                }
+                console.log("Sovereign Identity Mounted:", token.id)
+            }
+        } catch (err) {
+            console.warn('Failed to load Sovereign Identity:', err)
+        }
+    }
+
     const login = async (email, password) => {
         try {
             const res = await api('/auth/login', 'POST', { email, password })
             if (!res.accessToken) {
                 throw new Error('Invalid response from server')
             }
-            // Hydrate Sovereign Identity from local/seed if available
-            // For now, if the user has a sovereign_id, regenerate the local identity object.
-            // (In a production flow, we'd prompt for the identity passphrase/seed)
-            if (res.user.sovereign_id) {
-                try {
-                    const token = await SovereignSDK.createToken({ id: res.user.sovereign_id })
-                    window._sovereign_identity = token
-                } catch (e) {
-                    console.error("Sovereign Identity initialization failed:", e)
-                    // Continue without sovereign identity if it fails
-                }
-            }
 
             setTokens(res.accessToken, res.refreshToken)
-            setVpState(prev => ({ ...prev, token: res.accessToken, user: res.user }))
             localStorage.setItem('vp_user', JSON.stringify(res.user))
+
+            // Load user specific projects from server (sync)
+            const userZines = await api('/zines', 'GET')
+            const projectKey = `vp_projects_${res.user.id}`
+            const localStored = localStorage.getItem(projectKey)
+            let projects = userZines.length > 0 ? userZines : (localStored ? JSON.parse(localStored) : [])
+
+            // Ensure demos
+            const demos = [getVisionOfMadnessData(), getTutorialData()]
+            demos.forEach(demo => {
+                if (!projects.find(p => p.id === demo.id || p.title === demo.title)) {
+                    projects.push(demo)
+                }
+            })
+
+            setVpState(prev => ({
+                ...prev,
+                token: res.accessToken,
+                user: res.user,
+                projects,
+                currentProject: null,
+                currentView: 'dashboard'
+            }))
+
+            await loadSovereignIdentity()
             closeModal('authModal')
             toast(`Welcome, ${res.user.username}!`, 'success')
         } catch (err) {
@@ -204,18 +310,25 @@ const VPProvider = ({ children }) => {
                 throw new Error('Invalid response from server')
             }
 
-            if (res.user.sovereign_id) {
-                try {
-                    const token = await SovereignSDK.createToken({ id: res.user.sovereign_id })
-                    window._sovereign_identity = token
-                } catch (e) {
-                    console.error("Sovereign Identity initialization failed:", e)
-                }
-            }
-
             setTokens(res.accessToken, res.refreshToken)
-            setVpState(prev => ({ ...prev, token: res.accessToken, user: res.user }))
             localStorage.setItem('vp_user', JSON.stringify(res.user))
+
+            // New user gets default projects
+            const projects = [getVisionOfMadnessData(), getTutorialData()]
+            localStorage.setItem(`vp_projects_${res.user.id}`, JSON.stringify(projects))
+
+            setVpState(prev => ({
+                ...prev,
+                token: res.accessToken,
+                user: res.user,
+                projects,
+                currentProject: null,
+                currentView: 'dashboard'
+            }))
+
+            await new Promise(r => setTimeout(r, 1000))
+            await loadSovereignIdentity()
+
             closeModal('authModal')
             toast(`Welcome, ${res.user.username}!`, 'success')
         } catch (err) {
@@ -226,10 +339,31 @@ const VPProvider = ({ children }) => {
     }
 
     const logout = () => {
-        // Attempt server logout, but clear local regardless
         api('/auth/logout', 'POST', { refreshToken: localStorage.getItem('refreshToken') }).catch(() => { });
         window._sovereign_identity = null;
-        setVpState(prev => ({ ...prev, token: null, user: null }))
+
+        // Reset to guest state
+        const storedGuest = localStorage.getItem('vp_projects_guest')
+        let guestProjects = storedGuest ? JSON.parse(storedGuest) : []
+
+        // Ensure demos
+        const demos = [getVisionOfMadnessData(), getTutorialData()]
+        demos.forEach(demo => {
+            if (!guestProjects.find(p => p.id === demo.id || p.title === demo.title)) {
+                guestProjects.push(demo)
+            }
+        })
+
+        setVpState(prev => ({
+            ...prev,
+            token: null,
+            user: null,
+            projects: guestProjects,
+            currentProject: null,
+            currentView: 'dashboard',
+            history: [],
+            historyIdx: -1
+        }))
         clearTokens()
         localStorage.removeItem('vp_user')
         toast('Logged out', 'info')
@@ -312,6 +446,33 @@ const VPProvider = ({ children }) => {
         toast('Project saved!', 'success')
     }
 
+    const preSyncEncryption = async (pages) => {
+        if (!window._sovereign_identity || !SovereignSDK) return pages
+        const processed = JSON.parse(JSON.stringify(pages))
+        for (const page of processed) {
+            for (const el of page.elements) {
+                if (el.isSealed && !el.sealedAt) {
+                    try {
+                        const sensitive = el.text || el.src || el.rssUrl || el.actionVal || el.content
+                        if (!sensitive) continue
+                        const res = await SovereignSDK.encrypt(sensitive, el.sealKey || 'default', window._sovereign_identity.id)
+                        el.sealedContent = res.envelope
+                        el.sealEnvelope = res.key
+                        el.sealedAt = new Date().toISOString()
+                        // Strip the original content to maintain privacy
+                        if (el.text) el.text = "[SEALED]"
+                        if (el.src) el.src = "sealed://asset"
+                        if (el.rssUrl) el.rssUrl = "sealed://rss"
+                        console.log(`SCEE: Sealed element ${el.id}`)
+                    } catch (e) {
+                        console.error(`SCEE: Failed to seal ${el.id}`, e)
+                    }
+                }
+            }
+        }
+        return processed
+    }
+
     const sync = async () => {
         if (!vpState.isOnline || !vpState.token) return
         setVpState(prev => ({ ...prev, isSyncing: true }))
@@ -320,11 +481,16 @@ const VPProvider = ({ children }) => {
             for (const p of projects) {
                 if (p._dirty && p.pages) {
                     try {
+                        const encryptedPages = await preSyncEncryption(p.pages)
                         const res = await api('/zines', 'POST', {
                             serverId: p.serverId,
                             title: p.title,
-                            data: p.pages,
-                            theme: p.theme
+                            data: encryptedPages,
+                            theme: p.theme,
+                            monetization_type: p.monetization_type,
+                            funding_goal: p.funding_goal,
+                            token_price: p.token_price,
+                            is_premium: p.is_premium
                         })
                         p.serverId = res.id
                         p._dirty = false
@@ -610,6 +776,7 @@ const VPProvider = ({ children }) => {
             return
         }
         try {
+            // First, ensure the zine is saved to the server
             if (!project.serverId) {
                 const res = await api('/zines', 'POST', { title: formData.title || project.title, data: project.pages, theme: project.theme })
                 project.serverId = res.id
@@ -619,13 +786,20 @@ const VPProvider = ({ children }) => {
                     projects: prev.projects.map(p => p.id === project.id ? { ...project, serverId: res.id } : p)
                 }))
             }
+            // Send ALL publish fields including monetization settings
             await api(`/publish/${project.serverId}`, 'POST', {
                 author_name: formData.author || vpState.user?.username || 'Anonymous',
+                description: formData.description || '',
                 genre: formData.genre || 'classic',
-                tags: (formData.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(',')
+                tags: (formData.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(','),
+                monetization_type: formData.monetization_type || 'free',
+                funding_goal: formData.funding_goal || null,
+                is_premium: formData.is_premium || 0,
+                requires_token: formData.requires_token || 0
             })
-            // Mark project as published
+            // Mark project as published locally
             project._published = true
+            project._monetization = formData.monetization_type || 'free'
             const idx = vpState.projects.findIndex(p => p.id === project.id)
             if (idx >= 0) {
                 const next = [...vpState.projects]
@@ -636,6 +810,21 @@ const VPProvider = ({ children }) => {
             toast('🚀 Zine published! Go to Discover to see it live.', 'success')
         } catch (e) {
             toast('Publish failed: ' + (e.message || 'Error'), 'error')
+        }
+    }
+
+    const createCheckoutSession = async (amountUSD) => {
+        try {
+            const result = await api('/credits/checkout', 'POST', { amountUSD })
+            if (result?.url) {
+                window.location.href = result.url
+            } else if (result?.simulated) {
+                toast(`Simulated: ${result.vpcAmount} credits added (no Stripe key configured)`, 'info')
+            }
+            return result
+        } catch (err) {
+            toast('Checkout failed: ' + err.message, 'error')
+            throw err
         }
     }
 
@@ -944,6 +1133,8 @@ const VPProvider = ({ children }) => {
         getAssets,
         addAsset,
         publishZine,
+        createCheckoutSession,
+        reloadProject,
         themes
     }
 

@@ -2,10 +2,7 @@ import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { exportToHTML, exportToPDF, exportToInteractive } from '../utils/exportSystem'
 
-const styles = {
-    desc: { marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' },
-    btn: { marginTop: 12 }
-}
+// No inline styles - using CSS classes
 
 function ExportModal({ onClose }) {
     const { vpState } = useVP()
@@ -45,17 +42,22 @@ function ExportModal({ onClose }) {
                     <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                 </div>
 
-                <div style={{ margin: '15px 0', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <div className="export-options">
+                    <label className="checkbox-row">
                         <input type="checkbox" checked={embedAssets} onChange={e => setEmbedAssets(e.target.checked)} />
-                        <span><b>Compile all files (Offline Mode)</b><br /><small style={{ color: '#aaa' }}>Embeds libraries and assets. No internet required to view.</small></span>
+                        <span>
+                            <b>Compile all files (Offline Mode)</b>
+                            <small>Embeds libraries and assets. No internet required to view.</small>
+                        </span>
                     </label>
                 </div>
 
                 {exportTab === 'pdf' && (
                     <div className="export-content active">
-                        <p style={styles.desc}>Export as print-ready PDF.</p>
-                        <button className="topnav-btn" onClick={handleExportPDF} style={styles.btn}>Generate PDF</button>
+                        <div className="export-option">
+                            <p>Print-ready PDF for physical zines</p>
+                            <button className="btn-primary" onClick={handleExportPDF}>Generate PDF</button>
+                        </div>
                     </div>
                 )}
                 {exportTab === 'html' && (

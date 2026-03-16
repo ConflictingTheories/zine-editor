@@ -3,28 +3,8 @@ import { useVP } from '../context/VPContext.jsx'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 
-const styles = {
-    themeSelect: {
-        padding: '5px 8px',
-        background: 'var(--vp-surface2)',
-        border: '1px solid var(--vp-border)',
-        color: 'var(--vp-text)',
-        borderRadius: '4px',
-        fontSize: '0.78em'
-    },
-    publishBtn: {
-        background: 'var(--vp-accent)',
-        color: '#000'
-    },
-    orientationSelect: {
-        padding: '4px 10px',
-        background: 'var(--vp-surface2)',
-        border: '1px solid var(--vp-border)',
-        color: 'var(--vp-text)',
-        fontSize: '0.78em',
-        borderRadius: '3px'
-    }
-}
+// Editor components use CSS classes defined in index.css and Editor.css
+
 
 function Editor() {
     const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, themes } = useVP()
@@ -52,8 +32,15 @@ function Editor() {
     }
 
 
-    const currentPage = project.pages[pageIdx]
+    const currentPage = project.pages?.[pageIdx]
     const themeStatus = themes[project.theme || 'classic']?.status || 'STABLE'
+
+    useEffect(() => {
+        // Ensure pageIdx is valid
+        if (project.pages && (pageIdx >= project.pages.length || pageIdx < 0)) {
+            updateVpState({ selection: { ...vpState.selection, pageIdx: 0 } })
+        }
+    }, [project.pages, pageIdx])
 
     useEffect(() => {
         const onKey = (e) => {
@@ -71,6 +58,7 @@ function Editor() {
     }, [project, pageIdx, currentPage?.id, undo, redo, copyElement, pasteElement, saveProject, deleteElement])
 
     const handleAddText = () => {
+        if (pageIdx < 0) return
         addElement(pageIdx, {
             type: 'text',
             content: 'Enter text here...',
@@ -88,6 +76,7 @@ function Editor() {
     }
 
     const handleAddImage = () => {
+        if (pageIdx < 0) return
         const input = document.createElement('input')
         input.type = 'file'
         input.accept = 'image/*'
@@ -128,45 +117,41 @@ function Editor() {
             {/* Top toolbar */}
             <div className="ed-toolbar-top">
                 <div className="ed-tool-group">
-                    <button className="ed-tool" title="Undo (Ctrl+Z)" onClick={undo}>↩ Undo</button>
-                    <button className="ed-tool" title="Redo (Ctrl+Shift+Z)" onClick={redo}>↪ Redo</button>
+                    <button className="ed-tool" title="Undo (Ctrl+Z)" onClick={undo}>↶</button>
+                    <button className="ed-tool" title="Redo (Ctrl+Shift+Z)" onClick={redo}>↷</button>
                 </div>
                 <div className="ed-tool-group">
-                    <button className="ed-tool" onClick={handleAddText}>T Text</button>
-                    <button className="ed-tool" onClick={handleAddImage}>🖼 Image</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>▣ Panel</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>◆ Shape</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>💬 Balloon</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>💥 SFX</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>✦ Symbol</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>🎨 Shader</button>
+                    <button className="ed-tool" title="Text" onClick={handleAddText}>T</button>
+                    <button className="ed-tool" title="Image" onClick={handleAddImage}>🖼️</button>
                 </div>
                 <div className="ed-tool-group">
-                    <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>⊞ Grid</button>
-                    <button className={`ed-tool ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(!snapOn)}>⊡ Snap</button>
+                    <button className="ed-tool" title="Assets" onClick={() => showModal('assetModal', 'panels')}>🎨</button>
+                    <button className={`ed-tool ${gridOn ? 'active' : ''}`} title="Grid" onClick={() => setGridOn(!gridOn)}>⊞</button>
+                    <button className={`ed-tool ${snapOn ? 'active' : ''}`} title="Snap" onClick={() => setSnapOn(!snapOn)}>⊡</button>
                 </div>
                 <div className="ed-tool-group">
-                    <select
-                        value={project.theme || 'classic'}
-                        onChange={(e) => applyTheme(e.target.value)}
-                        style={styles.themeSelect}
-                    >
-                        <option value="classic">Classic Literature</option>
-                        <option value="fantasy">Medieval Fantasy</option>
+                    <select className="form-input" value={project.theme || 'classic'} onChange={(e) => applyTheme(e.target.value)} style={{ minWidth: '120px' }}>
+                        <option value="classic">Classic</option>
+                        <option value="fantasy">Fantasy</option>
                         <option value="cyberpunk">Cyberpunk</option>
-                        <option value="conspiracy">Dark Conspiracies</option>
-                        <option value="worldbuilding">World Building</option>
+                        <option value="conspiracy">Conspiracy</option>
+                        <option value="worldbuilding">World</option>
                         <option value="comics">Comics</option>
-                        <option value="arcane">Arcane Lore</option>
+                        <option value="arcane">Arcane</option>
+                    </select>
+                </div>
+                <div className="ed-tool-group">
+                    <select className="form-input" value={currentPage?.orientation || 'portrait'} onChange={(e) => {/* TODO: implement */ }} style={{ minWidth: '100px' }}>
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
                     </select>
                 </div>
                 <div style={{ flex: 1 }}></div>
                 <div className="ed-tool-group">
-                    <button className="ed-tool" onClick={() => showModal('helpModal')}>❓ Help</button>
-                    <button className="ed-tool" onClick={saveProject}>💾 Save</button>
-                    <button className="ed-tool" onClick={() => previewProject()}>👁 Preview</button>
-                    <button className="ed-tool" onClick={() => showModal('exportModal')}>📤 Export</button>
-                    <button className="ed-tool" onClick={() => showModal('publishModal')} style={styles.publishBtn}>Publish</button>
+                    <button className="ed-tool" title="Preview" onClick={() => previewProject()}>👁</button>
+                    <button className="ed-tool" title="Export" onClick={() => showModal('exportModal')}>💾</button>
+                    <button className="btn-premium" onClick={() => showModal('publishModal')}>Publish</button>
+                    <button className="btn-ghost" onClick={saveProject}>Save</button>
                 </div>
             </div>
 
@@ -178,7 +163,7 @@ function Editor() {
                     <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
                     <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
                     <div className="page-thumbs" id="pageThumbs">
-                        {project.pages.map((p, i) => (
+                        {(project.pages || []).map((p, i) => (
                             <div
                                 key={p.id}
                                 className={`page-thumb ${i === pageIdx ? 'active' : ''}`}
@@ -199,17 +184,21 @@ function Editor() {
                 <div className="ed-panel-section" style={{ flex: 1 }}>
                     <h4>Layers</h4>
                     <div id="layerList" className="layer-list">
-                        {[...(currentPage.elements || [])].reverse().map(el => (
+                        {[...(currentPage?.elements || [])].reverse().map(el => (
                             <div
                                 key={el.id}
                                 className={`layer-item ${vpState.selection?.id === el.id ? 'active' : ''}`}
                                 onClick={() => updateVpState({ selection: { type: 'element', id: el.id, pageIdx } })}
                             >
-                                <span className="layer-name">{el.locked ? '🔒 ' : ''}{el.type === 'text' ? (el.content || '').substring(0, 15) : el.type}</span>
-                                <button className="layer-btn" onClick={(e) => {
-                                    e.stopPropagation()
-                                    updateElement(pageIdx, el.id, { hidden: !el.hidden })
-                                }} title="Toggle visibility">👁</button>
+                                <span className="layer-name">{el.locked ? '🔒 ' : ''}{el.type === 'text' ? (el.content || el.text || '').substring(0, 15) : el.type}</span>
+                                <div className="layer-actions">
+                                    <button className="layer-btn" onClick={(e) => { e.stopPropagation(); moveLayer(pageIdx, el.id, 1) }} title="Bring Forward">▲</button>
+                                    <button className="layer-btn" onClick={(e) => { e.stopPropagation(); moveLayer(pageIdx, el.id, -1) }} title="Send Backward">▼</button>
+                                    <button className="layer-btn" onClick={(e) => {
+                                        e.stopPropagation()
+                                        updateElement(pageIdx, el.id, { hidden: !el.hidden })
+                                    }} title="Toggle visibility">👁</button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -220,51 +209,38 @@ function Editor() {
             <div className="ed-canvas-area">
                 <div className="ed-canvas-bar">
                     <div className="zoom-group">
-                        <button onClick={() => setZoom(z => Math.max(25, z - 10))}>−</button>
-                        <span id="zoomLevel">{zoom}%</span>
-                        <button onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
-                        <button onClick={handleZoomFit}>Fit</button>
-                    </div>
-                    <div className="zoom-group">
-                        <select
-                            value={currentPage?.orientation || 'portrait'}
-                            onChange={(e) => {
-                                const o = e.target.value
-                                updateVpState({})
-                                // Orientation could be stored on page: updateElement(pageIdx, ...) - for now leave as portrait
-                            }}
-                            style={styles.orientationSelect}
-                        >
-                            <option value="portrait">Portrait</option>
-                            <option value="landscape">Landscape</option>
-                        </select>
+                        <button className="ed-tool" title="Zoom Out" onClick={() => setZoom(z => Math.max(25, z - 10))}>-</button>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85em', minWidth: '48px', textAlign: 'center' }}>{zoom}%</span>
+                        <button className="ed-tool" title="Zoom In" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
+                        <button className="ed-tool" title="Fit Canvas" onClick={handleZoomFit}>↔</button>
                     </div>
                 </div>
                 <div className="ed-canvas-wrap" id="canvasWrap">
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}>
-                        <Canvas page={currentPage} pageIdx={pageIdx} snapOn={snapOn} gridOn={gridOn} />
+                        {currentPage && <Canvas page={currentPage} pageIdx={pageIdx} snapOn={snapOn} gridOn={gridOn} />}
                     </div>
                 </div>
             </div>
 
             {/* Right Panel */}
             <div className="ed-right">
-                <div className="prop-tabs" id="propTabs">
-                    <button className={`prop-tab ${propTab === 'props' ? 'active' : ''}`} onClick={() => setPropTab('props')}>Props</button>
-                    <button className={`prop-tab ${propTab === 'effects' ? 'active' : ''}`} onClick={() => setPropTab('effects')}>Effects</button>
-                    <button className={`prop-tab ${propTab === 'logic' ? 'active' : ''}`} onClick={() => setPropTab('logic')}>Logic</button>
+                <div className="prop-tabs">
+                    <button className={`prop-tab ${propTab === 'props' ? 'active' : ''}`} onClick={() => setPropTab('props')}>📐</button>
+                    <button className={`prop-tab ${propTab === 'effects' ? 'active' : ''}`} onClick={() => setPropTab('effects')}>✨</button>
+                    <button className={`prop-tab ${propTab === 'logic' ? 'active' : ''}`} onClick={() => setPropTab('logic')}>⚙</button>
+                    <button className={`prop-tab ${propTab === 'settings' ? 'active' : ''}`} onClick={() => setPropTab('settings')}>🎛</button>
                 </div>
-                <div className="prop-pane active">
+                <div className="prop-pane">
                     <PropertyPanel activeTab={propTab} />
                 </div>
             </div>
 
             {/* Footer */}
             <div className="ed-footer">
-                <span>Page <b id="pageNum">{pageIdx + 1}</b> of <b id="pageTotal">{project.pages.length}</b></span>
+                <span>Page <b id="pageNum">{pageIdx + 1}</b> of <b id="pageTotal">{project.pages?.length || 0}</b></span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.max(0, pageIdx - 1))}>◀ Prev</button>
-                    <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.min(project.pages.length - 1, pageIdx + 1))}>Next ▶</button>
+                    <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.min((project.pages?.length || 1) - 1, pageIdx + 1))}>Next ▶</button>
                 </div>
                 <span className="status-text" id="statusText">REALITY: {themeStatus}</span>
             </div>
