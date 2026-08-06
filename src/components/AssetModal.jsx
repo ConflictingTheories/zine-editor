@@ -68,17 +68,26 @@ function AssetModal({ type: initialType, onClose }) {
 
                         <div className="asset-grid">
                             {filteredAssets.length > 0 ? (
-                                filteredAssets.map(asset => (
-                                    <div
-                                        key={asset.id}
-                                        className="asset-item"
-                                        onClick={() => handleSelect(asset)}
-                                        title={asset.name}
-                                    >
-                                        <div className="asset-preview" dangerouslySetInnerHTML={{ __html: asset.preview }} />
-                                        {asset.name && <div className="asset-name">{asset.name}</div>}
-                                    </div>
-                                ))
+                                filteredAssets.map((asset, i) => {
+                                    // Render a category divider for symbol categories to keep the vault organized & breathable
+                                    const prev = filteredAssets[i - 1]
+                                    const showCat = currentType === 'symbols' && asset.category && (!prev || prev.category !== asset.category)
+                                    return (
+                                        <React.Fragment key={asset.id}>
+                                            {showCat && (
+                                                <div className="asset-category">{asset.category}</div>
+                                            )}
+                                            <div
+                                                className="asset-item"
+                                                onClick={() => handleSelect(asset)}
+                                                title={asset.name}
+                                            >
+                                                <div className="asset-preview" dangerouslySetInnerHTML={{ __html: asset.preview }} />
+                                                {asset.name && <div className="asset-name">{asset.name}</div>}
+                                            </div>
+                                        </React.Fragment>
+                                    )
+                                })
                             ) : (
                                 <div style={{
                                     gridColumn: '1/-1',

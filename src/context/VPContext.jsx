@@ -626,19 +626,120 @@ const VPProvider = ({ children }) => {
             { id: 'splash', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLASH!</span>', name: 'Splat' },
             { id: 'splat', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLAT!</span>', name: 'Splat' }
         ]
+        // Splat / texture image symbols (from the devil's atlas asset pack)
+        const bloodSplats = [
+            { src: '/assets/devils-atlas/blood-splat00.png', name: 'Blood Splat 1', tint: '#8b0000' },
+            { src: '/assets/devils-atlas/blood-splat12.png', name: 'Blood Splat 2', tint: '#8b0000' },
+            { src: '/assets/devils-atlas/blood-splat22.png', name: 'Blood Splat 3', tint: '#8b0000' },
+            { src: '/assets/devils-atlas/blood-splat30.png', name: 'Blood Splat 4', tint: '#8b0000' }
+        ]
+        const inkSplats = [
+            { src: '/assets/devils-atlas/ink-splat00.png', name: 'Ink Splat 0', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat05.png', name: 'Ink Splat 1', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat08.png', name: 'Ink Splat 2', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat12.png', name: 'Ink Splat 3', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat15.png', name: 'Ink Splat 4', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat18.png', name: 'Ink Splat 5', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat22.png', name: 'Ink Splat 6', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat27.png', name: 'Ink Splat 7', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat30.png', name: 'Ink Splat 8', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat33.png', name: 'Ink Splat 9', tint: '#1a1a1a' }
+        ]
+        const splatSymbols = [
+            ...bloodSplats.map((s, i) => ({
+                id: `blood_${i}`,
+                kind: 'image',
+                src: s.src,
+                name: s.name,
+                preview: `<div style="width:50px;height:50px;background:radial-gradient(circle at 50% 50%, rgba(139,0,0,0.35), transparent 70%);border-radius:50%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 4px rgba(139,0,0,0.6))"><img src="${s.src}" style="width:100%;height:100%;object-fit:cover;mix-blend-mode:screen" /></div>`
+            })),
+            ...inkSplats.map((s, i) => ({
+                id: `ink_${i}`,
+                kind: 'image',
+                src: s.src,
+                name: s.name,
+                preview: `<div style="width:50px;height:50px;background:radial-gradient(circle at 50% 50%, rgba(26,26,26,0.4), transparent 70%);border-radius:50%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 4px rgba(0,0,0,0.5))"><img src="${s.src}" style="width:100%;height:100%;object-fit:cover" /></div>`
+            }))
+        ]
+
+        // Glyph symbols (revolutionary, occult, publishing, nature, celestial)
+        const glyph = (id, char, name, color = 'var(--vp-accent)', category = 'Symbols') => ({
+            id,
+            kind: 'glyph',
+            char,
+            name,
+            category,
+            preview: `<span style="font-size:34px;color:${color};filter:drop-shadow(0 0 6px ${color}66);line-height:1">${char}</span>`
+        })
+
         const symbols = [
-            { id: 'pentagram', preview: '<span style="font-size:32px">⛤</span>', name: 'Pentagram' },
-            { id: 'skull', preview: '<span style="font-size:32px">☠</span>', name: 'Skull' },
-            { id: 'star_symbol', preview: '<span style="font-size:32px">✦</span>', name: 'Star' },
-            { id: 'eye', preview: '<span style="font-size:32px">👁</span>', name: 'Eye' },
-            { id: 'biohazard', preview: '<span style="font-size:32px">☣</span>', name: 'Biohazard' },
-            { id: 'radiation', preview: '<span style="font-size:32px">☢</span>', name: 'Radiation' },
-            { id: 'compass', preview: '<span style="font-size:32px">🧭</span>', name: 'Compass' },
-            { id: 'rune', preview: '<span style="font-size:32px">ᚱ</span>', name: 'Rune' },
-            { id: 'ankh', preview: '<span style="font-size:32px">☥</span>', name: 'Ankh' },
-            { id: 'omega', preview: '<span style="font-size:32px">Ω</span>', name: 'Omega' },
-            { id: 'infinity', preview: '<span style="font-size:32px">∞</span>', name: 'Infinity' },
-            { id: 'trident', preview: '<span style="font-size:32px">🔱</span>', name: 'Trident' }
+            // Splatter bank first — the ink & blood
+            ...splatSymbols.map(s => ({ ...s, category: 'Ink & Blood' })),
+            // Revolutionary / protest
+            glyph('anarchy', 'ⓐ', 'Anarchy', '#e74c3c', 'Revolution'),
+            glyph('star_point', '✶', 'Star', '#d4af37', 'Revolution'),
+            glyph('star_8', '✴', '8-Point Star', '#d4af37', 'Revolution'),
+            glyph('star_outline', '✷', 'Star Outline', '#e67e22', 'Revolution'),
+            glyph('dove', '🕊', 'Peace Dove', '#7f8c8d', 'Revolution'),
+            glyph('fist', '✊', 'Raised Fist', '#e74c3c', 'Revolution'),
+            glyph('rose', '🌹', 'Rose', '#c0392b', 'Revolution'),
+            glyph('warning', '⚠', 'Warning', '#f1c40f', 'Revolution'),
+            glyph('no_entry', '⛔', 'No Entry', '#e74c3c', 'Revolution'),
+            glyph('high_voltage', '⚡', 'Lightning', '#f39c12', 'Revolution'),
+            glyph('crossed_swords', '⚔', 'Crossed Swords', '#bdc3c7', 'Revolution'),
+            glyph('skull_cross', '☠', 'Skull', '#95a5a6', 'Revolution'),
+            glyph('shield', '🛡', 'Shield', '#9b59b6', 'Revolution'),
+            glyph('spear', '🔱', 'Trident', '#d4af37', 'Revolution'),
+            // Occult / mystical
+            glyph('pentagram', '⛤', 'Pentagram', '#bc00ff', 'Occult'),
+            glyph('pentacle', '⛧', 'Pentacle', '#8e44ad', 'Occult'),
+            glyph('eye', '👁', 'Eye', '#e8e4d9', 'Occult'),
+            glyph('all_seeing', '𓂀', 'All-Seeing', '#d4af37', 'Occult'),
+            glyph('rune', 'ᚱ', 'Rune', '#c5b358', 'Occult'),
+            glyph('rune_2', 'ᛟ', 'Rune 2', '#c5b358', 'Occult'),
+            glyph('rune_3', 'ᚨ', 'Rune 3', '#c5b358', 'Occult'),
+            glyph('ankh', '☥', 'Ankh', '#d4af37', 'Occult'),
+            glyph('moon', '☽', 'Moon', '#bdc3c7', 'Occult'),
+            glyph('crescent', '🌙', 'Crescent', '#f1c40f', 'Occult'),
+            glyph('sun', '☀', 'Sun', '#f39c12', 'Occult'),
+            glyph('spiral', '🌀', 'Spiral', '#3498db', 'Occult'),
+            glyph('flower_life', '𓋹', 'Flower of Life', '#e67e22', 'Occult'),
+            glyph('sigil_1', '⚭', 'Sigil Bond', '#d4af37', 'Occult'),
+            glyph('sigil_2', '⚸', 'Sigil', '#bc00ff', 'Occult'),
+            glyph('marriage', '⚭', 'Marriage', '#e74c3c', 'Occult'),
+            // Celestial / navigation
+            glyph('compass', '🧭', 'Compass', '#d4af37', 'Celestial'),
+            glyph('globe', '🌍', 'Globe', '#3498db', 'Celestial'),
+            glyph('star_map', '✦', 'Star Map', '#d4af37', 'Celestial'),
+            glyph('mountain', '⛰', 'Mountain', '#7f8c8d', 'Celestial'),
+            glyph('anchor', '⚓', 'Anchor', '#bdc3c7', 'Celestial'),
+            glyph('ship', '⚓', 'Ship', '#3498db', 'Celestial'),
+            glyph('location', '📍', 'Location', '#e74c3c', 'Celestial'),
+            glyph('crosshair', '🎯', 'Target', '#e74c3c', 'Celestial'),
+            // Publishing / literature
+            glyph('quill', '✒', 'Quill', '#7f8c8d', 'Publishing'),
+            glyph('pen', '✎', 'Pen', '#95a5a6', 'Publishing'),
+            glyph('book', '📖', 'Book', '#d4af37', 'Publishing'),
+            glyph('scroll', '📜', 'Scroll', '#c5b358', 'Publishing'),
+            glyph('mask', '🎭', 'Theater', '#9b59b6', 'Publishing'),
+            glyph('key', '🔑', 'Key', '#d4af37', 'Publishing'),
+            glyph('lock', '🔒', 'Lock', '#e74c3c', 'Publishing'),
+            glyph('hourglass', '⌛', 'Hourglass', '#f1c40f', 'Publishing'),
+            glyph('chess', '♞', 'Chess', '#bdc3c7', 'Publishing'),
+            glyph('chess_king', '♚', 'King', '#d4af37', 'Publishing'),
+            glyph('infinity', '∞', 'Infinity', '#d4af37', 'Publishing'),
+            glyph('omega', 'Ω', 'Omega', '#e74c3c', 'Publishing'),
+            // Nature / elements
+            glyph('fire', '🔥', 'Fire', '#e74c3c', 'Nature'),
+            glyph('water', '💧', 'Water', '#3498db', 'Nature'),
+            glyph('leaf', '🍃', 'Leaf', '#27ae60', 'Nature'),
+            glyph('bone', '🦴', 'Bone', '#ecf0f1', 'Nature'),
+            glyph('heart', '❤', 'Heart', '#e74c3c', 'Nature'),
+            glyph('knife', '🔪', 'Knife', '#bdc3c7', 'Nature'),
+            glyph('hammer', '🔨', 'Hammer', '#95a5a6', 'Nature'),
+            glyph('gear', '⚙', 'Gear', '#bdc3c7', 'Nature'),
+            glyph('cross', '✝', 'Cross', '#95a5a6', 'Nature'),
+            glyph('star_of_david', '✡', 'Star of David', '#3498db', 'Nature')
         ]
         const shaderList = typeof window !== 'undefined' && window.VPShader?.getPresetList
             ? window.VPShader.getPresetList()
@@ -737,21 +838,46 @@ const VPProvider = ({ children }) => {
             const t = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', whoosh: 'WHOOSH!', pow: 'POW!', splat: 'SPLAT!', splash: 'SPLASH!' }
             el = { ...base, type: 'text', content: t[assetId] || 'BAM!', fontSize: 52, fontFamily: 'Bangers', color: '#0a0a0a', width: 180, height: 70, strokeWidth: 2, strokeColor: '#ffffff' }
         } else if (type === 'symbols') {
-            const s = {
-                pentagram: '⛤',
-                skull: '☠',
-                star_symbol: '✦',
-                eye: '👁',
-                biohazard: '☣',
-                radiation: '☢',
-                compass: '🧭',
-                rune: 'ᚱ',
-                ankh: '☥',
-                omega: 'Ω',
-                infinity: '∞',
-                trident: '🔱'
+            // Look up the asset to determine if it's an image splat or a glyph
+            const asset = (getAssets('symbols') || []).find(a => a.id === assetId)
+            if (asset?.kind === 'image') {
+                // Ink / blood splatter — drop as a full-bleed image, tintable
+                const baseElementCount = vpState.currentProject?.pages[pageIdx]?.elements?.length || 0
+                el = {
+                    ...base,
+                    type: 'image',
+                    src: asset.src,
+                    width: 220,
+                    height: 220,
+                    objectFit: 'cover',
+                    opacity: 0.85,
+                    blendMode: 'multiply',
+                    // Stagger placement so repeated drops don't stack exactly on top of each other
+                    x: 60 + ((baseElementCount % 5) * 32),
+                    y: 60 + ((baseElementCount % 4) * 32)
+                }
+            } else {
+                // Unicode / emoji glyph — mark as a symbol so it renders non-editable and stays freely draggable
+                const char = asset?.char || '✦'
+                const baseElementCount = (() => {
+                    const page = vpState.currentProject?.pages[pageIdx]
+                    return page?.elements?.length || 0
+                })()
+                el = {
+                    ...base,
+                    symbol: true,
+                    type: 'text',
+                    content: char,
+                    fontSize: 56,
+                    color: asset ? asset.previewColor || '#d4af37' : '#d4af37',
+                    width: 80,
+                    height: 80,
+                    fontFamily: 'sans-serif',
+                    // Stagger placement so repeated drops don't stack exactly on top of each other
+                    x: 80 + ((baseElementCount % 5) * 24),
+                    y: 80 + ((baseElementCount % 4) * 24)
+                }
             }
-            el = { ...base, type: 'text', content: s[assetId] || '✦', fontSize: 56, color: '#d4af37', width: 80, height: 80, fontFamily: 'sans-serif' }
         } else if (type === 'shaders') {
             el = { ...base, type: 'shader', shaderPreset: assetId || 'plasma', width: 220, height: 220, opacity: 1 }
         }

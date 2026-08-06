@@ -158,6 +158,10 @@ const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) =>
 const ElementContent = ({ el, pageIdx, updateElement }) => {
     switch (el.type) {
         case 'text':
+            // Render unicode/emoji symbols as static, non-editable so they stay freely draggable on the canvas
+            if (el.symbol) {
+                return <div className="el-text el-symbol" style={styles.text(el)}>{el.content}</div>
+            }
             return (
                 <EditableText
                     el={el}

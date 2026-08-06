@@ -16,14 +16,14 @@ function VfxSystem() {
         } else if (activeVfx === 'lightning') {
             setStyle({ background: '#fff', opacity: 1, pointerEvents: 'none', animation: 'vfx-lightning 0.4s' })
             setTimeout(() => setStyle({ background: '#fff', opacity: 0, pointerEvents: 'none', transition: 'opacity 0.3s ease' }), 450)
-        } else if (activeVfx === 'shake') {
-            // Apply shake animation to app container
+        } else if (activeVfx === 'shake' || activeVfx === 'zoom') {
+            // Apply shake / zoom animation to app container
             const container = document.querySelector('.app-container')
             if (container) {
-                container.classList.remove('shake-anim')
+                container.classList.remove('shake-anim', 'zoom-anim')
                 void container.offsetWidth // force reflow to restart animation
-                container.classList.add('shake-anim')
-                setTimeout(() => container.classList.remove('shake-anim'), 500)
+                container.classList.add(activeVfx === 'zoom' ? 'zoom-anim' : 'shake-anim')
+                setTimeout(() => container.classList.remove('shake-anim', 'zoom-anim'), 500)
             }
         } else if (activeVfx === 'pulse') {
             // Apply pulse animation to app container
@@ -34,6 +34,29 @@ function VfxSystem() {
                 container.classList.add('pulse-anim')
                 setTimeout(() => container.classList.remove('pulse-anim'), 500)
             }
+        } else if (activeVfx === 'glitch') {
+            // RGB-split + displacement glitch on the whole app
+            const container = document.querySelector('.app-container')
+            if (container) {
+                container.classList.remove('glitch-anim')
+                void container.offsetWidth
+                container.classList.add('glitch-anim')
+                setTimeout(() => container.classList.remove('glitch-anim'), 600)
+            }
+            setStyle({ background: 'rgba(255,0,80,0.12)', opacity: 1, pointerEvents: 'none', animation: 'vfx-glitch 0.5s steps(2, end)', mixBlendMode: 'screen' })
+            setTimeout(() => setStyle({ background: 'transparent', opacity: 0, pointerEvents: 'none', transition: 'opacity 0.2s ease' }), 550)
+        } else if (activeVfx === 'scanline') {
+            setStyle({ background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px, transparent 1px, transparent 3px)', opacity: 0.8, pointerEvents: 'none', animation: 'vfx-scan 0.2s linear infinite' })
+            setTimeout(() => setStyle({ opacity: 0, transition: 'opacity 0.3s ease' }), 600)
+        } else if (activeVfx === 'static') {
+            setStyle({ background: 'rgba(50,50,60,0.6)', opacity: 1, pointerEvents: 'none', animation: 'vfx-static 0.15s steps(3) infinite' })
+            setTimeout(() => setStyle({ opacity: 0, transition: 'opacity 0.3s ease' }), 650)
+        } else if (activeVfx === 'fade-black') {
+            setStyle({ background: '#000', opacity: 1, pointerEvents: 'none', transition: 'opacity 0.6s ease' })
+            setTimeout(() => setStyle({ background: '#000', opacity: 0, pointerEvents: 'none', transition: 'opacity 0.6s ease' }), 650)
+        } else if (activeVfx === 'blood') {
+            setStyle({ background: 'radial-gradient(circle at 50% 50%, rgba(139,0,0,0.5), rgba(60,0,0,0.8) 60%, rgba(20,0,0,0.9))', opacity: 1, pointerEvents: 'none', animation: 'vfx-blood 0.5s ease-out' })
+            setTimeout(() => setStyle({ opacity: 0, transition: 'opacity 0.4s ease' }), 550)
         }
 
         const timer = setTimeout(() => setStyle({}), 1000)

@@ -5,7 +5,13 @@ const VFX_OPTIONS = [
     { id: 'flash', name: 'Flash' },
     { id: 'lightning', name: 'Lightning' },
     { id: 'shake', name: 'Shake' },
-    { id: 'pulse', name: 'Pulse' }
+    { id: 'pulse', name: 'Pulse' },
+    { id: 'glitch', name: 'Glitch' },
+    { id: 'scanline', name: 'Scanline' },
+    { id: 'static', name: 'Static' },
+    { id: 'fade-black', name: 'Fade to Black' },
+    { id: 'zoom', name: 'Zoom' },
+    { id: 'blood', name: 'Blood Overflow' }
 ]
 
 const styles = {
@@ -154,6 +160,14 @@ function PropertyPanel({ activeTab = 'props' }) {
                             <option value="shake">Shake</option>
                             <option value="pulse">Pulse</option>
                             <option value="spin">Spin</option>
+                            <option value="glitch">Glitch</option>
+                            <option value="flicker">Flicker</option>
+                            <option value="breathe">Breathe</option>
+                            <option value="bounce">Bounce</option>
+                            <option value="wobble">Wobble</option>
+                            <option value="blink">Blink</option>
+                            <option value="drift">Drift</option>
+                            <option value="fly-in">Fly In</option>
                         </select>
                     </div>
                     <div className="prop-row">

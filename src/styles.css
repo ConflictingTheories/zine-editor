@@ -882,6 +882,18 @@ textarea {
     border-color: rgba(139, 92, 246, .3)
 }
 
+/* Unicode / emoji symbol glyphs — static, centered, freely draggable */
+.el-symbol {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: auto;
+    min-height: auto;
+    user-select: none;
+    cursor: move;
+    pointer-events: auto;
+}
+
 .el-img {
     overflow: hidden
 }
@@ -1732,11 +1744,23 @@ body.reader-active .topnav {
 
 .asset-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 14px;
     overflow-y: auto;
     padding-right: 8px;
     padding-bottom: 20px;
+}
+
+/* Category chips inside the symbol grid */
+.asset-category {
+    grid-column: 1 / -1;
+    font-size: 0.68em;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--vp-accent2);
+    margin: 6px 0 0;
+    padding-bottom: 2px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Custom Scrollbar for Asset Grid */
@@ -2113,6 +2137,38 @@ body.reader-active .topnav {
     animation: pulse 0.4s ease;
 }
 
+.glitch-anim {
+    animation: appGlitch 0.5s steps(2, end);
+}
+
+@keyframes appGlitch {
+
+    0%,
+    100% {
+        transform: translate(0);
+        filter: none;
+    }
+
+    20% {
+        transform: translate(-3px, 2px);
+        filter: hue-rotate(90deg) saturate(2);
+    }
+
+    40% {
+        transform: translate(3px, -2px);
+        filter: hue-rotate(-90deg);
+    }
+
+    60% {
+        transform: translate(-2px, -3px);
+        filter: invert(0.2);
+    }
+
+    80% {
+        transform: translate(2px, 3px);
+    }
+}
+
 @keyframes shake {
 
     0%,
@@ -2220,6 +2276,230 @@ body.reader-active .topnav {
 
     100% {
         transform: rotate(360deg);
+    }
+}
+
+/* ── New element-level animations (Reader/Preview) ── */
+@keyframes reader-el-glitch {
+
+    0%,
+    100% {
+        transform: translate(0);
+        filter: none;
+    }
+
+    20% {
+        transform: translate(-2px, 1px);
+        filter: hue-rotate(90deg);
+    }
+
+    40% {
+        transform: translate(2px, -1px);
+        filter: hue-rotate(-90deg);
+    }
+
+    60% {
+        transform: translate(-1px, -2px);
+    }
+
+    80% {
+        transform: translate(1px, 2px);
+        opacity: 0.7;
+    }
+}
+
+@keyframes reader-el-flicker {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    41% {
+        opacity: 1;
+    }
+
+    42% {
+        opacity: 0.3;
+    }
+
+    43% {
+        opacity: 1;
+    }
+
+    78% {
+        opacity: 1;
+    }
+
+    79% {
+        opacity: 0.2;
+    }
+
+    80% {
+        opacity: 1;
+    }
+}
+
+@keyframes reader-el-breathe {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.06);
+    }
+}
+
+@keyframes reader-el-bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@keyframes reader-el-wobble {
+
+    0%,
+    100% {
+        transform: rotate(0deg);
+    }
+
+    25% {
+        transform: rotate(-6deg);
+    }
+
+    75% {
+        transform: rotate(6deg);
+    }
+}
+
+@keyframes reader-el-blink {
+
+    0%,
+    49%,
+    100% {
+        opacity: 1;
+    }
+
+    50%,
+    99% {
+        opacity: 0;
+    }
+}
+
+@keyframes reader-el-drift {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+
+    25% {
+        transform: translate(6px, -4px);
+    }
+
+    50% {
+        transform: translate(-4px, 6px);
+    }
+
+    75% {
+        transform: translate(4px, 4px);
+    }
+}
+
+@keyframes reader-el-fly-in {
+    0% {
+        transform: translateY(-40px) scale(0.8);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* ── New full-screen VFX overlays ── */
+@keyframes vfx-glitch {
+
+    0%,
+    100% {
+        transform: translate(0);
+    }
+
+    20% {
+        transform: translate(-6px, 2px);
+    }
+
+    40% {
+        transform: translate(6px, -2px);
+    }
+
+    60% {
+        transform: translate(-3px, -3px);
+    }
+
+    80% {
+        transform: translate(3px, 3px);
+    }
+}
+
+@keyframes vfx-scan {
+    0% {
+        background-position: 0 0;
+    }
+
+    100% {
+        background-position: 0 6px;
+    }
+}
+
+@keyframes vfx-static {
+
+    0%,
+    100% {
+        opacity: 0.3;
+    }
+
+    50% {
+        opacity: 0.9;
+    }
+}
+
+@keyframes vfx-blood {
+    0% {
+        opacity: 0;
+        transform: scale(0.6);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.zoom-anim {
+    animation: zoomInOut 0.5s ease;
+}
+
+@keyframes zoomInOut {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.06);
+    }
+
+    100% {
+        transform: scale(1);
     }
 }
 

@@ -8,7 +8,15 @@ const ANIMATION_MAP = {
     'lightning': 'reader-el-lightning',
     'shake': 'reader-el-shake',
     'pulse': 'reader-el-pulse',
-    'spin': 'reader-el-spin'
+    'spin': 'reader-el-spin',
+    'glitch': 'reader-el-glitch',
+    'flicker': 'reader-el-flicker',
+    'breathe': 'reader-el-breathe',
+    'bounce': 'reader-el-bounce',
+    'wobble': 'reader-el-wobble',
+    'blink': 'reader-el-blink',
+    'drift': 'reader-el-drift',
+    'fly-in': 'reader-el-fly-in'
 }
 
 const BALLOON_PROPS = {

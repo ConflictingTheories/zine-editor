@@ -64,7 +64,12 @@ function Editor() {
             if ((e.ctrlKey || e.metaKey) && e.key === 'c') copyElement()
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') { e.preventDefault(); pasteElement() }
             if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject() }
-            if (e.key === 'Delete' || e.key === 'Backspace') { if (!e.target.isContentEditable) deleteElement() }
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const tag = e.target?.tagName
+                const editing = e.target?.isContentEditable ||
+                    tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+                if (!editing) deleteElement()
+            }
             if (e.key === 'Escape') updateVpState({ selection: { type: 'page', id: currentPage?.id, pageIdx } })
         }
         window.addEventListener('keydown', onKey)
