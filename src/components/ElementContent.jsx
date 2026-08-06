@@ -95,25 +95,65 @@ const styles = {
     }
 }
 
-const ElementContent = ({ el, pageIdx, updateElement }) => {
-    const handleBlur = (e) => {
-        if (e.target.textContent !== el.content && updateElement) {
-            updateElement(pageIdx, el.id, { content: e.target.textContent })
+const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) => {
+    const ref = React.useRef(null)
+    const focusedRef = React.useRef(false)
+    const debounceRef = React.useRef(null)
+
+    React.useEffect(() => {
+        // Don't overwrite in-progress typing from stale props while focused
+        if (focusedRef.current) return
+        if (ref.current && ref.current.textContent !== (el.content || '')) {
+            ref.current.textContent = el.content || ''
         }
+    }, [el.content])
+
+    React.useEffect(() => () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+    }, [])
+
+    const commitContent = (text) => {
+        if (!updateElement) return
+        if (text === (el.content || '')) return
+        updateElement(pageIdx, el.id, { content: text })
     }
 
+    return (
+        <div
+            ref={ref}
+            className={styleClass}
+            contentEditable
+            suppressContentEditableWarning
+            style={styleProps}
+            onFocus={() => { focusedRef.current = true }}
+            onBlur={(e) => {
+                focusedRef.current = false
+                if (debounceRef.current) {
+                    clearTimeout(debounceRef.current)
+                    debounceRef.current = null
+                }
+                commitContent(e.target.textContent || '')
+            }}
+            onInput={(e) => {
+                const text = e.target.textContent || ''
+                if (debounceRef.current) clearTimeout(debounceRef.current)
+                debounceRef.current = setTimeout(() => commitContent(text), 200)
+            }}
+        />
+    )
+}
+
+const ElementContent = ({ el, pageIdx, updateElement }) => {
     switch (el.type) {
         case 'text':
             return (
-                <div
-                    className="el-text"
-                    contentEditable
-                    suppressContentEditableWarning
-                    style={styles.text(el)}
-                    onBlur={handleBlur}
-                >
-                    {el.content}
-                </div>
+                <EditableText
+                    el={el}
+                    pageIdx={pageIdx}
+                    updateElement={updateElement}
+                    styleClass="el-text"
+                    styleProps={styles.text(el)}
+                />
             )
         case 'image':
             return (
@@ -131,15 +171,13 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
             return <div className="el-shape" style={styles.shape(el)} />
         case 'balloon':
             return (
-                <div
-                    className="el-text"
-                    contentEditable
-                    suppressContentEditableWarning
-                    style={styles.balloon(el)}
-                    onBlur={handleBlur}
-                >
-                    {el.content}
-                </div>
+                <EditableText
+                    el={el}
+                    pageIdx={pageIdx}
+                    updateElement={updateElement}
+                    styleClass="el-text"
+                    styleProps={styles.balloon(el)}
+                />
             )
         case 'shader':
             return (

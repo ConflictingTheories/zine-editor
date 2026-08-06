@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
-import { exportToHTML, exportToPDF, exportToInteractive } from '../utils/exportSystem'
+import { exportToHTML, exportToPDF, exportToInteractive, exportToFoldablePDF } from '../utils/exportSystem'
 
 const styles = {
     desc: { marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' },
@@ -27,6 +27,13 @@ function ExportModal({ onClose }) {
         }
     }
 
+    const handleExportFoldable = () => {
+        if (currentProject) {
+            exportToFoldablePDF(currentProject, embedAssets)
+            onClose()
+        }
+    }
+
     const handleExportInteractive = () => {
         if (currentProject) {
             exportToInteractive(currentProject, embedAssets)
@@ -40,7 +47,8 @@ function ExportModal({ onClose }) {
                 <button className="modal-close" onClick={onClose}>✕</button>
                 <h2>Export Zine</h2>
                 <div className="export-tabs">
-                    <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Print)</button>
+                    <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Standard)</button>
+                    <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (Foldable 8-Page)</button>
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
                     <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                 </div>
@@ -54,8 +62,15 @@ function ExportModal({ onClose }) {
 
                 {exportTab === 'pdf' && (
                     <div className="export-content active">
-                        <p style={styles.desc}>Export as print-ready PDF.</p>
+                        <p style={styles.desc}>Export as standard 1-page-per-sheet PDF.</p>
                         <button className="topnav-btn" onClick={handleExportPDF} style={styles.btn}>Generate PDF</button>
+                    </div>
+                )}
+                {exportTab === 'foldable' && (
+                    <div className="export-content active">
+                        <p style={styles.desc}>Export an 8-page zine onto a single foldable sheet (Letter/A4).</p>
+                        <p style={{ fontSize: '11px', color: '#ffb347', marginBottom: '8px' }}>Note: Only the first 8 pages of your project will be included.</p>
+                        <button className="topnav-btn" onClick={handleExportFoldable} style={styles.btn}>Generate Foldable PDF</button>
                     </div>
                 )}
                 {exportTab === 'html' && (

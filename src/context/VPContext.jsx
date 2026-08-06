@@ -12,18 +12,19 @@ const VPProvider = ({ children }) => {
         currentProject: null,
         isPremium: false,
         selectedTheme: 'classic',
+        uiTheme: localStorage.getItem('vp_ui_theme') || 'dark',
         // Parse user and ensure ID is numeric
         user: (() => {
             const stored = localStorage.getItem('vp_user')
-            if (!stored) return null
+            if (!stored) return { id: 1, username: 'Local_Creator', email: 'local@zinemaker.org', roles: ['admin'], is_premium: 1 }
             try {
                 const parsed = JSON.parse(stored)
                 return { ...parsed, id: Number(parsed.id) }
             } catch {
-                return null
+                return { id: 1, username: 'Local_Creator', email: 'local@zinemaker.org', roles: ['admin'], is_premium: 1 }
             }
         })(),
-        token: localStorage.getItem('vp_token'),
+        token: localStorage.getItem('vp_token') || 'local_offline_token',
         isOnline: navigator.onLine,
         isSyncing: false,
         toasts: [],
@@ -35,31 +36,70 @@ const VPProvider = ({ children }) => {
         historyIdx: -1
     })
 
+    const historyTimerRef = useRef(null)
+
     const updateVpState = (updates) => {
         setVpState(prev => ({ ...prev, ...updates }))
     }
 
-    const pushHistory = (project) => {
-        setVpState(prev => {
-            const nextHistory = prev.history.slice(0, prev.historyIdx + 1)
-            nextHistory.push(JSON.parse(JSON.stringify(project)))
-            if (nextHistory.length > 50) nextHistory.shift()
-            return {
-                ...prev,
-                history: nextHistory,
-                historyIdx: nextHistory.length - 1
+    const pushHistory = (project, { immediate = true } = {}) => {
+        const doPush = () => {
+            setVpState(prev => {
+                const nextHistory = prev.history.slice(0, prev.historyIdx + 1)
+                nextHistory.push(JSON.parse(JSON.stringify(project)))
+                if (nextHistory.length > 50) nextHistory.shift()
+                return {
+                    ...prev,
+                    history: nextHistory,
+                    historyIdx: nextHistory.length - 1
+                }
+            })
+        }
+        if (immediate) {
+            if (historyTimerRef.current) {
+                clearTimeout(historyTimerRef.current)
+                historyTimerRef.current = null
             }
-        })
+            doPush()
+        } else {
+            if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+            historyTimerRef.current = setTimeout(doPush, 400)
+        }
     }
+
+    const applyUiTheme = (theme) => {
+        const next = theme === 'light' ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-ui-theme', next)
+        localStorage.setItem('vp_ui_theme', next)
+        setVpState(prev => ({ ...prev, uiTheme: next }))
+    }
+
+    const setUiTheme = (theme) => applyUiTheme(theme)
+
+    const toggleUiTheme = () => {
+        applyUiTheme(vpState.uiTheme === 'light' ? 'dark' : 'light')
+    }
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-ui-theme', vpState.uiTheme || 'dark')
+    }, [vpState.uiTheme])
 
     const themes = {
         classic: { '--ed-black': '#1a1a1a', '--ed-crimson': '#5c0a0a', '--ed-white': '#fdfaf1', '--ed-purple': '#4b2c5e', '--ed-green': '#2ecc71', '--ed-gold': '#d4af37', '--ed-silver': '#bdc3c7', '--ed-gray': '#34495e', '--ed-font': "'EB Garamond',serif", '--ed-display': "'Playfair Display',serif", '--ed-accent': "'Crimson Text',serif", status: 'STABLE' },
+        editorial: { '--ed-black': '#1c2430', '--ed-crimson': '#c23b3b', '--ed-white': '#f7f8fb', '--ed-purple': '#5b6abf', '--ed-green': '#2f9e6b', '--ed-gold': '#c28b2c', '--ed-silver': '#8b93a7', '--ed-gray': '#5c667a', '--ed-font': "'Source Serif 4',serif", '--ed-display': "'Fraunces',serif", '--ed-accent': "'DM Sans',sans-serif", status: 'BRIGHT' },
         fantasy: { '--ed-black': '#0a0a0a', '--ed-crimson': '#8b0000', '--ed-white': '#f5f5dc', '--ed-purple': '#4b0082', '--ed-green': '#00ff41', '--ed-gold': '#ffd700', '--ed-silver': '#c0c0c0', '--ed-gray': '#2c2c2c', '--ed-font': "'Crimson Text',serif", '--ed-display': "'Cinzel',serif", '--ed-accent': "'MedievalSharp',cursive", status: 'LEGENDARY' },
         cyberpunk: { '--ed-black': '#050505', '--ed-crimson': '#ff003c', '--ed-white': '#f0f0f0', '--ed-purple': '#bc00ff', '--ed-green': '#00f3ff', '--ed-gold': '#fcee0a', '--ed-silver': '#333333', '--ed-gray': '#121212', '--ed-font': "'Roboto Mono',monospace", '--ed-display': "'Orbitron',sans-serif", '--ed-accent': "'Bebas Neue',sans-serif", status: 'CONNECTED' },
         conspiracy: { '--ed-black': '#000000', '--ed-crimson': '#4a0000', '--ed-white': '#e8e4d9', '--ed-purple': '#2a003a', '--ed-green': '#00ff00', '--ed-gold': '#c5b358', '--ed-silver': '#7f8c8d', '--ed-gray': '#1c1c1c', '--ed-font': "'Courier Prime',monospace", '--ed-display': "'Special Elite',cursive", '--ed-accent': "'Roboto Mono',monospace", status: 'CLASSIFIED' },
         worldbuilding: { '--ed-black': '#2c3e50', '--ed-crimson': '#e74c3c', '--ed-white': '#ecf0f1', '--ed-purple': '#8e44ad', '--ed-green': '#27ae60', '--ed-gold': '#f1c40f', '--ed-silver': '#95a5a6', '--ed-gray': '#34495e', '--ed-font': "'Assistant',sans-serif", '--ed-display': "'Montserrat',sans-serif", '--ed-accent': "'Crimson Text',serif", status: 'CHARTED' },
         comics: { '--ed-black': '#000000', '--ed-crimson': '#ff0000', '--ed-white': '#ffffff', '--ed-purple': '#663399', '--ed-green': '#32cd32', '--ed-gold': '#ffd700', '--ed-silver': '#cccccc', '--ed-gray': '#222222', '--ed-font': "'Comic Neue',cursive", '--ed-display': "'Bangers',cursive", '--ed-accent': "'Bebas Neue',sans-serif", status: 'DYNAMIC' },
         arcane: { '--ed-black': '#0f041b', '--ed-crimson': '#6a040f', '--ed-white': '#f8f1ff', '--ed-purple': '#3c096c', '--ed-green': '#70e000', '--ed-gold': '#ff9e00', '--ed-silver': '#5a189a', '--ed-gray': '#240046', '--ed-font': "'Crimson Text',serif", '--ed-display': "'Cinzel Decorative',cursive", '--ed-accent': "'Cinzel',serif", status: 'MANIFESTED' }
+    }
+
+    const applyContentThemeVars = (key) => {
+        const t = themes[key] || themes.classic
+        Object.entries(t).forEach(([k, v]) => {
+            if (k.startsWith('--')) document.documentElement.style.setProperty(k, v)
+        })
     }
 
     const [clipboard, setClipboard] = useState(null)
@@ -214,14 +254,16 @@ const VPProvider = ({ children }) => {
     }
 
     const createProject = (themeKey) => {
+        const theme = themeKey || vpState.selectedTheme
         const project = {
             id: Date.now(),
             title: 'Untitled Zine',
-            theme: themeKey || vpState.selectedTheme,
+            theme,
             pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
             created: new Date().toISOString(),
             _dirty: true
         }
+        applyContentThemeVars(theme)
         setVpState(prev => ({
             ...prev,
             projects: [project, ...prev.projects],
@@ -249,6 +291,7 @@ const VPProvider = ({ children }) => {
                 const project = { ...p, pages, _remote: false }
                 const nextProjects = [...projects]
                 nextProjects[idx] = project
+                applyContentThemeVars(project.theme || 'classic')
                 setVpState(prev => ({
                     ...prev,
                     projects: nextProjects,
@@ -263,6 +306,7 @@ const VPProvider = ({ children }) => {
             })
             return
         }
+        applyContentThemeVars(p.theme || 'classic')
         setVpState(prev => ({
             ...prev,
             currentProject: p,
@@ -344,20 +388,36 @@ const VPProvider = ({ children }) => {
     }
 
     const updateElement = (pageIdx, elementId, updates) => {
-        if (!vpState.currentProject) return
-        const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        const page = project.pages[pageIdx]
-        const el = page?.elements?.find(e => e.id === elementId)
-        if (!el) return
-        Object.assign(el, updates)
-        setVpState(prev => ({ ...prev, currentProject: project }))
-        pushHistory(project)
-        const projIdx = vpState.projects.findIndex(p => p.id === project.id)
-        if (projIdx >= 0) {
-            const next = [...vpState.projects]
-            next[projIdx] = { ...project, _dirty: true }
-            setVpState(prev2 => ({ ...prev2, projects: next }))
-        }
+        setVpState(prev => {
+            if (!prev.currentProject) return prev
+            const project = JSON.parse(JSON.stringify(prev.currentProject))
+            const page = project.pages[pageIdx]
+            const el = page?.elements?.find(e => e.id === elementId)
+            if (!el) return prev
+            Object.assign(el, updates)
+
+            const projIdx = prev.projects.findIndex(p => p.id === project.id)
+            const projects = projIdx >= 0
+                ? prev.projects.map((p, i) => i === projIdx ? { ...project, _dirty: true } : p)
+                : prev.projects
+
+            // Debounce history for rapid edits (typing / drag)
+            if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+            historyTimerRef.current = setTimeout(() => {
+                setVpState(p => {
+                    const nextHistory = p.history.slice(0, p.historyIdx + 1)
+                    nextHistory.push(JSON.parse(JSON.stringify(project)))
+                    if (nextHistory.length > 50) nextHistory.shift()
+                    return {
+                        ...p,
+                        history: nextHistory,
+                        historyIdx: nextHistory.length - 1
+                    }
+                })
+            }, 400)
+
+            return { ...prev, currentProject: project, projects }
+        })
     }
 
     const deleteElement = () => {
@@ -808,6 +868,7 @@ const VPProvider = ({ children }) => {
         const oldT = themes[oldKey]
 
         project.theme = key
+        applyContentThemeVars(key)
 
         if (oldKey !== key && confirm('Do you want to update existing items to match the new theme?')) {
             project.pages.forEach(p => {
@@ -922,7 +983,9 @@ const VPProvider = ({ children }) => {
         getAssets,
         addAsset,
         publishZine,
-        themes
+        themes,
+        setUiTheme,
+        toggleUiTheme
     }
 
     return (

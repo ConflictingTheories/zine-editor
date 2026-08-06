@@ -1,16 +1,26 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
-export function useEditor() {
-    const { vpState, updateElement, updateVpState, moveLayer } = useVP()
+export function useEditor(zoom = 100) {
+    const { vpState, updateElement, moveLayer } = useVP()
     const [isDragging, setIsDragging] = useState(false)
     const [isResizing, setIsResizing] = useState(false)
     const [isRotating, setIsRotating] = useState(false)
+    const zoomRef = useRef(zoom)
+
+    useEffect(() => {
+        zoomRef.current = zoom || 100
+    }, [zoom])
 
     const dragStartPos = useRef({ x: 0, y: 0 })
     const elementStartPos = useRef({ x: 0, y: 0, w: 0, h: 0, rot: 0 })
 
+    const getScale = () => Math.max(0.01, (zoomRef.current || 100) / 100)
+
     const startDrag = useCallback((e, el, pageIdx) => {
+        if (e.target.isContentEditable || e.target.closest('[contenteditable]')) {
+            return
+        }
         e.preventDefault()
         e.stopPropagation()
         setIsDragging(true)
@@ -18,8 +28,9 @@ export function useEditor() {
         elementStartPos.current = { x: el.x || 0, y: el.y || 0 }
 
         const onMouseMove = (moveEvent) => {
-            const dx = moveEvent.clientX - dragStartPos.current.x
-            const dy = moveEvent.clientY - dragStartPos.current.y
+            const scale = getScale()
+            const dx = (moveEvent.clientX - dragStartPos.current.x) / scale
+            const dy = (moveEvent.clientY - dragStartPos.current.y) / scale
 
             updateElement(pageIdx, el.id, {
                 x: elementStartPos.current.x + dx,
@@ -45,8 +56,9 @@ export function useEditor() {
         elementStartPos.current = { x: el.x || 0, y: el.y || 0, w: el.width || 100, h: el.height || 50 }
 
         const onMouseMove = (moveEvent) => {
-            const dx = moveEvent.clientX - dragStartPos.current.x
-            const dy = moveEvent.clientY - dragStartPos.current.y
+            const scale = getScale()
+            const dx = (moveEvent.clientX - dragStartPos.current.x) / scale
+            const dy = (moveEvent.clientY - dragStartPos.current.y) / scale
 
             const updates = {}
             if (handle.includes('e')) updates.width = Math.max(20, elementStartPos.current.w + dx)
@@ -109,16 +121,16 @@ export function useEditor() {
             if (e.key === '[') {
                 e.preventDefault()
                 if (e.shiftKey) {
-                    moveLayer('bottom') // Ctrl+Shift+[ : Move to back
+                    moveLayer('bottom')
                 } else {
-                    moveLayer('down') // Ctrl+[ : Move back
+                    moveLayer('down')
                 }
             } else if (e.key === ']') {
                 e.preventDefault()
                 if (e.shiftKey) {
-                    moveLayer('top') // Ctrl+Shift+] : Move to front
+                    moveLayer('top')
                 } else {
-                    moveLayer('up') // Ctrl+] : Move forward
+                    moveLayer('up')
                 }
             }
         }
@@ -131,6 +143,7 @@ export function useEditor() {
         startDrag,
         startResize,
         startRotate,
+        updateElement,
         isDragging,
         isResizing,
         isRotating

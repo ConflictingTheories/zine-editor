@@ -152,6 +152,7 @@ function Editor() {
                         style={styles.themeSelect}
                     >
                         <option value="classic">Classic Literature</option>
+                        <option value="editorial">Editorial Light</option>
                         <option value="fantasy">Medieval Fantasy</option>
                         <option value="cyberpunk">Cyberpunk</option>
                         <option value="conspiracy">Dark Conspiracies</option>
@@ -242,7 +243,7 @@ function Editor() {
                 </div>
                 <div className="ed-canvas-wrap" id="canvasWrap">
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}>
-                        <Canvas page={currentPage} pageIdx={pageIdx} snapOn={snapOn} gridOn={gridOn} />
+                        <Canvas page={currentPage} pageIdx={pageIdx} snapOn={snapOn} gridOn={gridOn} zoom={zoom} />
                     </div>
                 </div>
             </div>

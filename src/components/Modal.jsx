@@ -5,6 +5,7 @@ import ExportModal from './ExportModal.jsx'
 
 const THEME_OPTIONS = [
     { key: 'classic', name: 'Classic Literature', desc: 'Elegant prose & serif beauty', colors: ['#5c0a0a', '#d4af37', '#fdfaf1', '#4b2c5e'] },
+    { key: 'editorial', name: 'Editorial Light', desc: 'Bright pages & clean type', colors: ['#c23b3b', '#c28b2c', '#f7f8fb', '#5b6abf'] },
     { key: 'fantasy', name: 'Medieval Fantasy', desc: 'Swords, sorcery & scrolls', colors: ['#8b0000', '#ffd700', '#f5f5dc', '#4b0082'] },
     { key: 'cyberpunk', name: 'Cyberpunk', desc: 'Neon grids & digital void', colors: ['#ff003c', '#00f3ff', '#fcee0a', '#bc00ff'] },
     { key: 'conspiracy', name: 'Dark Conspiracies', desc: 'Redacted truths & shadows', colors: ['#4a0000', '#00ff00', '#c5b358', '#e8e4d9'] },

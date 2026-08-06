@@ -75,6 +75,10 @@ export const THEMES = {
     LIGHT: 'light',
 }
 
+// Canonical zine page size (half-letter / digest) — keep editor, preview, and exports in sync
+export const PAGE_W = 528
+export const PAGE_H = 816
+
 // Toast notification durations (ms)
 export const TOAST_DURATION = {
     SHORT: 2000,

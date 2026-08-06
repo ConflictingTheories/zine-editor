@@ -1,5 +1,6 @@
 // Adapted from old version's editor.js export methods
 import MCPClient from './mcpClient.js'
+import { PAGE_W, PAGE_H } from '../constants.js'
 
 // Server-side export using MCP (for automation)
 export const exportToHTMLServer = async (project, token) => {
@@ -73,12 +74,13 @@ export const exportToHTML = (project, embedAssets = false) => {
 
     setTimeout(() => {
         let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
+        <link rel="stylesheet" href="/fonts/fonts.css">
         <style>
             body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
             .reader-header{padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
             .reader-title{font-weight:700;letter-spacing:1px;color:#d4af37;font-size:1.1em}
             .reader-main{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
-            .page-wrap{width:528px;height:816px;background:#fff;box-shadow:0 0 50px rgba(0,0,0,0.6);position:relative;display:none;transform-origin:center;overflow:hidden}
+            .page-wrap{width:${PAGE_W}px;height:${PAGE_H}px;background:#fff;box-shadow:0 0 50px rgba(0,0,0,0.6);position:absolute;top:50%;left:50%;margin-top:-${PAGE_H / 2}px;margin-left:-${PAGE_W / 2}px;display:none;transform-origin:center;overflow:hidden}
             .page-wrap.active{display:block;animation:fadeIn 0.4s cubic-bezier(0.25, 1, 0.5, 1)}
             @keyframes fadeIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
             .reader-controls{padding:20px;background:#1a1a1a;border-top:1px solid #333;display:flex;justify-content:center;gap:20px;align-items:center;z-index:10}
@@ -260,29 +262,30 @@ export const exportToInteractive = async (project, embedAssets = false) => {
     ld.innerHTML = '<div>Building Interactive Zine...</div>';
     document.body.appendChild(ld);
 
-    // Fetch PageFlip if embedding is requested
-    let pageFlipScript = `<script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>`;
+    let pageFlipScript = `<script src="/libs/page-flip.browser.js"></script>`;
     if (embedAssets) {
         try {
             ld.innerHTML = '<div>Fetching libraries...</div>';
-            const res = await fetch('https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js');
+            const res = await fetch('/libs/page-flip.browser.js');
             if (res.ok) {
                 const text = await res.text();
                 pageFlipScript = `<script>${text}</script>`;
             }
         } catch (e) {
-            console.warn('Failed to fetch page-flip for embedding, falling back to CDN');
+            console.warn('Failed to fetch page-flip for embedding');
         }
     }
 
-    setTimeout(() => {
+    timeoutTracker = setTimeout(() => {
         let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
+        <link rel="stylesheet" href="/fonts/fonts.css">
         ${pageFlipScript}
         <style>
             body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
             .reader-header{padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
             .reader-title{font-weight:700;letter-spacing:1px;color:#d4af37;font-size:1.1em}
-            .book-stage{flex:1;width:100%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
+            .book-stage{flex:1;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%);position:relative;}
+            #book{margin:auto;}
             .page{background-color:#fff;overflow:hidden;position:relative;display:none;box-shadow:inset 0 0 20px rgba(0,0,0,0.1)} 
             .page.-active{display:block}
             .el{position:absolute}
@@ -338,7 +341,7 @@ export const exportToInteractive = async (project, embedAssets = false) => {
             const ov = document.getElementById('vp-overlay'); ov.style.opacity = 0;
             setTimeout(() => { ov.remove(); Gen.init();
                 const el = document.getElementById('book');
-                pf = new St.PageFlip(el, { width: 528, height: 816, size: 'fixed', minWidth: 300, maxWidth: 1000, minHeight: 400, maxHeight: 1400, maxShadowOpacity: 0.5, showCover: true, mobileScrollSupport: false });
+                pf = new St.PageFlip(el, { width: ${PAGE_W}, height: ${PAGE_H}, size: 'fixed', minWidth: 300, maxWidth: 1000, minHeight: 400, maxHeight: 1400, maxShadowOpacity: 0.5, showCover: true, mobileScrollSupport: false });
                 pf.loadFromHTML(document.querySelectorAll('.page'));
                 pf.on('flip', (e) => { const p = document.querySelectorAll('.page')[e.data]; if(p) P(p.dataset.bgm); });
                 const p0 = document.querySelectorAll('.page')[0]; if(p0) P(p0.dataset.bgm);
@@ -389,20 +392,20 @@ export const exportToPDF = async (project, embedAssets = false) => {
             const s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = reject; document.head.appendChild(s);
         });
 
-        if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-        if (!window.html2canvas) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+        if (!window.jspdf) await loadScript('/libs/jspdf.umd.min.js');
+        if (!window.html2canvas) await loadScript('/libs/html2canvas.min.js');
 
         let mushu;
         try {
-            const m = await import('https://unpkg.com/mushu-flow@1.1.0/src/index.js');
+            const m = await (new Function('return import("/libs/mushu-flow.js")'))();
             mushu = m.mushu;
         } catch (e) { console.warn('Failed to load mushu for PDF export', e); }
 
         const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [550, 850] });
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [PAGE_W, PAGE_H] });
 
         const container = document.createElement('div');
-        container.style.cssText = "position:absolute;left:-9999px;top:0;width:550px;height:850px;overflow:hidden;background:#fff";
+        container.style.cssText = `position:absolute;left:-9999px;top:0;width:${PAGE_W}px;height:${PAGE_H}px;overflow:hidden;background:#fff`;
         document.body.appendChild(container);
 
         try {
@@ -443,7 +446,7 @@ export const exportToPDF = async (project, embedAssets = false) => {
                 const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
                 if (i > 0) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, 0, 550, 850);
+                pdf.addImage(imgData, 'JPEG', 0, 0, PAGE_W, PAGE_H);
 
                 p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; });
             }
@@ -458,27 +461,165 @@ export const exportToPDF = async (project, embedAssets = false) => {
     ld.remove();
 }
 
-// Helper function from old version
+export const exportToFoldablePDF = async (project, embedAssets = false) => {
+    const ld = document.createElement('div');
+    ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
+    ld.innerHTML = '<div>Initializing Foldable Zine Export...</div>';
+    document.body.appendChild(ld);
+
+    try {
+        const loadScript = (src) => new Promise((resolve, reject) => {
+            if (document.querySelector('script[src="' + src + '"]')) return resolve();
+            const s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = reject; document.head.appendChild(s);
+        });
+
+        if (!window.jspdf) await loadScript('/libs/jspdf.umd.min.js');
+        if (!window.html2canvas) await loadScript('/libs/html2canvas.min.js');
+
+        let mushu;
+        try {
+            const m = await (new Function('return import("/libs/mushu-flow.js")'))();
+            mushu = m.mushu;
+        } catch (e) { console.warn('Failed to load mushu for foldable PDF export', e); }
+
+        const { jsPDF } = window.jspdf;
+        // Landscape Letter (11x8.5 inches at 96PPI) -> 1056 x 816 px
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1056, 816] });
+
+        const container = document.createElement('div');
+        // The container needs to hold 8 pages. We'll render the entire 1056x816 sheet at once.
+        container.style.cssText = "position:absolute;left:-9999px;top:0;width:1056px;height:816px;overflow:hidden;background:#fff";
+        document.body.appendChild(container);
+
+        // A single landscape sheet is divided into 4 columns and 2 rows.
+        // Each mini-page is 264px wide (1056/4) and 408px high (816/2).
+        // Since original pages are 528x816, we scale them by 0.5.
+        // The Zine grid layout (array index 0-7):
+        // Top row (upside down, 180deg): [page 4, page 3, page 2, page 1 (which is index 1, aka pg2 in 1-idx)]
+        // Bottom row (0deg): [page 5, page 6, page 7, page 0 (cover)]
+        // Using indexes (0-7):
+        // Top row: 4, 3, 2, 1
+        // Bottom row: 5, 6, 7, 0
+
+        try {
+            ld.innerHTML = `<div>Generating Foldable Zine Layout...</div>`;
+
+            // Prepare up to 8 pages
+            const pages = [];
+            for (let i = 0; i < 8; i++) {
+                pages.push(project.pages[i] || { elements: [], background: '#ffffff', texture: null });
+            }
+
+            // Render shaders for all pages
+            if (mushu) {
+                for (const p of pages) {
+                    for (const el of p.elements) {
+                        if (el.type === 'shader' && el.shaderCode) {
+                            try {
+                                const c = document.createElement('canvas');
+                                c.width = el.width; c.height = el.height;
+                                mushu(c).gl(el.shaderCode);
+                                await new Promise(r => setTimeout(r, 50));
+                                el.shaderImage = c.toDataURL('image/jpeg', 0.9);
+                            } catch (e) { console.warn('Shader render failed', e); }
+                        }
+                    }
+                }
+            }
+
+            const pageIndexMap = [4, 3, 2, 1, 5, 6, 7, 0];
+            const pageTransforms = [
+                { x: 0, y: 0, rot: 180 }, { x: 264, y: 0, rot: 180 }, { x: 528, y: 0, rot: 180 }, { x: 792, y: 0, rot: 180 },
+                { x: 0, y: 408, rot: 0 }, { x: 264, y: 408, rot: 0 }, { x: 528, y: 408, rot: 0 }, { x: 792, y: 408, rot: 0 }
+            ];
+
+            let htmlString = "";
+            for (let i = 0; i < 8; i++) {
+                const srcIdx = pageIndexMap[i];
+                const p = pages[srcIdx];
+                const tr = pageTransforms[i];
+
+                htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:264px;height:408px;
+                    transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #eee">
+                    <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative;">
+                        ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>` : ''}
+                        ${p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                    </div>
+                </div>`;
+            }
+
+            container.innerHTML = htmlString;
+
+            // Allow DOM to settle and images to load
+            await new Promise(r => setTimeout(r, 200));
+
+            const canvas = await window.html2canvas(container, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                imageTimeout: 5000
+            });
+            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+            pdf.addImage(imgData, 'JPEG', 0, 0, 1056, 816);
+
+            // Cleanup shaders
+            pages.forEach(p => p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; }));
+
+            pdf.save('voidpress-foldable-zine.pdf');
+        } finally {
+            container.remove();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Foldable PDF export failed: ' + e.message);
+    }
+    ld.remove();
+}
+
+// Helper function — keep defaults aligned with ElementContent / Reader
+const BALLOON_EXPORT = {
+    dialog: 'background:#fff;border:2px solid #000;border-radius:20px;padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;',
+    thought: 'background:#fff;border:2px solid #000;border-radius:50%;padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;',
+    shout: 'background:#fff;border:4px solid #000;padding:10px;font-weight:bold;display:flex;align-items:center;justify-content:center;text-align:center;',
+    caption: 'background:#000;color:#fff;padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;',
+    whisper: 'background:#f8f8f8;border:1px dashed #999;border-radius:16px;padding:10px;font-style:italic;display:flex;align-items:center;justify-content:center;text-align:center;',
+    narration: 'background:#ffe;border:1px solid #cc9;padding:10px;font-style:italic;display:flex;align-items:center;justify-content:center;text-align:center;'
+}
+
 const elementToHTML = (el, isExport = true) => {
-    let s = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;transform:rotate(${el.rotation || 0}deg);z-index:${el.zIndex || 0};opacity:${el.opacity ?? 1};mix-blend-mode:${el.blendMode || 'normal'};`;
-    if (el.isHidden) s += 'display:none;';
-    let content = '';
-    const handler = isExport ? 'H' : 'VP.handleInteraction';
+    let s = `position:absolute;left:${el.x || 0}px;top:${el.y || 0}px;width:${el.width}px;height:${el.height}px;transform:rotate(${el.rotation || 0}deg);z-index:${el.zIndex || 0};opacity:${el.opacity ?? 1};mix-blend-mode:${el.blendMode || 'normal'};box-sizing:border-box;`
+    if (el.hidden || el.isHidden) s += 'display:none;'
+    if (el.shadow) s += `box-shadow:${el.shadow};`
+    if (el.blur) s += `filter:blur(${el.blur}px);`
+    else if (el.filter) s += `filter:${el.filter};`
+    if (el.borderWidth) s += `border:${el.borderWidth}px solid ${el.borderColor || '#000'};`
+    if (el.borderRadius) s += `border-radius:${el.borderRadius}px;`
+
+    let content = ''
+    const handler = isExport ? 'H' : 'VP.handleInteraction'
     if (el.type === 'text' || el.type === 'balloon') {
-        s += `font-size:${el.fontSize}px;font-family:${el.fontFamily || 'sans-serif'};color:${el.color || '#000'};text-align:${el.align || 'left'};`;
-        if (el.bold) s += 'font-weight:bold;'; if (el.italic) s += 'font-style:italic;';
-        content = el.content || '';
+        s += `font-size:${el.fontSize || (el.type === 'balloon' ? 14 : 16)}px;font-family:${el.fontFamily || 'sans-serif'};color:${el.color || '#000'};text-align:${el.align || (el.type === 'balloon' ? 'center' : 'left')};`
+        if (el.bold) s += 'font-weight:bold;'
+        if (el.italic) s += 'font-style:italic;'
+        if (el.lineHeight) s += `line-height:${el.lineHeight};`
+        if (el.letterSpacing) s += `letter-spacing:${el.letterSpacing}px;`
+        if (el.textShadow) s += `text-shadow:${el.textShadow};`
+        if (el.strokeWidth) s += `-webkit-text-stroke:${el.strokeWidth}px ${el.strokeColor || '#fff'};`
+        if (el.type === 'text') s += 'padding:4px;'
+        content = el.content || ''
         if (el.type === 'balloon') {
-            if (el.balloonType === 'dialog') { s += 'background:#fff;border:2px solid #000;border-radius:20px;padding:10px;' }
-            if (el.balloonType === 'thought') { s += 'background:#fff;border:2px solid #000;border-radius:50%;padding:10px;' }
-            if (el.balloonType === 'shout') { s += 'background:#fff;border:4px solid #000;padding:10px;font-weight:bold;' }
-            if (el.balloonType === 'caption') { s += 'background:#000;color:#fff;padding:10px;' }
-            if (el.balloonType === 'whisper') { s += 'background:#f8f8f8;border:1px dashed #999;border-radius:16px;padding:10px;font-style:italic;' }
-            if (el.balloonType === 'narration') { s += 'background:#ffe;border:1px solid #cc9;padding:10px;font-style:italic;' }
+            s += BALLOON_EXPORT[el.balloonType || 'dialog'] || BALLOON_EXPORT.dialog
         }
     }
-    if (el.type === 'image') content = `<img src="${el.src}" style="width:100%;height:100%;object-fit:${el.objectFit || 'cover'}">`;
-    if (el.type === 'video') content = `<video src="${el.src}" controls style="width:100%;height:100%;object-fit:${el.objectFit || 'cover'}"></video>`;
+    if (el.type === 'image') {
+        const fit = el.objectFit || 'contain'
+        const radius = el.imgRadius ? `border-radius:${el.imgRadius}px;` : ''
+        content = `<img src="${el.src}" style="width:100%;height:100%;object-fit:${fit};display:block;${radius}" alt="">`
+    }
+    if (el.type === 'video') content = `<video src="${el.src}" controls style="width:100%;height:100%;object-fit:${el.objectFit || 'contain'}"></video>`
     if (el.type === 'audio-log') {
         content = `<div class="audio-log-wrap" style="display:flex;flex-direction:column;width:100%;height:100%;background:rgba(0,0,0,0.5);border:1px solid #d4af37;padding:10px;box-sizing:border-box;color:#fff">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
@@ -486,23 +627,34 @@ const elementToHTML = (el, isExport = true) => {
                 <div style="font-weight:bold">${el.label || 'AUDIO LOG'}</div>
             </div>
             <canvas width="${el.width}" height="${el.height - 50}" style="flex:1;width:100%;background:#000;border-radius:4px" data-theme="${el.vizTheme || 'bars'}"></canvas>
-        </div>`;
+        </div>`
     }
-    if (el.type === 'panel') s += `border:${el.panelBorderWidth || 0}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'};background:${el.fill || 'transparent'};border-radius:${el.panelRadius || 0}px;`;
-    if (el.type === 'shape') { s += `background:${el.fill || '#000'};`; if (el.shape === 'circle') s += 'border-radius:50%;' }
-    if (el.type === 'shader') {
-        if (el.shaderImage) {
-            content = `<img src="${el.shaderImage}" style="width:100%;height:100%;object-fit:cover">`;
+    if (el.type === 'panel') {
+        s += `border:${el.panelBorderWidth ?? 4}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'};background:${el.fill || 'transparent'};border-radius:${el.panelRadius || 0}px;`
+        if (el.panelShadow) s += `box-shadow:${el.panelShadow};`
+    }
+    if (el.type === 'shape') {
+        if (el.shape === 'triangle') {
+            s += `background:transparent;width:0;height:0;border-left:${(el.width || 0) / 2}px solid transparent;border-right:${(el.width || 0) / 2}px solid transparent;border-bottom:${el.height || 0}px solid ${el.fill || '#000'};`
+        } else if (el.shape === 'diamond') {
+            s += `background:${el.fill || '#000'};transform:rotate(${(el.rotation || 0) + 45}deg);`
         } else {
-            content = `<canvas class="vp-shader-canvas" data-code="${btoa(unescape(encodeURIComponent(el.shaderCode || '')))}" style="width:100%;height:100%"></canvas>`;
+            s += `background:${el.fill || '#000'};`
+            if (el.shape === 'circle') s += 'border-radius:50%;'
         }
     }
-    if (el.shadow) s += `box-shadow:${el.shadow};`;
-    if (el.animation && el.animation !== 'none') s += `animation:${el.animation} ${el.animDuration || 1}s ease ${el.animLoop ? 'infinite' : 'both'};`;
-
-    let attr = `style="${s}" class="reader-el-item" data-label="${el.label || ''}"`;
-    if (el.action) {
-        attr = `style="${s}cursor:pointer" class="reader-el-item" data-label="${el.label || ''}" data-action="${el.action}" data-action-val="${el.actionVal || ''}" onclick="${handler}(this, event)"`;
+    if (el.type === 'shader') {
+        if (el.shaderImage) {
+            content = `<img src="${el.shaderImage}" style="width:100%;height:100%;object-fit:cover" alt="">`
+        } else {
+            content = `<canvas class="vp-shader-canvas" data-code="${btoa(unescape(encodeURIComponent(el.shaderCode || '')))}" style="width:100%;height:100%"></canvas>`
+        }
     }
-    return `<div ${attr}>${content}</div>`;
+    if (el.animation && el.animation !== 'none') s += `animation:${el.animation} ${el.animDuration || 1}s ease ${el.animLoop ? 'infinite' : 'both'};`
+
+    let attr = `style="${s}" class="reader-el-item" data-label="${el.label || ''}"`
+    if (el.action) {
+        attr = `style="${s}cursor:pointer" class="reader-el-item" data-label="${el.label || ''}" data-action="${el.action}" data-action-val="${el.actionVal || ''}" onclick="${handler}(this, event)"`
+    }
+    return `<div ${attr}>${content}</div>`
 }

@@ -30,7 +30,7 @@ const normalizeColor = (color) => {
 }
 
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updateVpState, playSFX } = useVP()
+    const { vpState, updateElement, updateVpState, playSFX, moveLayer } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -404,6 +404,16 @@ function PropertyPanel({ activeTab = 'props' }) {
                     </div>
                 </div>
             )}
+
+            <div className="prop-section">
+                <h4>Layering</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button type="button" className="prop-btn" style={{ fontSize: '11px', padding: '6px' }} onClick={() => moveLayer('top')}>Bring to Front</button>
+                    <button type="button" className="prop-btn" style={{ fontSize: '11px', padding: '6px' }} onClick={() => moveLayer('up')}>Bring Forward</button>
+                    <button type="button" className="prop-btn" style={{ fontSize: '11px', padding: '6px' }} onClick={() => moveLayer('bottom')}>Send to Back</button>
+                    <button type="button" className="prop-btn" style={{ fontSize: '11px', padding: '6px' }} onClick={() => moveLayer('down')}>Send Backward</button>
+                </div>
+            </div>
 
             <div className="prop-section">
                 <h4>Quick actions</h4>

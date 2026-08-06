@@ -7,7 +7,7 @@ const styles = {
 }
 
 function TopNav() {
-    const { vpState, updateVpState, showView, showModal, logout } = useVP()
+    const { vpState, showView, showModal, logout, toggleUiTheme } = useVP()
 
     const handleViewChange = (view) => {
         showView(view)
@@ -24,6 +24,8 @@ function TopNav() {
     const handlePremium = () => {
         showModal('premiumModal')
     }
+
+    const isLight = vpState.uiTheme === 'light'
 
     return (
         <nav className="topnav">
@@ -63,6 +65,14 @@ function TopNav() {
                 )}
             </div>
             <div className="topnav-right">
+                <button
+                    className="topnav-btn secondary"
+                    onClick={toggleUiTheme}
+                    title={isLight ? 'Switch to dark UI' : 'Switch to light UI'}
+                    aria-label={isLight ? 'Switch to dark UI' : 'Switch to light UI'}
+                >
+                    {isLight ? 'Dark' : 'Light'}
+                </button>
                 <div className="cloud-status" title={vpState.isOnline ? 'Online' : 'Offline'}>
                     {vpState.isOnline ? '☁️' : '☁️⃠'}
                 </div>

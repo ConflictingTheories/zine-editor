@@ -11,10 +11,10 @@ const styles = {
     })
 }
 
-function Canvas({ page, pageIdx, snapOn = true, gridOn = false }) {
+function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
     const { vpState, updateVpState } = useVP()
     const { selection } = vpState
-    const { startDrag, startResize, startRotate, updateElement } = useEditor()
+    const { startDrag, startResize, startRotate, updateElement } = useEditor(zoom)
     const canvasRef = useRef(null)
     const [ctxMenu, setCtxMenu] = useState({ visible: false, x: 0, y: 0, element: null })
 
@@ -31,7 +31,13 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false }) {
         e.preventDefault()
         e.stopPropagation()
         const rect = canvasRef.current.getBoundingClientRect()
-        setCtxMenu({ visible: true, x: e.clientX - rect.left, y: e.clientY - rect.top, element: el })
+        const scale = Math.max(0.01, zoom / 100)
+        setCtxMenu({
+            visible: true,
+            x: (e.clientX - rect.left) / scale,
+            y: (e.clientY - rect.top) / scale,
+            element: el
+        })
     }
 
     return (

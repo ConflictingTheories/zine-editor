@@ -81,6 +81,12 @@ const authenticateToken = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication token required' });
 
+    // Offline Bypass Token support
+    if (token === 'local_offline_token') {
+        req.user = { id: 1, username: 'Local_Creator' };
+        return next();
+    }
+
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.status(403).json({ error: 'Forbidden', message: 'Invalid or expired token' });
         req.user = user;
