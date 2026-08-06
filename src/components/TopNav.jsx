@@ -30,7 +30,7 @@ function TopNav() {
     return (
         <nav className="topnav">
             <div className="topnav-logo" onClick={() => handleViewChange('dashboard')}>
-                VOID PRESS <span>Publishing</span>
+                SVRN <span>Sovereign Publishing</span>
             </div>
             <div className="topnav-tabs">
                 {vpState.user && (

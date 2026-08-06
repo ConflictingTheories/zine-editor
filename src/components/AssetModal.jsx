@@ -67,40 +67,42 @@ function AssetModal({ type: initialType, onClose }) {
                             />
                         </div>
 
-                        <div className="asset-grid">
-                            {filteredAssets.length > 0 ? (
-                                filteredAssets.map((asset, i) => {
-                                    // Render a category divider for symbol categories to keep the vault organized & breathable
-                                    const prev = filteredAssets[i - 1]
-                                    const showCat = currentType === 'symbols' && asset.category && (!prev || prev.category !== asset.category)
-                                    return (
-                                        <React.Fragment key={asset.id}>
-                                            {showCat && (
-                                                <div className="asset-category">{asset.category}</div>
-                                            )}
-                                            <div
-                                                className="asset-item"
-                                                onClick={() => handleSelect(asset)}
-                                                title={asset.name}
-                                            >
-                                                <div className="asset-preview" dangerouslySetInnerHTML={{ __html: asset.preview }} />
-                                                {asset.name && <div className="asset-name">{asset.name}</div>}
-                                            </div>
-                                        </React.Fragment>
-                                    )
-                                })
-                            ) : (
-                                <div style={{
-                                    gridColumn: '1/-1',
-                                    padding: '40px',
-                                    textAlign: 'center',
-                                    color: 'var(--vp-text-dim)',
-                                    background: 'rgba(255,255,255,0.02)',
-                                    borderRadius: '12px'
-                                }}>
-                                    No assets found matching "{searchQuery}"
-                                </div>
-                            )}
+                        <div className="asset-scroll">
+                            <div className="asset-grid">
+                                {filteredAssets.length > 0 ? (
+                                    filteredAssets.map((asset, i) => {
+                                        // Render a category divider for symbol categories to keep the vault organized & breathable
+                                        const prev = filteredAssets[i - 1]
+                                        const showCat = currentType === 'symbols' && asset.category && (!prev || prev.category !== asset.category)
+                                        return (
+                                            <React.Fragment key={asset.id}>
+                                                {showCat && (
+                                                    <div className="asset-category">{asset.category}</div>
+                                                )}
+                                                <div
+                                                    className="asset-item"
+                                                    onClick={() => handleSelect(asset)}
+                                                    title={asset.name}
+                                                >
+                                                    <div className="asset-preview" dangerouslySetInnerHTML={{ __html: asset.preview }} />
+                                                    {asset.name && <div className="asset-name">{asset.name}</div>}
+                                                </div>
+                                            </React.Fragment>
+                                        )
+                                    })
+                                ) : (
+                                    <div style={{
+                                        gridColumn: '1/-1',
+                                        padding: '40px',
+                                        textAlign: 'center',
+                                        color: 'var(--vp-text-dim)',
+                                        background: 'rgba(255,255,255,0.02)',
+                                        borderRadius: '12px'
+                                    }}>
+                                        No assets found matching "{searchQuery}"
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </main>
                 </div>

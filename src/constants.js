@@ -7,7 +7,7 @@
  */
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-export const APP_NAME = import.meta.env.VITE_APP_NAME || 'Void Press'
+export const APP_NAME = import.meta.env.VITE_APP_NAME || 'SVRN Publishing'
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0'
 
 // API Endpoints (derived from base URL)
@@ -95,6 +95,6 @@ export const ENV = {
 
 // Debug logging (only in dev)
 if (ENV.isDev) {
-    console.log(`%c[Void Press] ${APP_VERSION}`, 'color: #d4af37; font-weight: bold;')
+    console.log(`%c[SVRN Publishing] ${APP_VERSION}`, 'color: #d4af37; font-weight: bold;')
     console.log(`%cAPI: ${API_BASE_URL}`, 'color: #8b5cf6;')
 }

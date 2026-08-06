@@ -1,20 +1,28 @@
-# Void Press — 3D Glow Objects & Offline Upgrade
+# SVRN Publishing — Implementation TODO
 
-## Vendor mushu-flow for offline & advanced features
-- [x] Create `src/lib/mushu/` vendored copy
-- [x] Copy rich local `mushu` library (core, glsl, gpu) into project
-- [x] Rewire imports to vendored copy (fully offline, no CDN)
+## 1. Fix asset modal nesting (original task)
+- [ ] `AssetModal.jsx`: wrap `.asset-grid` in `.asset-scroll` container
+- [ ] `styles.css`: add `.asset-scroll` styles, fix `.asset-item` overlap
 
-## Rewrite 3D objects with real glow shaders
-- [x] Rewrite `Object3D.jsx` using `shader3d()` custom GLSL (fresnel rim glow, additive halo, transparent, double-sided, time pulse)
-- [x] Use `crystal` geometry from vendored mushu
-- [x] Verify editor + reader render the glowing object
+## 2. Rebrand to "SVRN Publishing" (SVRN = Sovereign)
+- [ ] `index.html` title
+- [ ] `constants.js` APP_NAME
+- [ ] `TopNav.jsx` logo
+- [ ] `exportSystem.js` overlay text + filenames
+- [ ] `manifest.json`, `sw.js`
+- [ ] `CreditPurchase.jsx`, `Modal.jsx`
+- [ ] `SovereignTokenManager.jsx` platform id
+- [ ] `shaderBridge.js` comment
+- [ ] `tutorialData.js` footer
 
-## Wire into asset library
-- [x] Ensure `objects` category + `addAsset` place shader-based 3D objects
-- [x] PropertyPanel model/color controls already added
+## 3. Additional art styles (graffiti, sketch, pen & ink, watercolour)
+- [ ] `VPContext.jsx`: add 4 content themes
+- [ ] `PropertyPanel.jsx`: add matching page textures
+- [ ] Add graffiti/ink/watercolour glyph & splat assets
 
-## Verify
-- [x] `npm run build` passes
-- [x] App runs offline (vendored mushu, export uses MINI_MUSHU)
-</content>
+## 4. Poster effects
+- [ ] `PropertyPanel.jsx`: add screen VFX options
+- [ ] `VfxSystem.jsx`: implement new VFX
+- [ ] `PropertyPanel.jsx`: add poster CSS filter presets for elements
+- [ ] `ElementContent.jsx` / `Reader.jsx`: render filter presets if needed
+

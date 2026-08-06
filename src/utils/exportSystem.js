@@ -73,7 +73,7 @@ export const exportToHTML = (project, embedAssets = false) => {
     document.body.appendChild(ld);
 
     setTimeout(() => {
-        let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
+        let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SVRN Publishing Zine</title>
         <link rel="stylesheet" href="/fonts/fonts.css">
         <style>
             body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -106,7 +106,7 @@ export const exportToHTML = (project, embedAssets = false) => {
             .btn-audio:hover{background:#d4af37;color:#000}
         </style></head><body>`;
 
-        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">VOID PRESS</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
+        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">SVRN PUBLISHING</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">SOVEREIGN INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
 
         html += `<div class="reader-header">
             <div class="reader-title">${project.title || 'UNTITLED ZINE'}</div>
