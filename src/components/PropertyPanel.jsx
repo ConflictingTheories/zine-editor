@@ -396,6 +396,29 @@ function PropertyPanel({ activeTab = 'props' }) {
                 </div>
             )}
 
+            {element.type === 'object' && (
+                <div className="prop-section">
+                    <h4>3D Object</h4>
+                    <div className="form-row">
+                        <label>Model</label>
+                        <select value={element.objModel || 'crystal'} onChange={(e) => handleChange('objModel', e.target.value)}>
+                            <option value="crystal">Glowing Crystal</option>
+                            <option value="crystalCluster">Crystal Cluster</option>
+                            <option value="orb">Energy Orb</option>
+                            <option value="prism">Neon Prism</option>
+                            <option value="runestone">Rune Stone</option>
+                        </select>
+                    </div>
+                    <div className="form-row">
+                        <label>Glow Color</label>
+                        <input type="color" value={normalizeColor(element.objColor || '#4488ff')} onChange={(e) => handleChange('objColor', e.target.value)} />
+                    </div>
+                    <div className="form-row-checkbox">
+                        <label><input type="checkbox" checked={element.objSpin !== false} onChange={(e) => handleChange('objSpin', e.target.checked)} /> Auto-Rotate</label>
+                    </div>
+                </div>
+            )}
+
             {element.type === 'shader' && (
                 <div className="prop-section">
                     <h4>Shader Settings</h4>

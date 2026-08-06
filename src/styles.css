@@ -1715,6 +1715,7 @@ body.reader-active .topnav {
     flex-direction: column;
     gap: 16px;
     overflow: hidden;
+    min-height: 0;
 }
 
 .asset-search {
@@ -1747,6 +1748,9 @@ body.reader-active .topnav {
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 14px;
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    align-content: start;
     padding-right: 8px;
     padding-bottom: 20px;
 }

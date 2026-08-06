@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
+import Object3D from './Object3D.jsx'
 import ContentGate from './ContentGate.jsx'
 
 const ANIMATION_MAP = {
@@ -301,6 +302,15 @@ function Reader() {
                                 )}
                                 {el.type === 'shader' && (
                                     <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
+                                )}
+                                {el.type === 'object' && (
+                                    <Object3D
+                                        model={el.objModel || 'crystal'}
+                                        color={el.objColor || '#4488ff'}
+                                        autoRotate={el.objSpin !== false}
+                                        width={el.width}
+                                        height={el.height}
+                                    />
                                 )}
                                 {el.type === 'balloon' && (
                                     <div style={styles.balloon(el)}>{el.content}</div>

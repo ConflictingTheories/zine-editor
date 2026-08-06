@@ -1,6 +1,7 @@
 import React from 'react'
 import ShaderElement from './ShaderElement.jsx'
 import AudioViz from './AudioViz.jsx'
+import Object3D from './Object3D.jsx'
 
 const BALLOON_PROPS = {
     dialog: { background: '#fff', border: '2px solid #000', borderRadius: '20px' },
@@ -205,6 +206,16 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
                         height={el.height}
                     />
                 </div>
+            )
+        case 'object':
+            return (
+                <Object3D
+                    model={el.objModel || 'crystal'}
+                    color={el.objColor || '#4488ff'}
+                    autoRotate={el.objSpin !== false}
+                    width={el.width}
+                    height={el.height}
+                />
             )
         case 'video':
             return (

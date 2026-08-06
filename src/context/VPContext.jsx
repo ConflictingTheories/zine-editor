@@ -756,7 +756,14 @@ const VPProvider = ({ children }) => {
             name: p.name,
             preview: `<div style="width:50px;height:50px;background:linear-gradient(135deg,#222,#444);border-radius:4px;display:flex;align-items:center;justify-content:center;color:#8a889a;font-size:10px;text-align:center;padding:4px;border:1px solid #444">${p.name}</div>`
         }))
-        const map = { panels, shapes, balloons, sfx, symbols, shaders }
+        const objects = [
+            { id: 'crystal', name: 'Glowing Crystal', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #7ff, #447);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #48f)">💎</div>' },
+            { id: 'crystalCluster', name: 'Crystal Cluster', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #f8f, #a4a);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #f4f)">🔮</div>' },
+            { id: 'orb', name: 'Energy Orb', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 40% 35%, #fff, #0af 70%);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 8px #0af)">🌀</div>' },
+            { id: 'prism', name: 'Neon Prism', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #ff8, #f80);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #fa0)">🔶</div>' },
+            { id: 'runestone', name: 'Rune Stone', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #8f8, #484);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #4f4)">🪨</div>' }
+        ]
+        const map = { panels, shapes, balloons, sfx, symbols, shaders, objects }
         return map[type] || []
     }
 
@@ -880,6 +887,24 @@ const VPProvider = ({ children }) => {
             }
         } else if (type === 'shaders') {
             el = { ...base, type: 'shader', shaderPreset: assetId || 'plasma', width: 220, height: 220, opacity: 1 }
+        } else if (type === 'objects') {
+            const colors = {
+                crystal: '#4488ff',
+                crystalCluster: '#cc44ff',
+                orb: '#00aaff',
+                prism: '#ffaa00',
+                runestone: '#44ff88'
+            }
+            el = {
+                ...base,
+                type: 'object',
+                objModel: assetId || 'crystal',
+                objColor: colors[assetId] || '#4488ff',
+                objSpin: true,
+                width: 200,
+                height: 200,
+                opacity: 1
+            }
         }
         addElement(pageIdx, el)
     }

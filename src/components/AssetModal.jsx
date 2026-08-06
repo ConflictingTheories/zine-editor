@@ -12,7 +12,8 @@ function AssetModal({ type: initialType, onClose }) {
         { id: 'balloons', label: 'Balloons', icon: '💬' },
         { id: 'sfx', label: 'Sound FX', icon: '💥' },
         { id: 'symbols', label: 'Symbols', icon: '✦' },
-        { id: 'shaders', label: 'Shaders', icon: '🎨' }
+        { id: 'shaders', label: 'Shaders', icon: '🎨' },
+        { id: 'objects', label: '3D Objects', icon: '💎' }
     ]
 
     const allAssets = useMemo(() => getAssets(currentType), [currentType, getAssets])

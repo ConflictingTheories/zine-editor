@@ -149,6 +149,7 @@ function Editor() {
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>💥 SFX</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>✦ Symbol</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>🎨 Shader</button>
+                    <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>💎 3D</button>
                 </div>
                 <div className="ed-tool-group">
                     <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>⊞ Grid</button>
