@@ -245,6 +245,7 @@ class MCPClient {
     getThemeColors(themeKey) {
         const themes = {
             classic: { background: '#fdfaf1', text: '#1a1a1a', accent: '#d4af37' },
+            editorial: { background: '#f7f8fb', text: '#1c2430', accent: '#c28b2c' },
             fantasy: { background: '#f5f5dc', text: '#0a0a0a', accent: '#ffd700' },
             cyberpunk: { background: '#f0f0f0', text: '#050505', accent: '#ff003c' },
             conspiracy: { background: '#e8e4d9', text: '#000000', accent: '#c5b358' },
@@ -280,22 +281,30 @@ class MCPClient {
             cover: {
                 background: '#1a1a1a',
                 elements: [
-                    { type: 'text', content: 'ZINE TITLE', x: 50, y: 150, width: 428, height: 100, fontSize: 64, color: '#d4af37', align: 'center', bold: true },
-                    { type: 'text', content: 'Issue No. 01', x: 50, y: 260, width: 428, height: 40, fontSize: 24, color: '#fdfaf1', align: 'center' },
-                    { type: 'panel', x: 40, y: 40, width: 448, height: 736, panelBorderWidth: 8, panelBorderColor: '#d4af37' }
+                    { type: 'panel', x: 28, y: 28, width: 472, height: 760, fill: 'transparent', panelBorderWidth: 3, panelBorderColor: '#d4af37' },
+                    { type: 'text', content: '✦', x: 234, y: 100, width: 60, height: 50, fontSize: 36, color: '#d4af37', align: 'center', animation: 'pulse', animDuration: 2.5, animLoop: true },
+                    { type: 'text', content: 'ZINE TITLE', x: 50, y: 200, width: 428, height: 100, fontSize: 56, color: '#d4af37', align: 'center', bold: true },
+                    { type: 'text', content: 'Issue No. 01', x: 50, y: 320, width: 428, height: 40, fontSize: 20, color: '#fdfaf1', align: 'center', italic: true },
+                    { type: 'shape', shape: 'line_h', x: 140, y: 380, width: 248, height: 2, fill: '#d4af37', opacity: 0.7 },
+                    { type: 'text', content: 'TURN THE PAGE →', x: 144, y: 620, width: 240, height: 40, fontSize: 14, color: '#1a1a1a', align: 'center', bold: true, fill: '#d4af37', borderRadius: 4, action: 'goto', actionVal: '2' }
                 ]
             },
             content: {
                 background: '#fdfaf1',
                 elements: [
-                    { type: 'text', content: 'CHAPTER NAME', x: 50, y: 50, width: 428, height: 60, fontSize: 32, color: '#1a1a1a', bold: true },
-                    { type: 'text', content: 'Start your story here...', x: 50, y: 120, width: 428, height: 600, fontSize: 16, color: '#1a1a1a' }
+                    { type: 'text', content: 'CHAPTER', x: 50, y: 36, width: 428, height: 20, fontSize: 11, color: '#4a0000', letterSpacing: 3 },
+                    { type: 'text', content: 'CHAPTER NAME', x: 50, y: 60, width: 428, height: 50, fontSize: 32, color: '#1a1a1a', bold: true },
+                    { type: 'shape', shape: 'line_h', x: 50, y: 120, width: 120, height: 2, fill: '#4a0000' },
+                    { type: 'text', content: 'Start your story here. Drop panels, balloons, shaders, and logic actions — build the page the way a skilled hand would.', x: 50, y: 150, width: 428, height: 520, fontSize: 16, color: '#1a1a1a', lineHeight: 1.4 }
                 ]
             },
             back: {
                 background: '#1a1a1a',
                 elements: [
-                    { type: 'text', content: 'THE END', x: 50, y: 380, width: 428, height: 60, fontSize: 48, color: '#fdfaf1', align: 'center', bold: true }
+                    { type: 'panel', x: 40, y: 40, width: 448, height: 736, fill: 'transparent', panelBorderWidth: 2, panelBorderColor: '#d4af37' },
+                    { type: 'text', content: 'THE END', x: 50, y: 340, width: 428, height: 60, fontSize: 48, color: '#fdfaf1', align: 'center', bold: true },
+                    { type: 'shape', shape: 'line_h', x: 160, y: 420, width: 208, height: 2, fill: '#d4af37', opacity: 0.6 },
+                    { type: 'text', content: 'Buy the ticket. Take the ride.', x: 50, y: 450, width: 428, height: 40, fontSize: 14, color: '#d4af37', align: 'center', italic: true }
                 ]
             }
         }

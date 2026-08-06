@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
-import { getTutorialData } from '../data/tutorialData.js'
+import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID } from '../data/tutorialData.js'
 
 const VPContext = createContext()
 
@@ -152,11 +152,33 @@ const VPProvider = ({ children }) => {
     }
 
     useEffect(() => {
+        const seedVersion = localStorage.getItem('vp_example_seed_v')
         const stored = localStorage.getItem('vp_projects')
-        if (stored) return
-        const initial = [getTutorialData()]
-        setVpState(prev => ({ ...prev, projects: initial }))
-        localStorage.setItem('vp_projects', JSON.stringify(initial))
+        const needsSeed = seedVersion !== String(EXAMPLE_SEED_VERSION)
+
+        if (!stored) {
+            const initial = [getTutorialData()]
+            setVpState(prev => ({ ...prev, projects: initial }))
+            localStorage.setItem('vp_projects', JSON.stringify(initial))
+            localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
+            return
+        }
+
+        if (!needsSeed) return
+
+        try {
+            const projects = JSON.parse(stored)
+            const example = getTutorialData()
+            const withoutOld = projects.filter(p =>
+                p.id !== EXAMPLE_PROJECT_ID && p.id !== 'tutorial_zine'
+            )
+            const next = [example, ...withoutOld]
+            setVpState(prev => ({ ...prev, projects: next }))
+            localStorage.setItem('vp_projects', JSON.stringify(next))
+            localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
+        } catch (e) {
+            // keep existing projects if parse fails
+        }
     }, [])
 
     useEffect(() => {
@@ -922,21 +944,34 @@ const VPProvider = ({ children }) => {
 
         if (type === 'cover') {
             page.background = bg
+            page.texture = 'https://www.transparenttextures.com/patterns/dark-matter.png'
             page.elements = [
-                { id: 'el_t1_' + Date.now(), type: 'text', content: 'ZINE TITLE', x: 50, y: 150, width: 428, height: 100, fontSize: 64, fontFamily: displayFont, color: accent, align: 'center', bold: true, zIndex: 0 },
-                { id: 'el_t2_' + Date.now(), type: 'text', content: 'Issue No. 01', x: 50, y: 260, width: 428, height: 40, fontSize: 24, fontFamily: bodyFont, color: fg, align: 'center', zIndex: 1 },
-                { id: 'el_p1_' + Date.now(), type: 'panel', x: 40, y: 40, width: 448, height: 736, panelBorderWidth: 8, panelBorderColor: accent, panelBorderStyle: 'solid', zIndex: -1 }
+                { id: 'el_p1_' + Date.now(), type: 'panel', x: 28, y: 28, width: 472, height: 760, fill: 'transparent', panelBorderWidth: 3, panelBorderColor: accent, panelBorderStyle: 'solid', zIndex: 0 },
+                { id: 'el_p2_' + Date.now(), type: 'panel', x: 40, y: 40, width: 448, height: 736, fill: 'transparent', panelBorderWidth: 1, panelBorderColor: theme['--ed-crimson'] || '#4a0000', panelBorderStyle: 'solid', zIndex: 1 },
+                { id: 'el_sym_' + Date.now(), type: 'text', content: '✦', x: 234, y: 100, width: 60, height: 50, fontSize: 36, color: accent, align: 'center', zIndex: 2, animation: 'pulse', animDuration: 2.5, animLoop: true },
+                { id: 'el_t1_' + Date.now(), type: 'text', content: 'ZINE TITLE', x: 50, y: 200, width: 428, height: 100, fontSize: 56, fontFamily: displayFont, color: accent, align: 'center', bold: true, zIndex: 2, textShadow: '3px 3px 0 rgba(0,0,0,0.5)' },
+                { id: 'el_t2_' + Date.now(), type: 'text', content: 'Issue No. 01', x: 50, y: 320, width: 428, height: 40, fontSize: 20, fontFamily: bodyFont, color: fg, align: 'center', italic: true, zIndex: 2 },
+                { id: 'el_line_' + Date.now(), type: 'shape', shape: 'line_h', x: 140, y: 380, width: 248, height: 2, fill: accent, opacity: 0.7, zIndex: 2 },
+                { id: 'el_sub_' + Date.now(), type: 'text', content: 'A story worth the ink', x: 50, y: 420, width: 428, height: 30, fontSize: 14, fontFamily: bodyFont, color: theme['--ed-silver'] || '#bdc3c7', align: 'center', zIndex: 2 },
+                { id: 'el_cta_' + Date.now(), type: 'text', content: 'TURN THE PAGE →', x: 144, y: 620, width: 240, height: 40, fontSize: 14, fontFamily: displayFont, color: bg, align: 'center', bold: true, fill: accent, borderRadius: 4, zIndex: 3, action: 'goto', actionVal: '2' }
             ]
         } else if (type === 'content') {
             page.background = theme['--ed-white']
+            page.texture = 'https://www.transparenttextures.com/patterns/old-mathematics.png'
             page.elements = [
-                { id: 'el_t3_' + Date.now(), type: 'text', content: 'CHAPTER NAME', x: 50, y: 50, width: 428, height: 60, fontSize: 32, fontFamily: displayFont, color: bg, align: 'left', bold: true, zIndex: 0 },
-                { id: 'el_t4_' + Date.now(), type: 'text', content: 'Start your story here...', x: 50, y: 120, width: 428, height: 600, fontSize: 16, fontFamily: bodyFont, color: bg, align: 'left', zIndex: 1 }
+                { id: 'el_chap_' + Date.now(), type: 'text', content: 'CHAPTER', x: 50, y: 36, width: 428, height: 20, fontSize: 11, fontFamily: 'Courier Prime', color: theme['--ed-crimson'] || '#4a0000', align: 'left', letterSpacing: 3, zIndex: 0 },
+                { id: 'el_t3_' + Date.now(), type: 'text', content: 'CHAPTER NAME', x: 50, y: 60, width: 428, height: 50, fontSize: 32, fontFamily: displayFont, color: bg, align: 'left', bold: true, zIndex: 0 },
+                { id: 'el_rule_' + Date.now(), type: 'shape', shape: 'line_h', x: 50, y: 120, width: 120, height: 2, fill: theme['--ed-crimson'] || '#4a0000', zIndex: 0 },
+                { id: 'el_t4_' + Date.now(), type: 'text', content: 'Start your story here. Drop panels, balloons, shaders, and logic actions — build the page the way a skilled hand would.', x: 50, y: 150, width: 428, height: 520, fontSize: 16, fontFamily: bodyFont, color: bg, align: 'left', lineHeight: 1.4, zIndex: 1 }
             ]
         } else if (type === 'back') {
             page.background = bg
+            page.texture = 'https://www.transparenttextures.com/patterns/dark-matter.png'
             page.elements = [
-                { id: 'el_t5_' + Date.now(), type: 'text', content: 'THE END', x: 50, y: 380, width: 428, height: 60, fontSize: 48, fontFamily: displayFont, color: fg, align: 'center', bold: true, zIndex: 0 }
+                { id: 'el_p3_' + Date.now(), type: 'panel', x: 40, y: 40, width: 448, height: 736, fill: 'transparent', panelBorderWidth: 2, panelBorderColor: accent, zIndex: 0 },
+                { id: 'el_t5_' + Date.now(), type: 'text', content: 'THE END', x: 50, y: 340, width: 428, height: 60, fontSize: 48, fontFamily: displayFont, color: fg, align: 'center', bold: true, zIndex: 1 },
+                { id: 'el_line2_' + Date.now(), type: 'shape', shape: 'line_h', x: 160, y: 420, width: 208, height: 2, fill: accent, opacity: 0.6, zIndex: 1 },
+                { id: 'el_fin_' + Date.now(), type: 'text', content: 'Buy the ticket. Take the ride.', x: 50, y: 450, width: 428, height: 40, fontSize: 14, fontFamily: bodyFont, color: accent, align: 'center', italic: true, zIndex: 1 }
             ]
         }
 

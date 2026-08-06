@@ -1,13 +1,13 @@
 import React, { useRef, useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { useEditor } from '../hooks/useEditor.js'
-import ShaderElement from './ShaderElement.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import CanvasElement from './CanvasElement.jsx'
+import { PAGE_W, PAGE_H } from '../constants.js'
 
 const styles = {
     canvas: (page) => ({
-        background: page.background || '#fff', width: 528, height: 816
+        background: page.background || '#fff', width: PAGE_W, height: PAGE_H
     })
 }
 

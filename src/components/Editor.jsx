@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
+import { PAGE_W, PAGE_H } from '../constants.js'
 
 const styles = {
     themeSelect: {
@@ -116,7 +117,10 @@ function Editor() {
         if (wrap) {
             const canvas = wrap.querySelector('.ed-canvas')
             if (canvas) {
-                const scale = Math.min((wrap.clientWidth - 80) / 528, (wrap.clientHeight - 80) / 816, 1)
+                const isLandscape = currentPage?.orientation === 'landscape'
+                const w = isLandscape ? PAGE_H : PAGE_W
+                const h = isLandscape ? PAGE_W : PAGE_H
+                const scale = Math.min((wrap.clientWidth - 80) / w, (wrap.clientHeight - 80) / h, 1)
                 setZoom(Math.round(scale * 100))
             }
         }

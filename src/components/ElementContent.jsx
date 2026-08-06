@@ -99,6 +99,12 @@ const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) =>
     const ref = React.useRef(null)
     const focusedRef = React.useRef(false)
     const debounceRef = React.useRef(null)
+    const latestContentRef = React.useRef(el.content || '')
+    const savedContentRef = React.useRef(el.content || '')
+    const updateRef = React.useRef({ updateElement, pageIdx, id: el.id })
+
+    updateRef.current = { updateElement, pageIdx, id: el.id }
+    savedContentRef.current = el.content || ''
 
     React.useEffect(() => {
         // Don't overwrite in-progress typing from stale props while focused
@@ -110,10 +116,15 @@ const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) =>
 
     React.useEffect(() => () => {
         if (debounceRef.current) clearTimeout(debounceRef.current)
+        const { updateElement: update, pageIdx: idx, id } = updateRef.current
+        if (update && latestContentRef.current !== savedContentRef.current) {
+            update(idx, id, { content: latestContentRef.current })
+        }
     }, [])
 
     const commitContent = (text) => {
         if (!updateElement) return
+        latestContentRef.current = text
         if (text === (el.content || '')) return
         updateElement(pageIdx, el.id, { content: text })
     }
@@ -136,6 +147,7 @@ const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) =>
             }}
             onInput={(e) => {
                 const text = e.target.textContent || ''
+                latestContentRef.current = text
                 if (debounceRef.current) clearTimeout(debounceRef.current)
                 debounceRef.current = setTimeout(() => commitContent(text), 200)
             }}

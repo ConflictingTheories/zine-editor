@@ -26,6 +26,8 @@
     --radius: 8px;
     --radius-lg: 12px;
     --shadow: 0 4px 24px rgba(0, 0, 0, .5);
+    --vp-canvas-area: #1a1a22;
+    --vp-reader-bg: #050507;
     /* Editor theme vars */
     --ed-black: #1a1a1a;
     --ed-crimson: #5c0a0a;
@@ -38,6 +40,25 @@
     --ed-font: 'EB Garamond', serif;
     --ed-display: 'Playfair Display', serif;
     --ed-accent: 'Crimson Text', serif;
+}
+
+:root[data-ui-theme="light"] {
+    --vp-bg: #f3f2f7;
+    --vp-surface: #ffffff;
+    --vp-surface2: #ebeaf2;
+    --vp-border: #d4d2e0;
+    --vp-text: #1a1a24;
+    --vp-text-dim: #6a687a;
+    --vp-accent: #b8960c;
+    --vp-accent2: #6d4cc7;
+    --vp-danger: #dc2626;
+    --vp-success: #16a34a;
+    --vp-info: #2563eb;
+    --vp-crimson: #8b1a1a;
+    --vp-gold: #b8960c;
+    --shadow: 0 4px 24px rgba(30, 28, 50, .12);
+    --vp-canvas-area: #e4e3ec;
+    --vp-reader-bg: #e8e7ef;
 }
 
 html,
@@ -650,7 +671,7 @@ textarea {
 
 /* CANVAS AREA */
 .ed-canvas-area {
-    background: #1a1a22;
+    background: var(--vp-canvas-area);
     overflow: hidden;
     position: relative;
     display: flex;
@@ -1413,7 +1434,7 @@ body.reader-active .topnav {
 }
 
 #view-reader {
-    background: #050507;
+    background: var(--vp-reader-bg);
     position: fixed;
     inset: 0;
     z-index: 2000;
@@ -2053,7 +2074,7 @@ body.reader-active .topnav {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #050507;
+    background: var(--vp-reader-bg);
 }
 
 .reader-toolbar {

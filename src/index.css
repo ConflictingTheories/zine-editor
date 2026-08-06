@@ -25,6 +25,30 @@
     --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+:root[data-ui-theme="light"] {
+    --vp-bg-raw: 240, 14%, 96%;
+    --vp-bg: hsl(var(--vp-bg-raw));
+    --vp-surface-raw: 0, 0%, 100%;
+    --vp-surface: hsl(var(--vp-surface-raw));
+    --vp-surface-elevated: hsl(240, 12%, 94%);
+
+    --vp-accent-raw: 45, 88%, 38%;
+    --vp-accent: hsl(var(--vp-accent-raw));
+    --vp-accent-glow: hsla(var(--vp-accent-raw), 0.2);
+
+    --vp-primary-raw: 258, 42%, 48%;
+    --vp-primary: hsl(var(--vp-primary-raw));
+
+    --vp-text: #1a1a24;
+    --vp-text-dim: #6a687a;
+    --vp-border: hsla(250, 12%, 20%, 0.12);
+
+    --vp-glass-bg: hsla(var(--vp-surface-raw), 0.92);
+    --vp-glass-border: hsla(var(--vp-accent-raw), 0.25);
+
+    --vp-shadow-premium: 0 20px 50px rgba(30, 28, 50, 0.12), 0 0 12px var(--vp-accent-glow);
+}
+
 body {
     margin: 0;
     background: var(--vp-bg);

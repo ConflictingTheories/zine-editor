@@ -591,7 +591,7 @@ const BALLOON_EXPORT = {
 
 const elementToHTML = (el, isExport = true) => {
     let s = `position:absolute;left:${el.x || 0}px;top:${el.y || 0}px;width:${el.width}px;height:${el.height}px;transform:rotate(${el.rotation || 0}deg);z-index:${el.zIndex || 0};opacity:${el.opacity ?? 1};mix-blend-mode:${el.blendMode || 'normal'};box-sizing:border-box;`
-    if (el.hidden || el.isHidden) s += 'display:none;'
+    if (el.isHidden) s += 'display:none;'
     if (el.shadow) s += `box-shadow:${el.shadow};`
     if (el.blur) s += `filter:blur(${el.blur}px);`
     else if (el.filter) s += `filter:${el.filter};`
