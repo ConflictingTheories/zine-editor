@@ -109,7 +109,7 @@ const CreditPurchase = () => {
 
             <div style={{ padding: '1.25rem', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--vp-accent-glow)', borderRadius: '10px', marginBottom: '2rem', textAlign: 'center' }}>
                 <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--vp-accent)', marginBottom: '0.25rem' }}>Price: ${amount}.00 USD</div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--vp-text-dim)' }}>$1 = 100 VPC (Void Press Credits)</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--vp-text-dim)' }}>$1 = 100 VPC (SVRN Publishing Credits)</div>
                 <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', fontWeight: 600 }}>You'll receive {amount * 100} VPC</div>
             </div>
 

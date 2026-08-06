@@ -76,7 +76,7 @@ function Modal() {
             <div className="modal-box" style={{ maxWidth: '400px' }}>
                 <button className="modal-close" onClick={() => closeModal('authModal')}>✕</button>
                 <h2 className="modal-h2" style={{ textAlign: 'center' }}>
-                    {authMode === 'login' ? 'Welcome Back' : 'Join Void Press'}
+                    {authMode === 'login' ? 'Welcome Back' : 'Join SVRN Publishing'}
                 </h2>
                 <form onSubmit={handleAuthSubmit}>
                     {authMode === 'register' && (
@@ -254,7 +254,7 @@ function Modal() {
                         <label htmlFor="pubGuidelines" style={{ marginBottom: 0 }}>Accept Voyagers' Guidelines</label>
                     </div>
                     <button className="btn-premium" type="submit" style={{ width: '100%', marginTop: '1rem' }}>
-                        🚀 Launch to Void Press
+                        🚀 Launch to SVRN Publishing
                     </button>
                 </form>
             </div>

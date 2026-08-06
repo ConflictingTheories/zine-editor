@@ -1,4 +1,4 @@
-const CACHE_NAME = 'void-press-v1';
+const CACHE_NAME = 'svrn-publishing-v2';
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',

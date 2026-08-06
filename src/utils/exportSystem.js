@@ -251,7 +251,7 @@ export const exportToHTML = (project, embedAssets = false) => {
         html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
         html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
 
-        const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-zine.html'; a.click();
+        const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'svrn-zine.html'; a.click();
         ld.remove();
     }, 300);
 }
@@ -277,7 +277,7 @@ export const exportToInteractive = async (project, embedAssets = false) => {
     }
 
     timeoutTracker = setTimeout(() => {
-        let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Void Press Zine</title>
+        let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SVRN Publishing Zine</title>
         <link rel="stylesheet" href="/fonts/fonts.css">
         ${pageFlipScript}
         <style>
@@ -300,7 +300,7 @@ export const exportToInteractive = async (project, embedAssets = false) => {
             .btn-audio:hover{background:#d4af37;color:#000}
         </style></head><body>`;
 
-        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">VOID PRESS</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
+        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">SVRN PUBLISHING</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">SOVEREIGN INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
 
         html += `<div class="reader-header">
             <div class="reader-title">${project.title || 'UNTITLED ZINE'}</div>
@@ -374,7 +374,7 @@ export const exportToInteractive = async (project, embedAssets = false) => {
 
         const msc = `document.querySelectorAll('.vp-shader-canvas').forEach(c => { try { const code = decodeURIComponent(escape(atob(c.dataset.code))); window.mushu(c).gl(code); } catch(e) { console.warn(e); } });`;
         html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
-        const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'voidpress-interactive.html'; a.click();
+        const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'svrn-interactive.html'; a.click();
         ld.remove();
     }, 300);
 }
@@ -450,7 +450,7 @@ export const exportToPDF = async (project, embedAssets = false) => {
 
                 p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; });
             }
-            pdf.save('voidpress-zine.pdf');
+            pdf.save('svrn-zine.pdf');
         } finally {
             container.remove();
         }
@@ -567,7 +567,7 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
             // Cleanup shader snapshots
             sourcePages.forEach(p => (p.elements || []).forEach(e => { if (e.shaderImage) delete e.shaderImage; }));
 
-            pdf.save('voidpress-foldable-zine.pdf');
+            pdf.save('svrn-foldable-zine.pdf');
         } finally {
             container.remove();
         }

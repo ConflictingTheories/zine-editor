@@ -54,7 +54,7 @@ export default function SovereignTokenManager({ userId, onTokenCreated }) {
         try {
             const result = await createSovereignToken(newTokenIdentity, {
                 created_at: new Date().toISOString(),
-                platform: 'void-press'
+                platform: 'svrn-publishing'
             });
 
             if (result === null) {

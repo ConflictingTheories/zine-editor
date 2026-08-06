@@ -1,4 +1,4 @@
-// VOID PRESS — Shader Bridge for React (Vite)
+// SVRN Publishing — Shader Bridge for React (Vite)
 // Exposes window.VPShader using mushu-flow
 
 import { mushu } from '../lib/mushu/src/index.js'
