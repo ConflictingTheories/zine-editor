@@ -467,6 +467,19 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
     ld.innerHTML = '<div>Initializing Foldable Zine Export...</div>';
     document.body.appendChild(ld);
 
+    const SHEET_W = 1056;
+    const SHEET_H = 816;
+    const CELL_W = SHEET_W / 4; // 264
+    const CELL_H = SHEET_H / 2; // 408
+    // Classic one-sheet 8-page zine imposition (relative indices within a signature):
+    // Top row (180deg): 4, 3, 2, 1 | Bottom row (0deg): 5, 6, 7, 0
+    const PAGE_INDEX_MAP = [4, 3, 2, 1, 5, 6, 7, 0];
+    const PAGE_TRANSFORMS = [
+        { x: 0, y: 0, rot: 180 }, { x: CELL_W, y: 0, rot: 180 }, { x: CELL_W * 2, y: 0, rot: 180 }, { x: CELL_W * 3, y: 0, rot: 180 },
+        { x: 0, y: CELL_H, rot: 0 }, { x: CELL_W, y: CELL_H, rot: 0 }, { x: CELL_W * 2, y: CELL_H, rot: 0 }, { x: CELL_W * 3, y: CELL_H, rot: 0 }
+    ];
+    const blankPage = () => ({ elements: [], background: '#ffffff', texture: null });
+
     try {
         const loadScript = (src) => new Promise((resolve, reject) => {
             if (document.querySelector('script[src="' + src + '"]')) return resolve();
@@ -484,36 +497,21 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
 
         const { jsPDF } = window.jspdf;
         // Landscape Letter (11x8.5 inches at 96PPI) -> 1056 x 816 px
-        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1056, 816] });
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [SHEET_W, SHEET_H] });
 
         const container = document.createElement('div');
-        // The container needs to hold 8 pages. We'll render the entire 1056x816 sheet at once.
-        container.style.cssText = "position:absolute;left:-9999px;top:0;width:1056px;height:816px;overflow:hidden;background:#fff";
+        container.style.cssText = `position:absolute;left:-9999px;top:0;width:${SHEET_W}px;height:${SHEET_H}px;overflow:hidden;background:#fff`;
         document.body.appendChild(container);
 
-        // A single landscape sheet is divided into 4 columns and 2 rows.
-        // Each mini-page is 264px wide (1056/4) and 408px high (816/2).
-        // Since original pages are 528x816, we scale them by 0.5.
-        // The Zine grid layout (array index 0-7):
-        // Top row (upside down, 180deg): [page 4, page 3, page 2, page 1 (which is index 1, aka pg2 in 1-idx)]
-        // Bottom row (0deg): [page 5, page 6, page 7, page 0 (cover)]
-        // Using indexes (0-7):
-        // Top row: 4, 3, 2, 1
-        // Bottom row: 5, 6, 7, 0
-
         try {
-            ld.innerHTML = `<div>Generating Foldable Zine Layout...</div>`;
+            const sourcePages = project.pages || [];
+            const sheetCount = Math.max(1, Math.ceil(sourcePages.length / 8));
 
-            // Prepare up to 8 pages
-            const pages = [];
-            for (let i = 0; i < 8; i++) {
-                pages.push(project.pages[i] || { elements: [], background: '#ffffff', texture: null });
-            }
-
-            // Render shaders for all pages
+            // Pre-render shaders for every project page once
             if (mushu) {
-                for (const p of pages) {
-                    for (const el of p.elements) {
+                ld.innerHTML = `<div>Rendering shaders…</div>`;
+                for (const p of sourcePages) {
+                    for (const el of (p.elements || [])) {
                         if (el.type === 'shader' && el.shaderCode) {
                             try {
                                 const c = document.createElement('canvas');
@@ -527,46 +525,47 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
                 }
             }
 
-            const pageIndexMap = [4, 3, 2, 1, 5, 6, 7, 0];
-            const pageTransforms = [
-                { x: 0, y: 0, rot: 180 }, { x: 264, y: 0, rot: 180 }, { x: 528, y: 0, rot: 180 }, { x: 792, y: 0, rot: 180 },
-                { x: 0, y: 408, rot: 0 }, { x: 264, y: 408, rot: 0 }, { x: 528, y: 408, rot: 0 }, { x: 792, y: 408, rot: 0 }
-            ];
+            for (let sheet = 0; sheet < sheetCount; sheet++) {
+                ld.innerHTML = `<div>Generating foldable sheet ${sheet + 1} of ${sheetCount}…</div>`;
 
-            let htmlString = "";
-            for (let i = 0; i < 8; i++) {
-                const srcIdx = pageIndexMap[i];
-                const p = pages[srcIdx];
-                const tr = pageTransforms[i];
+                const offset = sheet * 8;
+                const pages = [];
+                for (let i = 0; i < 8; i++) {
+                    pages.push(sourcePages[offset + i] || blankPage());
+                }
 
-                htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:264px;height:408px;
-                    transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #eee">
-                    <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative;">
-                        ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>` : ''}
-                        ${p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
-                    </div>
-                </div>`;
+                let htmlString = '';
+                for (let i = 0; i < 8; i++) {
+                    const p = pages[PAGE_INDEX_MAP[i]];
+                    const tr = PAGE_TRANSFORMS[i];
+                    htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:${CELL_W}px;height:${CELL_H}px;
+                        transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #eee">
+                        <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative;">
+                            ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>` : ''}
+                            ${(p.elements || []).filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                        </div>
+                    </div>`;
+                }
+
+                container.innerHTML = htmlString;
+                await new Promise(r => setTimeout(r, 200));
+
+                const canvas = await window.html2canvas(container, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    imageTimeout: 5000
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+                if (sheet > 0) pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, 0, SHEET_W, SHEET_H);
             }
 
-            container.innerHTML = htmlString;
-
-            // Allow DOM to settle and images to load
-            await new Promise(r => setTimeout(r, 200));
-
-            const canvas = await window.html2canvas(container, {
-                scale: 2,
-                useCORS: true,
-                logging: false,
-                allowTaint: true,
-                backgroundColor: '#ffffff',
-                imageTimeout: 5000
-            });
-            const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-            pdf.addImage(imgData, 'JPEG', 0, 0, 1056, 816);
-
-            // Cleanup shaders
-            pages.forEach(p => p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; }));
+            // Cleanup shader snapshots
+            sourcePages.forEach(p => (p.elements || []).forEach(e => { if (e.shaderImage) delete e.shaderImage; }));
 
             pdf.save('voidpress-foldable-zine.pdf');
         } finally {

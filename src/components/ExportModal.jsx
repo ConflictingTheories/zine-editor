@@ -48,7 +48,7 @@ function ExportModal({ onClose }) {
                 <h2>Export Zine</h2>
                 <div className="export-tabs">
                     <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Standard)</button>
-                    <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (Foldable 8-Page)</button>
+                    <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (Foldable)</button>
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
                     <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                 </div>
@@ -68,8 +68,15 @@ function ExportModal({ onClose }) {
                 )}
                 {exportTab === 'foldable' && (
                     <div className="export-content active">
-                        <p style={styles.desc}>Export an 8-page zine onto a single foldable sheet (Letter/A4).</p>
-                        <p style={{ fontSize: '11px', color: '#ffb347', marginBottom: '8px' }}>Note: Only the first 8 pages of your project will be included.</p>
+                        <p style={styles.desc}>
+                            Export as foldable letter sheets (8 pages per sheet). Longer zines become multiple sheets — one signature each.
+                            {currentProject?.pages?.length
+                                ? ` This project will produce ${Math.max(1, Math.ceil(currentProject.pages.length / 8))} sheet${Math.ceil((currentProject.pages.length || 1) / 8) === 1 ? '' : 's'} (${currentProject.pages.length} pages).`
+                                : ''}
+                        </p>
+                        <p style={{ fontSize: '11px', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
+                            Incomplete final sheets are padded with blank pages so the fold layout stays correct.
+                        </p>
                         <button className="topnav-btn" onClick={handleExportFoldable} style={styles.btn}>Generate Foldable PDF</button>
                     </div>
                 )}
