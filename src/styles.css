@@ -24,6 +24,9 @@
     --font-ui: 'Inter', sans-serif;
     --font-display: 'Cinzel', serif;
     --radius: 8px;
+    --vp-glass-bg: rgba(19, 19, 26, 0.85);
+    --vp-modal-overlay: rgba(0, 0, 0, 0.55);
+    --vp-modal-shadow: 0 30px 90px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
     --radius-lg: 12px;
     --shadow: 0 4px 24px rgba(0, 0, 0, .5);
     --vp-canvas-area: #1a1a22;
@@ -59,6 +62,9 @@
     --shadow: 0 4px 24px rgba(30, 28, 50, .12);
     --vp-canvas-area: #e4e3ec;
     --vp-reader-bg: #e8e7ef;
+    --vp-glass-bg: rgba(255, 255, 255, 0.92);
+    --vp-modal-overlay: rgba(0, 0, 0, 0.28);
+    --vp-modal-shadow: 0 30px 90px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(0, 0, 0, 0.03);
 }
 
 html,
@@ -1541,7 +1547,7 @@ body.reader-active .topnav {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, .85);
+    background: var(--vp-modal-overlay, rgba(0, 0, 0, 0.55));
     backdrop-filter: blur(4px);
     z-index: 999;
     align-items: center;
@@ -1576,9 +1582,9 @@ body.reader-active .topnav {
 }
 
 .modal-box {
-    background: rgba(19, 19, 26, 0.85);
+    background: var(--vp-glass-bg, rgba(19, 19, 26, 0.85));
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--vp-border);
     border-radius: 20px;
     padding: 32px;
     max-width: 800px;
@@ -1586,7 +1592,7 @@ body.reader-active .topnav {
     max-height: 85vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    box-shadow: var(--vp-modal-shadow, 0 30px 90px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.06));
     animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
