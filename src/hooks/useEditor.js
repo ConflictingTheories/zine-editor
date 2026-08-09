@@ -18,7 +18,8 @@ export function useEditor(zoom = 100) {
     const getScale = () => Math.max(0.01, (zoomRef.current || 100) / 100)
 
     const startDrag = useCallback((e, el, pageIdx) => {
-        if (e.target.isContentEditable || e.target.closest('[contenteditable]')) {
+        const editingTarget = e.target.isContentEditable || e.target.closest('[contenteditable]')
+        if (editingTarget && !e.shiftKey) {
             return
         }
         e.preventDefault()

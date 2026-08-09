@@ -843,7 +843,7 @@ const VPProvider = ({ children }) => {
             el = { ...base, type: 'balloon', ...(b[assetId] || b.dialog) }
         } else if (type === 'sfx') {
             const t = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', whoosh: 'WHOOSH!', pow: 'POW!', splat: 'SPLAT!', splash: 'SPLASH!' }
-            el = { ...base, type: 'text', content: t[assetId] || 'BAM!', fontSize: 52, fontFamily: 'Bangers', color: '#0a0a0a', width: 180, height: 70, strokeWidth: 2, strokeColor: '#ffffff' }
+            el = { ...base, type: 'text', sfx: true, content: t[assetId] || 'BAM!', fontSize: 52, fontFamily: 'Bangers', color: '#0a0a0a', width: 180, height: 70, strokeWidth: 2, strokeColor: '#ffffff' }
         } else if (type === 'symbols') {
             // Look up the asset to determine if it's an image splat or a glyph
             const asset = (getAssets('symbols') || []).find(a => a.id === assetId)

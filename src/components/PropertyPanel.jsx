@@ -330,7 +330,8 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <h4>Typography</h4>
                     <div className="form-row">
                         <label>Font Family</label>
-                        <select value={element.fontFamily || 'Crimson Text'} onChange={(e) => handleChange('fontFamily', e.target.value)}>
+                        <select value={element.fontFamily || ''} onChange={(e) => handleChange('fontFamily', e.target.value)}>
+                            <option value=''>Theme default</option>
                             {fonts.map(f => <option key={f} value={f}>{f}</option>)}
                         </select>
                     </div>

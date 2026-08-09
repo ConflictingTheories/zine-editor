@@ -5,6 +5,7 @@ import App from './App.jsx'
 import { VPProvider } from './context/VPContext.jsx'
 import { XRPayIDProvider } from './context/XRPayIDContext.jsx'
 import './styles.css'
+import './styles/tokens.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>

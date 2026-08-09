@@ -16,7 +16,7 @@ const styles = {
     text: (el) => ({
         fontSize: el.fontSize || 16,
         color: el.color || '#000',
-        fontFamily: el.fontFamily || 'inherit',
+        fontFamily: el.fontFamily || 'var(--font-body, serif)',
         textAlign: el.align || 'left',
         fontWeight: el.bold ? 'bold' : 'normal',
         fontStyle: el.italic ? 'italic' : 'normal',
@@ -38,8 +38,8 @@ const styles = {
         display: 'block'
     }),
     panel: (el) => ({
-        border: `${el.panelBorderWidth || 4}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}`,
-        borderRadius: `${el.panelRadius || 0}px`,
+        border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
+        borderRadius: el.panelRadius !== undefined ? `${el.panelRadius}px` : 'var(--radius)',
         background: el.fill || 'transparent',
         boxShadow: el.panelShadow || 'none',
         width: '100%',
@@ -159,8 +159,8 @@ const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) =>
 const ElementContent = ({ el, pageIdx, updateElement }) => {
     switch (el.type) {
         case 'text':
-            // Render unicode/emoji symbols as static, non-editable so they stay freely draggable on the canvas
-            if (el.symbol) {
+            // Render unicode/emoji symbols and SFX text as static, non-editable so they stay freely draggable on the canvas
+            if (el.symbol || el.sfx) {
                 return <div className="el-text el-symbol" style={styles.text(el)}>{el.content}</div>
             }
             return (
@@ -172,6 +172,8 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
                     styleProps={styles.text(el)}
                 />
             )
+        case 'sfx':
+            return <div className="el-text el-symbol" style={styles.text(el)}>{el.content}</div>
         case 'image':
             return (
                 <div className="el-img" style={styles.imageContainer}>

@@ -76,7 +76,7 @@ export const exportToHTML = (project, embedAssets = false) => {
         let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SVRN Publishing Zine</title>
         <link rel="stylesheet" href="/fonts/fonts.css">
         <style>
-            body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+            body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:var(--font-ui, 'Helvetica Neue',Helvetica,Arial,sans-serif);height:100vh;display:flex;flex-direction:column;overflow:hidden}
             .reader-header{padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
             .reader-title{font-weight:700;letter-spacing:1px;color:#d4af37;font-size:1.1em}
             .reader-main{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
@@ -90,7 +90,7 @@ export const exportToHTML = (project, embedAssets = false) => {
             #pg{color:#666;font-variant-numeric:tabular-nums;font-size:0.9em;min-width:60px;text-align:center}
             
             #vp-overlay{position:fixed;inset:0;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s}
-            .start-btn{padding:15px 40px;font-size:18px;background:transparent;color:#d4af37;border:2px solid #d4af37;cursor:pointer;border-radius:4px;font-weight:bold;margin-top:30px;font-family:sans-serif;text-transform:uppercase;letter-spacing:2px;transition:all 0.3s}
+            .start-btn{padding:15px 40px;font-size:18px;background:transparent;color:#d4af37;border:2px solid #d4af37;cursor:pointer;border-radius:4px;font-weight:bold;margin-top:30px;font-family:var(--font-ui, sans-serif);text-transform:uppercase;letter-spacing:2px;transition:all 0.3s}
             .start-btn:hover{transform:scale(1.05)}
             
             .mute-btn{width:32px;height:32px;border:1px solid #444;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#666;transition:all 0.2s}
@@ -106,7 +106,7 @@ export const exportToHTML = (project, embedAssets = false) => {
             .btn-audio:hover{background:#d4af37;color:#000}
         </style></head><body>`;
 
-        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:sans-serif;letter-spacing:4px">SVRN PUBLISHING</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">SOVEREIGN INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
+        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:var(--font-ui, sans-serif);letter-spacing:4px">SVRN PUBLISHING</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">SOVEREIGN INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
 
         html += `<div class="reader-header">
             <div class="reader-title">${project.title || 'UNTITLED ZINE'}</div>
@@ -600,7 +600,7 @@ const elementToHTML = (el, isExport = true) => {
     let content = ''
     const handler = isExport ? 'H' : 'VP.handleInteraction'
     if (el.type === 'text' || el.type === 'balloon') {
-        s += `font-size:${el.fontSize || (el.type === 'balloon' ? 14 : 16)}px;font-family:${el.fontFamily || 'sans-serif'};color:${el.color || '#000'};text-align:${el.align || (el.type === 'balloon' ? 'center' : 'left')};`
+        s += `font-size:${el.fontSize || (el.type === 'balloon' ? 14 : 16)}px;font-family:${el.fontFamily || 'var(--font-body, sans-serif)'};color:${el.color || '#000'};text-align:${el.align || (el.type === 'balloon' ? 'center' : 'left')};`
         if (el.bold) s += 'font-weight:bold;'
         if (el.italic) s += 'font-style:italic;'
         if (el.lineHeight) s += `line-height:${el.lineHeight};`
@@ -629,7 +629,12 @@ const elementToHTML = (el, isExport = true) => {
         </div>`
     }
     if (el.type === 'panel') {
-        s += `border:${el.panelBorderWidth ?? 4}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'};background:${el.fill || 'transparent'};border-radius:${el.panelRadius || 0}px;`
+        if (el.panelBorderWidth !== undefined) {
+            s += `border:${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'};`
+        } else {
+            s += `border:var(--panel-border);`
+        }
+        s += `background:${el.fill || 'transparent'};border-radius:${el.panelRadius !== undefined ? el.panelRadius + 'px' : 'var(--radius)'};`
         if (el.panelShadow) s += `box-shadow:${el.panelShadow};`
     }
     if (el.type === 'shape') {

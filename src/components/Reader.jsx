@@ -64,7 +64,7 @@ const styles = {
         }
     },
     text: (el) => ({
-        fontSize: el.fontSize, color: el.color, fontFamily: el.fontFamily,
+        fontSize: el.fontSize, color: el.color, fontFamily: el.fontFamily || 'var(--font-body, serif)',
         textAlign: el.align, fontWeight: el.bold ? 'bold' : 'normal',
         fontStyle: el.italic ? 'italic' : 'normal',
         lineHeight: el.lineHeight || 'normal',
@@ -79,8 +79,8 @@ const styles = {
     }),
     panel: (el) => ({
         width: '100%', height: '100%',
-        border: `${el.panelBorderWidth || 4}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}`,
-        borderRadius: `${el.panelRadius || 0}px`,
+        border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
+        borderRadius: el.panelRadius !== undefined ? `${el.panelRadius}px` : 'var(--radius)',
         background: el.fill || 'transparent',
         boxShadow: el.panelShadow || 'none'
     }),

@@ -59,15 +59,32 @@ function Editor() {
     useEffect(() => {
         const onKey = (e) => {
             if (!project) return
+            const tag = e.target?.tagName
+            const editing = e.target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+
+            if (e.shiftKey && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                const selection = vpState.selection
+                const page = project.pages[pageIdx]
+                const element = selection?.type === 'element' && page?.elements?.find(el => el.id === selection.id)
+                if (element) {
+                    e.preventDefault()
+                    const delta = 10
+                    const updates = {}
+                    if (e.key === 'ArrowDown') updates.y = (element.y || 0) + delta
+                    if (e.key === 'ArrowUp') updates.y = (element.y || 0) - delta
+                    if (e.key === 'ArrowLeft') updates.x = (element.x || 0) - delta
+                    if (e.key === 'ArrowRight') updates.x = (element.x || 0) + delta
+                    if (Object.keys(updates).length) updateElement(pageIdx, element.id, updates)
+                    return
+                }
+            }
+
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) { e.preventDefault(); redo() }
             if ((e.ctrlKey || e.metaKey) && e.key === 'c') copyElement()
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') { e.preventDefault(); pasteElement() }
             if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject() }
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                const tag = e.target?.tagName
-                const editing = e.target?.isContentEditable ||
-                    tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
                 if (!editing) deleteElement()
             }
             if (e.key === 'Escape') updateVpState({ selection: { type: 'page', id: currentPage?.id, pageIdx } })
