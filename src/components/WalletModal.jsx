@@ -1,6 +1,20 @@
+/*
+ * Component: WalletModal
+ * Wallet connection modal for linking XRP, PayID, and token wallets.
+ */
+
 import React, { useState } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 
+/**
+ * Component: WalletModal
+ * Modal UI for connecting or creating an XRP wallet. Uses `useXRPayID`
+ * context to perform wallet operations and displays helper controls.
+ *
+ * Props:
+ * - isOpen: boolean to control visibility
+ * - onClose: function() invoked to close the modal
+ */
 const WalletModal = ({ isOpen, onClose }) => {
     const { xrState, connectWallet } = useXRPayID()
     const [xrpAddress, setXrpAddress] = useState('')

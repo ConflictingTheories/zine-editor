@@ -1,3 +1,8 @@
+/*
+ * Component: ContentGate
+ * Protects gated content behind token ownership or access rights.
+ */
+
 import { useState, useEffect } from 'react';
 import { getGateInfo, unlockContent, checkZineAccess } from '../api/index.js';
 

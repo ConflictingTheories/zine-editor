@@ -1,3 +1,8 @@
+/*
+ * Component: FundingPanel
+ * Displays and manages crowdfunding goals, contributions, and campaign progress.
+ */
+
 import { useState, useEffect } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -79,6 +84,16 @@ function StripePaymentForm({ amountDollars, onSuccess, onCancel }) {
   );
 }
 
+/**
+ * Component: FundingPanel
+ * Handles crowdfunding contributions for a zine. Integrates with Stripe
+ * via a client-side Payment Element flow and records contributions.
+ *
+ * Props:
+ * - zine: project object
+ * - onFunded: callback(amount) when funding completes
+ * - onContribute: callback(amount) for any contribution
+ */
 // ── Outer panel — handles amount input and PaymentIntent creation ─────────────
 export default function FundingPanel({ zine, onFunded, onContribute }) {
   const [step, setStep] = useState("input");   // "input" | "stripe"

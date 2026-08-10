@@ -1,9 +1,19 @@
 
+/*
+ * Component: CreatorMonetization
+ * Presents creator revenue tools, subscriptions, and tokenized monetization options.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 import { useVP } from '../context/VPContext'
 import { setZineFunding } from '../api/index.js'
 
+/**
+ * Component: CreatorMonetization
+ * Admin panel for creators to manage monetization options, gating,
+ * reputation insights and transaction history.
+ */
 const CreatorMonetization = () => {
     const { xrState, getReputation, setTokenGate } = useXRPayID()
     const { vpState } = useVP()

@@ -1,3 +1,8 @@
+/*
+ * Hook: useStripeConfirm
+ * Detects Stripe payment return URLs and confirms payment sessions in the app lifecycle.
+ */
+
 import { useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 import { useVP } from '../context/VPContext'

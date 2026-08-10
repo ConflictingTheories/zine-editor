@@ -1,7 +1,18 @@
+/*
+ * Component: VfxSystem
+ * Manages visual effects overlays, particle systems, and cinematic UI transitions.
+ */
+
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Component: VfxSystem
+ * Global visual effect layer. Reacts to `activeVfx` from context and
+ * briefly overlays/animates the app to produce flashes, glitches, shakes,
+ * and other cinematic effects.
+ */
 function VfxSystem() {
     const { activeVfx } = useVP()
     const [style, setStyle] = useState({})

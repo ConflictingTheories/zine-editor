@@ -1,6 +1,20 @@
 
+/*
+ * Component: ReputationBadge
+ * Displays reputation, trust, or contribution status for user profiles and creators.
+ */
+
 import React from 'react'
 
+/**
+ * Component: ReputationBadge
+ * Visual badge that displays a creator's reputation level and score.
+ *
+ * Props:
+ * - score: numeric reputation score
+ * - level: reputation level key (newcomer|supporter|contributor|...)
+ * - size: small|medium|large
+ */
 const ReputationBadge = ({ score, level, size = 'medium' }) => {
     const getLevelConfig = (level) => {
         const configs = {

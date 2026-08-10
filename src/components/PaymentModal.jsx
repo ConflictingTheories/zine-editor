@@ -1,6 +1,21 @@
+/*
+ * Component: PaymentModal
+ * Handles payment flow and contribution checkout within a modal interface.
+ */
+
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Component: PaymentModal
+ * Simple card payment modal used for purchasing credits via a lightweight
+ * test-card flow. In production this should be replaced with Stripe Elements.
+ *
+ * Props:
+ * - credits: number of credits to purchase
+ * - onSuccess: callback(newBalance)
+ * - onCancel: function to close modal
+ */
 const PaymentModal = ({ credits, onSuccess, onCancel }) => {
     const { vpState } = useVP()
     const token = vpState.token

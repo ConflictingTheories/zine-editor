@@ -1,3 +1,8 @@
+/*
+ * Component: TokenIssuance
+ * Provides a form and flow for issuing new platform tokens and managing creation metadata.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 import { useVP } from '../context/VPContext'

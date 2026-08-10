@@ -1,6 +1,20 @@
+/*
+ * Hook: useEditor
+ * Custom editor hook that centralizes pointer drag, selection, keyboard navigation, and interaction state.
+ */
+
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Hook: useEditor
+ * Handles element pointer interactions (drag, resize, rotate) within the
+ * editor canvas. Returns control functions and state flags used by
+ * `CanvasElement` / `Canvas` components to attach mouse handlers.
+ *
+ * @param {number} [zoom=100] initial zoom percentage (100 => 1:1)
+ * @returns {object} { startDrag, startResize, startRotate, updateElement, isDragging, isResizing, isRotating }
+ */
 export function useEditor(zoom = 100) {
     const { vpState, updateElement, moveLayer } = useVP()
     const [isDragging, setIsDragging] = useState(false)
@@ -17,6 +31,14 @@ export function useEditor(zoom = 100) {
 
     const getScale = () => Math.max(0.01, (zoomRef.current || 100) / 100)
 
+    /**
+     * Begin dragging an element. This function attaches global mousemove/mouseup
+     * listeners and updates the element position via `updateElement` while moving.
+     * Holding Shift overrides editable content checks (allow drag while editing)
+     * @param {MouseEvent} e pointer event
+     * @param {object} el element data (must contain id,x,y)
+     * @param {number} pageIdx index of page containing the element
+     */
     const startDrag = useCallback((e, el, pageIdx) => {
         const editingTarget = e.target.isContentEditable || e.target.closest('[contenteditable]')
         if (editingTarget && !e.shiftKey) {
@@ -49,6 +71,14 @@ export function useEditor(zoom = 100) {
         window.addEventListener('mouseup', onMouseUp)
     }, [updateElement])
 
+    /**
+     * Begin resizing an element from a resize handle (n, s, e, w combos).
+     * The `handle` string indicates which edges are being dragged (e.g. 'se').
+     * @param {MouseEvent} e
+     * @param {object} el current element state
+     * @param {number} pageIdx page index
+     * @param {string} handle string containing one or more of 'n','s','e','w'
+     */
     const startResize = useCallback((e, el, pageIdx, handle) => {
         e.preventDefault()
         e.stopPropagation()
@@ -86,6 +116,13 @@ export function useEditor(zoom = 100) {
         window.addEventListener('mouseup', onMouseUp)
     }, [updateElement])
 
+    /**
+     * Begin rotating an element. Calculates center of the element and updates
+     * rotation degrees by mapping pointer angle to degrees.
+     * @param {MouseEvent} e
+     * @param {object} el element object
+     * @param {number} pageIdx page index
+     */
     const startRotate = useCallback((e, el, pageIdx) => {
         e.preventDefault()
         e.stopPropagation()

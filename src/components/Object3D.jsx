@@ -1,3 +1,8 @@
+/*
+ * Component: Object3D
+ * Renders a 3D or WebGL-backed object layer used by the editor or visual effects system.
+ */
+
 import React, { useEffect, useRef } from 'react'
 import { mushuScene, camera, shader3d, crystal, cone, cylinder, sphere, torus } from '../lib/mushu/src/index.js'
 
@@ -149,10 +154,17 @@ const hexToRgb = (hex) => {
 }
 
 /**
- * Object3D renders a live 3D mesh (default: glowing crystal) into a canvas
- * using mushu-flow's scene graph + a custom glow shader. Auto-rotates and
- * gently floats for an alive, magical feel. Double-sided so it never
- * disappears while rotating.
+ * Object3D
+ * Renders a live 3D mesh (default: glowing crystal) into a canvas using
+ * mushu-flow's scene graph and a custom glow shader. Auto-rotates and
+ * gently floats for an alive, magical feel.
+ *
+ * @param {Object} props
+ * @param {string} props.model - model key (crystal, crystalCluster, orb, prism, runestone)
+ * @param {string} props.color - hex color for the glow
+ * @param {boolean} props.autoRotate - whether the object auto-rotates
+ * @param {number} props.width - requested render width (CSS)
+ * @param {number} props.height - requested render height (CSS)
  */
 function Object3D({ model = 'crystal', color = '#4488ff', autoRotate = true, width, height }) {
     const canvasRef = useRef(null)

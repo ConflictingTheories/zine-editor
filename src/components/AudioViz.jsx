@@ -1,3 +1,8 @@
+/*
+ * Component: AudioViz
+ * Visualizes audio waveforms or music playback state for creative zine media.
+ */
+
 import React, { useRef, useEffect } from 'react'
 
 /**

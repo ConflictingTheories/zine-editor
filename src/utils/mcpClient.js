@@ -1,3 +1,8 @@
+/*
+ * Utility: MCPClient
+ * API client wrapper for MCP server calls and zine/page/element operations.
+ */
+
 import { useVP } from '../context/VPContext.jsx'
 
 class MCPClient {

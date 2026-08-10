@@ -1,6 +1,7 @@
 // Adapted from old version's editor.js export methods
 import MCPClient from './mcpClient.js'
 import { PAGE_W, PAGE_H } from '../constants.js'
+import { resolvePublicationAsset } from './assets.js'
 
 // Server-side export using MCP (for automation)
 export const exportToHTMLServer = async (project, token) => {
@@ -117,7 +118,7 @@ export const exportToHTML = (project, embedAssets = false) => {
 
         project.pages.forEach((p, i) => {
             html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-bgm="${p.bgm || ''}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${p.password || ''}" style="background:${p.background}">`;
-            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>`;
+            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>`;
             p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
             html += `</div></div>`;
         });
@@ -310,7 +311,7 @@ export const exportToInteractive = async (project, embedAssets = false) => {
         html += `<div class="book-stage"><div id="book">`;
         project.pages.forEach((p, i) => {
             html += `<div class="page" id="p${i}" data-bgm="${p.bgm || ''}" style="background:${p.background}">`;
-            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>`;
+            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>`;
             p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
             html += `<div style="position:absolute;bottom:10px;width:100%;text-align:center;color:#aaa;font-size:12px;pointer-events:none">${i + 1}</div>`;
             html += `</div>`;
@@ -428,7 +429,7 @@ export const exportToPDF = async (project, embedAssets = false) => {
                 }
 
                 container.innerHTML = `<div style="width:100%;height:100%;position:relative;background:${p.background}">
-                    ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>` : ''}
+                    ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
                     ${p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
                 </div>`;
 
@@ -541,7 +542,7 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
                     htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:${CELL_W}px;height:${CELL_H}px;
                         transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #eee">
                         <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative;">
-                            ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>` : ''}
+                            ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
                             ${(p.elements || []).filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
                         </div>
                     </div>`;
@@ -634,7 +635,14 @@ const elementToHTML = (el, isExport = true) => {
         } else {
             s += `border:var(--panel-border);`
         }
-        s += `background:${el.fill || 'transparent'};border-radius:${el.panelRadius !== undefined ? el.panelRadius + 'px' : 'var(--radius)'};`
+        let panelBackground = el.fill || 'transparent'
+        if (el.panelFillType === 'transparent') panelBackground = 'transparent'
+        if (el.panelFillType === 'solid') panelBackground = el.panelFillColor || el.fill || '#ffffff'
+        if (el.panelFillType === 'gradient') {
+            const angle = Number.isFinite(Number(el.panelGradientAngle)) ? el.panelGradientAngle : 135
+            panelBackground = `linear-gradient(${angle}deg, ${el.panelFillColor || el.fill || '#ffffff'}, ${el.panelFillColorEnd || '#000000'})`
+        }
+        s += `background:${panelBackground};border-radius:${el.panelRadius !== undefined ? el.panelRadius + 'px' : 'var(--radius)'};box-sizing:border-box;`
         if (el.panelShadow) s += `box-shadow:${el.panelShadow};`
     }
     if (el.type === 'shape') {

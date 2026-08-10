@@ -1,9 +1,25 @@
+/*
+ * Component: ShaderElement
+ * Renders shader-based visual elements that enhance page styling and effects.
+ */
+
 import React, { useRef, useEffect } from 'react'
 
 const styles = {
     canvas: { width: '100%', height: '100%', display: 'block' }
 }
 
+/**
+ * Component: ShaderElement
+ * Lightweight shader canvas wrapper that delegates to the global `VPShader`
+ * runtime. Starts/stops the shader and keeps canvas sized to requested
+ * width/height.
+ *
+ * Props:
+ * - preset: shader preset key
+ * - customCode: optional GLSL code override
+ * - width, height: requested canvas size
+ */
 function ShaderElement({ preset = 'plasma', customCode, width = 220, height = 220 }) {
     const canvasRef = useRef(null)
 

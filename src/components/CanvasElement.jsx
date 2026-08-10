@@ -1,7 +1,28 @@
+/*
+ * Component: CanvasElement
+ * Displays an individual page element and forwards pointer events for selection and editing.
+ */
+
 import React from 'react'
 import ElementContent from './ElementContent.jsx'
 import ResizeHandles from './ResizeHandles.jsx'
 
+/**
+ * Component: CanvasElement
+ * Wraps a single element instance on the canvas and wires up interaction
+ * handlers for selection, dragging, context menu, and resize/rotate handles.
+ *
+ * Props:
+ * - el: element object (type, position, size, styling props)
+ * - pageIdx: index of the parent page
+ * - isSelected: boolean whether this element is currently selected
+ * - handlers: { startDrag, startResize, startRotate, handleElementClick, handleContextMenu, updateElement }
+ */
+
+/**
+ * Compute the inline style object for an element based on its properties.
+ * Keeping this deterministic avoids thrashing layout during quick updates.
+ */
 const getElementStyle = (el) => ({
     left: el.x || 0,
     top: el.y || 0,
@@ -22,11 +43,19 @@ const CanvasElement = ({ el, pageIdx, isSelected, handlers }) => {
 
     const style = getElementStyle(el)
 
+    const handleMouseDown = (e) => {
+        if (e.button !== 0 || el.locked) return
+        // Select on press so the first drag works; contentEditable targets are
+        // still left alone by startDrag, preserving normal text-caret behavior.
+        handleElementClick(e, el.id)
+        startDrag(e, el, pageIdx)
+    }
+
     return (
         <div
             className={`el ${isSelected ? 'selected' : ''} ${el.locked ? 'locked' : ''}`}
             style={style}
-            onMouseDown={(e) => isSelected && !el.locked && startDrag(e, el, pageIdx)}
+            onMouseDown={handleMouseDown}
             onClick={(e) => handleElementClick(e, el.id)}
             onContextMenu={(e) => handleContextMenu(e, el)}
         >

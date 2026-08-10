@@ -1,8 +1,19 @@
 
+/*
+ * Component: TokenMarketplace
+ * Marketplace interface for browsing, buying, and selling user-issued tokens.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 import { useVP } from '../context/VPContext'
 
+/**
+ * Component: TokenMarketplace
+ * Displays available sovereign tokens, allows creation of trust lines,
+ * and purchasing tokens using platform credits. Interacts with
+ * `useXRPayID()` for blockchain operations and `useVP()` for auth/modal flows.
+ */
 const TokenMarketplace = () => {
     const { xrState, buyTokens, createTrustLine } = useXRPayID()
     const { token: vpToken, showModal } = useVP()

@@ -1,8 +1,15 @@
+/*
+ * Component: Reader
+ * Public zine reader view for browsing published content with navigation controls.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 import Object3D from './Object3D.jsx'
 import ContentGate from './ContentGate.jsx'
+import { getPanelBackground } from './ElementContent.jsx'
+import { resolvePublicationAsset } from '../utils/assets.js'
 
 const ANIMATION_MAP = {
     'flash-in': 'reader-flash-in',
@@ -37,7 +44,7 @@ const styles = {
     }),
     texture: (page) => ({
         position: 'absolute', inset: 0,
-        backgroundImage: `url(${page.texture})`,
+        backgroundImage: `url(${resolvePublicationAsset(page.texture)})`,
         backgroundSize: 'cover', opacity: 0.2,
         pointerEvents: 'none'
     }),
@@ -81,8 +88,9 @@ const styles = {
         width: '100%', height: '100%',
         border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
         borderRadius: el.panelRadius !== undefined ? `${el.panelRadius}px` : 'var(--radius)',
-        background: el.fill || 'transparent',
-        boxShadow: el.panelShadow || 'none'
+        background: getPanelBackground(el),
+        boxShadow: el.panelShadow || 'none',
+        boxSizing: 'border-box'
     }),
     shape: (el) => {
         const base = {
@@ -104,6 +112,11 @@ const styles = {
         const bStyle = BALLOON_PROPS[el.balloonType || 'dialog'] || BALLOON_PROPS.dialog
         return {
             fontSize: el.fontSize || 14,
+            fontFamily: el.fontFamily || 'var(--font-body, serif)',
+            fontWeight: el.bold ? 'bold' : bStyle.fontWeight || 'normal',
+            fontStyle: el.italic ? 'italic' : bStyle.fontStyle || 'normal',
+            lineHeight: el.lineHeight || 'normal',
+            letterSpacing: el.letterSpacing ? `${el.letterSpacing}px` : 'normal',
             padding: '10px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             textAlign: 'center', width: '100%', height: '100%',
@@ -117,6 +130,11 @@ const styles = {
     }
 }
 
+/**
+ * Component: Reader
+ * Renders a zine for reading with support for page navigation, content
+ * gating (paywalls/passwords), media playback, and element interactions.
+ */
 function Reader() {
     const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx } = useVP()
     const { currentProject, readerMode } = vpState

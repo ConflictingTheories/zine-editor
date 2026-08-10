@@ -1,3 +1,8 @@
+/*
+ * Component: TopNav
+ * Persistent top navigation bar for app sections, search, and account actions.
+ */
+
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
@@ -6,6 +11,11 @@ const styles = {
     loginBtn: { padding: '4px 12px', fontSize: '12px' }
 }
 
+/**
+ * Component: TopNav
+ * Application top navigation bar exposing view switches, theme toggle,
+ * help/premium modals and the user account actions.
+ */
 function TopNav() {
     const { vpState, showView, showModal, logout, toggleUiTheme } = useVP()
 

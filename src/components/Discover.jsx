@@ -1,6 +1,16 @@
+/*
+ * Component: Discover
+ * Search and explore published zines, with filters and navigation into the public reader.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Component: Discover
+ * Lists published zines with search and filters. Loads published zines
+ * from the server and navigates into the reader view on selection.
+ */
 const styles = {
     loading: { gridColumn: '1/-1', textAlign: 'center' },
     empty: { color: 'var(--vp-text-dim)', gridColumn: '1/-1', textAlign: 'center', padding: '60px 0', fontSize: '1.1em' }

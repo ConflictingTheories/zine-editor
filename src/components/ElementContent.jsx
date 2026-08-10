@@ -1,7 +1,23 @@
+/*
+ * Component: ElementContent
+ * Renders editable element content inside the canvas and handles text / media display.
+ */
+
 import React from 'react'
 import ShaderElement from './ShaderElement.jsx'
 import AudioViz from './AudioViz.jsx'
 import Object3D from './Object3D.jsx'
+
+/**
+ * Component: ElementContent
+ * Renders the inner content for an editor element depending on `el.type`.
+ * This file centralizes the rendering logic for text/image/panel/shader/etc.
+ *
+ * Props:
+ * - el: element descriptor object
+ * - pageIdx: index of the page containing the element
+ * - updateElement: function(pageIdx, elementId, updates) to persist changes
+ */
 
 const BALLOON_PROPS = {
     dialog: { background: '#fff', border: '2px solid #000', borderRadius: '20px' },
@@ -10,6 +26,19 @@ const BALLOON_PROPS = {
     caption: { background: '#000', color: '#fff' },
     whisper: { background: '#f8f8f8', border: '1px dashed #999', borderRadius: '16px', fontStyle: 'italic' },
     narration: { background: '#ffe', border: '1px solid #cc9', fontStyle: 'italic' }
+}
+
+// Panels have their own surface model, separate from the editor wrapper.
+// This preserves legacy `fill` values while enabling explicit solid and
+// gradient fills in the inspector.
+export const getPanelBackground = (el) => {
+    if (el.panelFillType === 'transparent') return 'transparent'
+    if (el.panelFillType === 'gradient') {
+        const angle = Number.isFinite(Number(el.panelGradientAngle)) ? el.panelGradientAngle : 135
+        return `linear-gradient(${angle}deg, ${el.panelFillColor || el.fill || '#ffffff'}, ${el.panelFillColorEnd || '#000000'})`
+    }
+    if (el.panelFillType === 'solid') return el.panelFillColor || el.fill || '#ffffff'
+    return el.fill || 'transparent'
 }
 
 const styles = {
@@ -40,10 +69,12 @@ const styles = {
     panel: (el) => ({
         border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
         borderRadius: el.panelRadius !== undefined ? `${el.panelRadius}px` : 'var(--radius)',
-        background: el.fill || 'transparent',
+        background: getPanelBackground(el),
         boxShadow: el.panelShadow || 'none',
         width: '100%',
-        height: '100%'
+        height: '100%',
+        boxSizing: 'border-box',
+        pointerEvents: 'none'
     }),
     shape: (el) => {
         const base = {
@@ -66,6 +97,11 @@ const styles = {
         const bStyle = BALLOON_PROPS[el.balloonType || 'dialog'] || BALLOON_PROPS.dialog
         return {
             fontSize: el.fontSize || 14,
+            fontFamily: el.fontFamily || 'var(--font-body, serif)',
+            fontWeight: el.bold ? 'bold' : bStyle.fontWeight || 'normal',
+            fontStyle: el.italic ? 'italic' : bStyle.fontStyle || 'normal',
+            lineHeight: el.lineHeight || 'normal',
+            letterSpacing: el.letterSpacing ? `${el.letterSpacing}px` : 'normal',
             padding: '10px',
             display: 'flex',
             alignItems: 'center',
@@ -96,6 +132,11 @@ const styles = {
     }
 }
 
+/**
+ * EditableText
+ * A small controlled contentEditable wrapper that debounces updates and
+ * avoids overwriting user input while focused.
+ */
 const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) => {
     const ref = React.useRef(null)
     const focusedRef = React.useRef(false)

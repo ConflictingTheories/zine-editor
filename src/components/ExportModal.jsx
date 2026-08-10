@@ -1,3 +1,8 @@
+/*
+ * Component: ExportModal
+ * Allows users to export zines to PDF, HTML, or other shareable formats.
+ */
+
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { exportToHTML, exportToPDF, exportToInteractive, exportToFoldablePDF } from '../utils/exportSystem'
@@ -7,6 +12,15 @@ const styles = {
     btn: { marginTop: 12 }
 }
 
+/**
+ * Component: ExportModal
+ * Offers multiple export formats (PDF, foldable PDF, HTML, interactive)
+ * and toggles such as embedding assets for offline use. Delegates the
+ * heavy lifting to `utils/exportSystem` helpers.
+ *
+ * Props:
+ * - onClose: function invoked when the modal should close
+ */
 function ExportModal({ onClose }) {
     const { vpState } = useVP()
     const { currentProject } = vpState

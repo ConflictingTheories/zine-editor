@@ -1,6 +1,20 @@
+/*
+ * Component: AssetModal
+ * Modal content for browsing, selecting, and inserting digital assets into the editor workspace.
+ */
+
 import React, { useState, useMemo } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Component: AssetModal
+ * Browse and insert assets (panels, shapes, balloons, sfx, symbols, shaders, objects)
+ * from the shared asset library. Filters by type and search query.
+ *
+ * Props:
+ * - type: initial asset category to open (e.g. 'panels')
+ * - onClose: function() called when the modal is dismissed
+ */
 function AssetModal({ type: initialType, onClose }) {
     const { getAssets, addAsset } = useVP()
     const [currentType, setCurrentType] = useState(initialType || 'panels')

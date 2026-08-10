@@ -1,3 +1,8 @@
+/*
+ * Component: SovereignTokenManager
+ * Manages sovereign identity tokens, claims, and content gating controls.
+ */
+
 import { useState, useEffect } from 'react';
 import { getUserSovereignTokens, createSovereignToken } from '../api/index.js';
 

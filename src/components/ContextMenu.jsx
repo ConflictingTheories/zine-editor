@@ -1,6 +1,22 @@
+/*
+ * Component: ContextMenu
+ * Renders right-click actions and quick commands for selected editor elements.
+ */
+
 import React, { useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Component: ContextMenu
+ * Small contextual menu used on the canvas to perform quick element
+ * operations: copy/paste, layer movement, duplicate, lock, and delete.
+ *
+ * Props:
+ * - x, y: screen coordinates where the menu should render
+ * - visible: boolean
+ * - onClose: function called to close the menu
+ * - selection, pageIdx, selectedElement: editor selection context
+ */
 export default function ContextMenu({ x, y, visible, onClose, selection, pageIdx, selectedElement }) {
     const { copyElement, pasteElement, duplicateElement, moveLayer, deleteElement, updateElement } = useVP()
 

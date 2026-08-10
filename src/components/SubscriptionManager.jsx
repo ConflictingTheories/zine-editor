@@ -1,7 +1,17 @@
 
+/*
+ * Component: SubscriptionManager
+ * Handles creator subscription plans, recurring payments, and subscriber controls.
+ */
+
 import React, { useState } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 
+/**
+ * Component: SubscriptionManager
+ * Manage subscriptions (both the user's subscriptions and subscribers)
+ * and provide UI to subscribe or cancel.
+ */
 const SubscriptionManager = () => {
     const { xrState, subscribe, cancelSubscription } = useXRPayID()
     const [subscribeTo, setSubscribeTo] = useState('')

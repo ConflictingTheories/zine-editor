@@ -1,8 +1,31 @@
+/*
+ * Context: VPContext
+ * Primary application state provider for authentication, views, editor state, and shared API helpers.
+ */
+
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID } from '../data/tutorialData.js'
 
+/**
+ * VPContext
+ *
+ * Central app context holding editor state, projects, user, and helper
+ * functions used across the application. The provider exposes a compact
+ * API for reading state and performing common actions (CRUD on elements,
+ * project management, theme application, simple audio playback, and
+ * lightweight sync to the backend API).
+ *
+ * Consumers should use `useVP()` to access `vpState` and the helper
+ * methods documented below.
+ */
+
 const VPContext = createContext()
 
+/**
+ * Hook: useVP
+ * @returns {object} The context value provided by VPProvider including
+ *                   `vpState` and helper methods (toast, api, addElement, ...)
+ */
 export const useVP = () => useContext(VPContext)
 
 const VPProvider = ({ children }) => {
@@ -38,10 +61,21 @@ const VPProvider = ({ children }) => {
 
     const historyTimerRef = useRef(null)
 
+    /**
+     * Merge-updater for `vpState`.
+     * @param {object} updates Partial state updates to shallow-merge into vpState
+     */
     const updateVpState = (updates) => {
         setVpState(prev => ({ ...prev, ...updates }))
     }
 
+    /**
+     * Push the provided `project` snapshot into the in-memory history stack.
+     * This enables undo/redo semantics inside the editor. History is capped
+     * to 50 snapshots.
+     * @param {object} project Project snapshot to serialize into history
+     * @param {object} options { immediate: boolean } When false, push is debounced
+     */
     const pushHistory = (project, { immediate = true } = {}) => {
         const doPush = () => {
             setVpState(prev => {
@@ -67,6 +101,11 @@ const VPProvider = ({ children }) => {
         }
     }
 
+    /**
+     * Apply UI theme to the document root and persist preference in localStorage.
+     * Accepts 'light' or 'dark' (anything else falls back to dark).
+     * @param {string} theme 'light'|'dark'
+     */
     const applyUiTheme = (theme) => {
         const next = theme === 'light' ? 'light' : 'dark'
         document.documentElement.setAttribute('data-ui-theme', next)
@@ -74,8 +113,15 @@ const VPProvider = ({ children }) => {
         setVpState(prev => ({ ...prev, uiTheme: next }))
     }
 
+    /**
+     * Public wrapper for applying UI theme.
+     * @param {string} theme
+     */
     const setUiTheme = (theme) => applyUiTheme(theme)
 
+    /**
+     * Toggle between 'light' and 'dark' UI themes.
+     */
     const toggleUiTheme = () => {
         applyUiTheme(vpState.uiTheme === 'light' ? 'dark' : 'light')
     }
@@ -95,6 +141,12 @@ const VPProvider = ({ children }) => {
         arcane: { '--ed-black': '#0f041b', '--ed-crimson': '#6a040f', '--ed-white': '#f8f1ff', '--ed-purple': '#3c096c', '--ed-green': '#70e000', '--ed-gold': '#ff9e00', '--ed-silver': '#5a189a', '--ed-gray': '#240046', '--ed-font': "'Crimson Text',serif", '--ed-display': "'Cinzel Decorative',cursive", '--ed-accent': "'Cinzel',serif", status: 'MANIFESTED' }
     }
 
+    /**
+     * Apply a named content theme (editor-specific design tokens) to
+     * the document root CSS variables. `key` should match one of the
+     * theme keys defined in `themes` above.
+     * @param {string} key theme identifier
+     */
     const applyContentThemeVars = (key) => {
         const t = themes[key] || themes.classic
         Object.entries(t).forEach(([k, v]) => {
@@ -106,14 +158,26 @@ const VPProvider = ({ children }) => {
     const [activeVfx, setActiveVfx] = useState(null)
     const bgmRef = useRef(null)
 
+    /**
+     * Set the active app view (dashboard/editor/reader/...)
+     * @param {string} name view key
+     */
     const showView = (name) => {
         setVpState(prev => ({ ...prev, currentView: name, ...(name !== 'reader' ? { readerMode: null } : {}) }))
     }
 
+    /**
+     * Open current project in read-only preview mode.
+     */
     const previewProject = () => {
         setVpState(prev => ({ ...prev, currentView: 'reader', readerMode: 'preview' }))
     }
 
+    /**
+     * Push a transient toast notification. Toasts auto-dismiss after 3s.
+     * @param {string} msg message to display
+     * @param {string} [type='info'] one of 'info'|'success'|'error'
+     */
     const toast = (msg, type = 'info') => {
         const id = Date.now()
         setVpState(prev => ({
@@ -128,6 +192,12 @@ const VPProvider = ({ children }) => {
         }, 3000)
     }
 
+    /**
+     * Show a modal identified by `id` (see Modal usage in UI components).
+     * Optionally provide a `subtype` to indicate modal variant.
+     * @param {string} id modal id key
+     * @param {string} [subtype]
+     */
     const showModal = (id, subtype) => {
         setVpState(prev => ({
             ...prev,
@@ -135,6 +205,10 @@ const VPProvider = ({ children }) => {
         }))
     }
 
+    /**
+     * Close the modal keyed by `id`.
+     * @param {string} id
+     */
     const closeModal = (id) => {
         setVpState(prev => ({
             ...prev,
@@ -142,6 +216,11 @@ const VPProvider = ({ children }) => {
         }))
     }
 
+    /**
+     * Persist lightweight project list to localStorage. This function
+     * is resilient to storage errors (quota/denied) and is intentionally
+     * silent on failure.
+     */
     const saveLocal = () => {
         setVpState(prev => {
             try {

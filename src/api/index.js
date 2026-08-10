@@ -1,4 +1,9 @@
 
+/**
+ * API Helper Module
+ * Provides a shared request helper and application-specific API calls
+ * for payments, crowdfunding, and sovereign token operations.
+ */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request(endpoint, method = 'GET', body = null) {

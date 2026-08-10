@@ -1,4 +1,9 @@
 
+/*
+ * Context: XRPayIDContext
+ * Provides wallet, credit, token, and sovereign identity state for the monetization features.
+ */
+
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useVP } from './VPContext.jsx'
 

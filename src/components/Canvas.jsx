@@ -1,9 +1,27 @@
+/*
+ * Component: Canvas
+ * Renders the editor page surface and coordinates element layout and interaction.
+ */
+
 import React, { useRef, useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { useEditor } from '../hooks/useEditor.js'
 import ContextMenu from './ContextMenu.jsx'
 import CanvasElement from './CanvasElement.jsx'
 import { PAGE_W, PAGE_H } from '../constants.js'
+import { resolvePublicationAsset } from '../utils/assets.js'
+
+/**
+ * Component: Canvas
+ * Renders a single page's canvas including all elements. Responsible for
+ * mouse interactions that are page-level (click to deselect, context menu)
+ * and for mapping elements to `CanvasElement` components.
+ *
+ * Props:
+ * - page: the page object containing `elements`, `background`, `texture`, etc.
+ * - pageIdx: index of the page within the project
+ * - snapOn, gridOn, zoom: visual/editor flags
+ */
 
 const styles = {
     canvas: (page) => ({
@@ -49,6 +67,7 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
                 onContextMenu={e => handleContextMenu(e, null)}
                 ref={canvasRef}
             >
+                {page.texture && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: `url(${resolvePublicationAsset(page.texture)})`, backgroundSize: 'cover', opacity: 0.2 }} />}
                 {(page.elements || [])
                     .filter(el => !el.hidden)
                     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))

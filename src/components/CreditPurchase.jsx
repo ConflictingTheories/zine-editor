@@ -1,7 +1,20 @@
+/*
+ * Component: CreditPurchase
+ * User interface for buying platform credits and managing payment checkout flow.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { useXRPayID } from '../context/XRPayIDContext'
 import { useVP } from '../context/VPContext'
+
+/**
+ * Component: CreditPurchase
+ * UI for purchasing platform credits via Stripe. Handles loading Stripe
+ * configuration, creating a checkout session, and redirecting the user.
+ *
+ * Uses `useXRPayID` for local credit state and `useVP` for auth token.
+ */
 
 const CreditPurchase = () => {
     const { xrState } = useXRPayID()
@@ -32,6 +45,8 @@ const CreditPurchase = () => {
             .finally(() => setIsConfigLoading(false))
     }, [])
 
+    // Initiate a purchase flow: call backend to create a Stripe session
+    // (or confirm simulated payments) and redirect the browser.
     const handlePurchase = async () => {
         if (amount <= 0) return
         setIsLoading(true)

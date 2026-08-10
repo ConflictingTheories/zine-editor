@@ -1,5 +1,20 @@
+/*
+ * Component: PropertyPanel
+ * Shows editable properties for the currently selected canvas element.
+ */
+
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
+
+/**
+ * Component: PropertyPanel
+ * Renders the right-hand property inspector for pages and elements.
+ * Supports tabs for 'props', 'effects', and 'logic'. Uses `useVP()` to
+ * read selection state and to persist updates via `updateElement`.
+ *
+ * Props:
+ * - activeTab: one of 'props' | 'effects' | 'logic'
+ */
 
 const VFX_OPTIONS = [
     { id: 'flash', name: 'Flash' },
@@ -32,8 +47,10 @@ const normalizeColor = (color) => {
     if (color.length === 4 && color.startsWith('#')) {
         return '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3]
     }
-    return color
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : '#000000'
 }
+
+const panelFillType = (element) => element.panelFillType || (element.fill && element.fill !== 'transparent' ? 'solid' : 'transparent')
 
 function PropertyPanel({ activeTab = 'props' }) {
     const { vpState, updateElement, updateVpState, playSFX, moveLayer } = useVP()
@@ -71,8 +88,8 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label>Texture</label>
                         <select value={page.texture || ''} onChange={(e) => updatePage('texture', e.target.value)}>
                             <option value="">None</option>
-                            <option value="https://www.transparenttextures.com/patterns/old-mathematics.png">Old Paper</option>
-                            <option value="https://www.transparenttextures.com/patterns/dark-matter.png">Dark Matter</option>
+                            <option value="/assets/textures/old-paper.svg">Old Paper</option>
+                            <option value="/assets/textures/dark-matter.svg">Dark Matter</option>
                         </select>
                     </div>
                     <div className="form-row">
@@ -125,18 +142,22 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label>Blur (px)</label>
                         <input type="number" min={0} max={20} value={element.blur || 0} onChange={(e) => handleChange('blur', parseInt(e.target.value) || 0)} />
                     </div>
-                    <div className="prop-row">
-                        <label>Border Width</label>
-                        <input type="number" value={element.borderWidth || 0} onChange={(e) => handleChange('borderWidth', parseInt(e.target.value) || 0)} />
-                    </div>
-                    <div className="prop-row">
-                        <label>Border Color</label>
-                        <input type="color" value={normalizeColor(element.borderColor || '#000000')} onChange={(e) => handleChange('borderColor', e.target.value)} />
-                    </div>
-                    <div className="prop-row">
-                        <label>Border Radius</label>
-                        <input type="number" value={element.borderRadius || 0} onChange={(e) => handleChange('borderRadius', parseInt(e.target.value) || 0)} />
-                    </div>
+                    {element.type === 'panel' ? (
+                        <p className="prop-hint">Panel border, corners, and shadow are in Properties → Panel Surface.</p>
+                    ) : <>
+                        <div className="prop-row">
+                            <label>Border Width</label>
+                            <input type="number" value={element.borderWidth || 0} onChange={(e) => handleChange('borderWidth', parseInt(e.target.value) || 0)} />
+                        </div>
+                        <div className="prop-row">
+                            <label>Border Color</label>
+                            <input type="color" value={normalizeColor(element.borderColor || '#000000')} onChange={(e) => handleChange('borderColor', e.target.value)} />
+                        </div>
+                        <div className="prop-row">
+                            <label>Border Radius</label>
+                            <input type="number" value={element.borderRadius || 0} onChange={(e) => handleChange('borderRadius', parseInt(e.target.value) || 0)} />
+                        </div>
+                    </>}
                     <div className="prop-row">
                         <label>Blend Mode</label>
                         <select value={element.blendMode || 'normal'} onChange={(e) => handleChange('blendMode', e.target.value)}>
@@ -355,8 +376,38 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label><input type="checkbox" checked={!!element.bold} onChange={(e) => handleChange('bold', e.target.checked)} /> Bold</label>
                         <label><input type="checkbox" checked={!!element.italic} onChange={(e) => handleChange('italic', e.target.checked)} /> Italic</label>
                     </div>
+                    <div className="form-row">
+                        <label>Leading & Tracking</label>
+                        <div className="input-group">
+                            <input type="number" step="0.05" min="0.5" value={element.lineHeight || 1.2} onChange={(e) => handleChange('lineHeight', parseFloat(e.target.value) || 1.2)} title="Line height" />
+                            <input type="number" step="0.1" value={element.letterSpacing || 0} onChange={(e) => handleChange('letterSpacing', parseFloat(e.target.value) || 0)} title="Letter spacing (px)" />
+                        </div>
+                    </div>
                 </div>
             )}
+
+            {element.type === 'panel' && (() => {
+                const fillType = panelFillType(element)
+                const setFillType = (nextType) => {
+                    if (nextType === 'transparent') return handleChange('panelFillType', 'transparent')
+                    if (nextType === 'solid') return updateElement(selection.pageIdx, element.id, { panelFillType: 'solid', panelFillColor: element.panelFillColor || (element.fill !== 'transparent' ? element.fill : '#ffffff') })
+                    return updateElement(selection.pageIdx, element.id, { panelFillType: 'gradient', panelFillColor: element.panelFillColor || '#ffffff', panelFillColorEnd: element.panelFillColorEnd || '#000000', panelGradientAngle: element.panelGradientAngle ?? 135 })
+                }
+                return <div className="prop-section">
+                    <h4>Panel Surface</h4>
+                    <div className="form-row"><label>Fill</label><select value={fillType} onChange={(e) => setFillType(e.target.value)}><option value="transparent">Transparent</option><option value="solid">Solid colour</option><option value="gradient">Linear gradient</option></select></div>
+                    {fillType !== 'transparent' && <div className="form-row"><label>{fillType === 'gradient' ? 'Start colour' : 'Fill colour'}</label><input type="color" value={normalizeColor(element.panelFillColor || element.fill || '#ffffff')} onChange={(e) => updateElement(selection.pageIdx, element.id, { panelFillColor: e.target.value, ...(fillType === 'solid' ? { fill: e.target.value } : {}) })} /></div>}
+                    {fillType === 'gradient' && <><div className="form-row"><label>End colour</label><input type="color" value={normalizeColor(element.panelFillColorEnd || '#000000')} onChange={(e) => handleChange('panelFillColorEnd', e.target.value)} /></div><div className="form-row"><label>Angle (°)</label><input type="number" min="0" max="360" value={element.panelGradientAngle ?? 135} onChange={(e) => handleChange('panelGradientAngle', Math.max(0, Math.min(360, parseInt(e.target.value, 10) || 0)))} /></div></>}
+                    <div className="form-row"><label>Border</label><div className="input-group"><input type="number" min="0" value={element.panelBorderWidth ?? 0} onChange={(e) => handleChange('panelBorderWidth', Math.max(0, parseInt(e.target.value, 10) || 0))} title="Border width" /><input type="color" value={normalizeColor(element.panelBorderColor || '#000000')} onChange={(e) => handleChange('panelBorderColor', e.target.value)} title="Border colour" /></div></div>
+                    <div className="form-row"><label>Border style</label><select value={element.panelBorderStyle || 'solid'} onChange={(e) => handleChange('panelBorderStyle', e.target.value)}><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="double">Double</option><option value="none">None</option></select></div>
+                    <div className="form-row"><label>Corner radius</label><input type="number" min="0" value={element.panelRadius ?? 0} onChange={(e) => handleChange('panelRadius', Math.max(0, parseInt(e.target.value, 10) || 0))} /></div>
+                    <div className="form-row"><label>Panel shadow</label><input type="text" value={element.panelShadow || ''} onChange={(e) => handleChange('panelShadow', e.target.value)} placeholder="0 4px 16px rgba(0,0,0,.25)" /></div>
+                </div>
+            })()}
+
+            {element.type === 'shape' && <div className="prop-section"><h4>Shape</h4><div className="form-row"><label>Fill colour</label><input type="color" value={normalizeColor(element.fill || '#000000')} onChange={(e) => handleChange('fill', e.target.value)} /></div></div>}
+
+            {element.type === 'balloon' && <div className="prop-section"><h4>Balloon</h4><div className="form-row"><label>Style</label><select value={element.balloonType || 'dialog'} onChange={(e) => handleChange('balloonType', e.target.value)}><option value="dialog">Dialog</option><option value="thought">Thought</option><option value="shout">Shout</option><option value="caption">Caption</option><option value="whisper">Whisper</option><option value="narration">Narration</option></select></div></div>}
 
             {element.type === 'image' && (
                 <div className="prop-section">
@@ -383,6 +434,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label>Source URL</label>
                         <input type="text" value={element.src || ''} onChange={(e) => handleChange('src', e.target.value)} placeholder="https://..." />
                     </div>
+                    {element.type === 'video' && <div className="form-row"><label>Object Fit</label><select value={element.objectFit || 'contain'} onChange={(e) => handleChange('objectFit', e.target.value)}><option value="contain">Contain</option><option value="cover">Cover</option><option value="fill">Fill</option></select></div>}
                     {element.type === 'audio-log' && (
                         <>
                             <div className="form-row">

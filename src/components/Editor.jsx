@@ -1,8 +1,20 @@
+/*
+ * Component: Editor
+ * Editor container for the canvas, toolbar, properties, and active element workflow.
+ */
+
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 import { PAGE_W, PAGE_H } from '../constants.js'
+
+/**
+ * Component: Editor
+ * Top-level editor view that composes the left page list, canvas, and
+ * right-hand property panel. Provides keyboard shortcuts and toolbar
+ * action handlers which call into `useVP()` helper functions.
+ */
 
 const styles = {
     themeSelect: {

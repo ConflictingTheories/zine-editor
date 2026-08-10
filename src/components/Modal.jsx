@@ -1,7 +1,19 @@
+/*
+ * Component: Modal
+ * Generic overlay container for dialogs, forms, and transient UI flows.
+ */
+
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import AssetModal from './AssetModal.jsx'
 import ExportModal from './ExportModal.jsx'
+
+/**
+ * Component: Modal
+ * Renders application-wide modal dialogs used across the app (auth,
+ * publish, theme picker, help, premium, asset browser, etc.). The
+ * component uses `vpState.modals` to determine which modals are active.
+ */
 
 const THEME_OPTIONS = [
     { key: 'classic', name: 'Classic Literature', desc: 'Elegant prose & serif beauty', colors: ['#5c0a0a', '#d4af37', '#fdfaf1', '#4b2c5e'] },

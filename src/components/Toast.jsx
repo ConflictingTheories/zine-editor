@@ -1,6 +1,16 @@
+/*
+ * Component: Toast
+ * Displays transient notification messages and user feedback toasts.
+ */
+
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
+/**
+ * Component: Toast
+ * Simple ephemeral toast notification container driven by `vpState.toasts`.
+ * Each toast should include an `id`, `msg`, and optional `type` ('error'|'success').
+ */
 const Toast = () => {
     const { vpState } = useVP()
 

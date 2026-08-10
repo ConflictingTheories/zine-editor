@@ -1,4 +1,9 @@
 
+/*
+ * Component: MonetizationDashboard
+ * Wraps monetization views for credits, marketplace, token issuance, subscriptions, and creator tools.
+ */
+
 import React, { useState } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 import CreditPurchase from './CreditPurchase'

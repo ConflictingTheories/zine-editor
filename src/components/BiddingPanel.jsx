@@ -1,7 +1,22 @@
 
+/*
+ * Component: BiddingPanel
+ * Manages auction-style bids and offers for zine contributions or collectible content.
+ */
+
 import React, { useState } from 'react'
 import { useXRPayID } from '../context/XRPayIDContext'
 
+/**
+ * Component: BiddingPanel
+ * Small panel to place and manage bids on zines. Integrates with the
+ * XR payid context for placing, accepting, and rejecting bids.
+ *
+ * Props:
+ * - zineId: identifier of the zine being bid on
+ * - zineTitle: display title
+ * - onClose: optional close callback
+ */
 const BiddingPanel = ({ zineId, zineTitle, onClose }) => {
     const { xrState, placeBid, acceptBid, rejectBid } = useXRPayID()
     const [amount, setAmount] = useState(50)

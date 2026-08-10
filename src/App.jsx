@@ -1,3 +1,8 @@
+/*
+ * Component: App
+ * Top-level application shell for routing, auth flow, and global overlay state.
+ */
+
 import React from 'react'
 import TopNav from './components/TopNav.jsx'
 import Modal from './components/Modal.jsx'
@@ -11,6 +16,12 @@ import MonetizationDashboard from './components/MonetizationDashboard.jsx'
 import { useVP } from './context/VPContext.jsx'
 import { useStripeConfirm } from './hooks/useStripeConfirm.js'
 
+/**
+ * Component: App
+ * Top-level application shell for routing between dashboard, editor,
+ * discover, reader, and monetization views. Also renders global
+ * overlays such as modals, VFX layer, and toast notifications.
+ */
 function App() {
     const { vpState, activeVfx } = useVP()
     useStripeConfirm() // Check for payment return

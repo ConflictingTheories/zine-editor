@@ -1,3 +1,8 @@
+/*
+ * Component: Dashboard
+ * Main user dashboard with project overview, recent activity, and navigation shortcuts.
+ */
+
 import React from 'react'
 import { useVP } from '../context/VPContext.jsx'
 
@@ -5,6 +10,11 @@ const styles = {
     statusIcon: { fontSize: '12px' }
 }
 
+/**
+ * Component: Dashboard
+ * Main user dashboard showing projects, stats, and quick actions to create
+ * or manage zines.
+ */
 function Dashboard() {
     const { vpState, updateVpState, showView, showModal, createProject, openProject, saveLocal } = useVP()
 

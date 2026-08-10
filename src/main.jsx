@@ -1,3 +1,8 @@
+/*
+ * Entry: main.jsx
+ * Bootstraps the React application, registers providers, and attaches the service worker.
+ */
+
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './lib/shaderBridge.js'
