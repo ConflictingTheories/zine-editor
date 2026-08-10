@@ -93,7 +93,7 @@ function ExportModal({ onClose }) {
                                 : ''}
                         </p>
                         <p style={{ fontSize: '11px', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
-                            Incomplete final sheets are padded with blank pages so the fold layout stays correct.
+                            Single-sided mini-zine layout: fold on the blue guides, cut the red centre slit, then push the slit open to form the booklet. Incomplete final sheets are padded with blank pages.
                         </p>
                         {hasLandscapePages && <p className="prop-hint">Foldable signatures use portrait digest cells. Export landscape pages as Standard PDF for their intended layout.</p>}
                         <button className="topnav-btn" onClick={handleExportFoldable} style={styles.btn}>Generate Foldable PDF</button>
