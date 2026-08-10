@@ -53,7 +53,7 @@ const normalizeColor = (color) => {
 const panelFillType = (element) => element.panelFillType || (element.fill && element.fill !== 'transparent' ? 'solid' : 'transparent')
 
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updateVpState, playSFX, moveLayer } = useVP()
+    const { vpState, updateElement, updatePage, playSFX, moveLayer } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -71,22 +71,18 @@ function PropertyPanel({ activeTab = 'props' }) {
         if (activeTab === 'logic') {
             return <p className="empty-msg" style={styles.emptyMsg}>Select an element to set interactions</p>
         }
-        const updatePage = (key, val) => {
-            const project = JSON.parse(JSON.stringify(currentProject))
-            project.pages[pageIdx][key] = val
-            updateVpState({ currentProject: project })
-        }
+        const setPageProperty = (key, val) => updatePage(pageIdx, { [key]: val })
         return (
             <div className="property-panel">
                 <h4 style={styles.header}>PAGE PROPERTIES</h4>
                 <div className="prop-section">
                     <div className="form-row">
                         <label>Background</label>
-                        <input type="color" value={normalizeColor(page.background || '#ffffff')} onChange={(e) => updatePage('background', e.target.value)} />
+                        <input type="color" value={normalizeColor(page.background || '#ffffff')} onChange={(e) => setPageProperty('background', e.target.value)} />
                     </div>
                     <div className="form-row">
                         <label>Texture</label>
-                        <select value={page.texture || ''} onChange={(e) => updatePage('texture', e.target.value)}>
+                        <select value={page.texture || ''} onChange={(e) => setPageProperty('texture', e.target.value)}>
                             <option value="">None</option>
                             <option value="/assets/textures/old-paper.svg">Old Paper</option>
                             <option value="/assets/textures/dark-matter.svg">Dark Matter</option>
@@ -94,11 +90,11 @@ function PropertyPanel({ activeTab = 'props' }) {
                     </div>
                     <div className="form-row">
                         <label>Page BGM (URL)</label>
-                        <input type="text" value={page.bgm || ''} onChange={(e) => updatePage('bgm', e.target.value)} placeholder="https://.../mood.mp3" />
+                        <input type="text" value={page.bgm || ''} onChange={(e) => setPageProperty('bgm', e.target.value)} placeholder="https://.../mood.mp3" />
                     </div>
                     <div className="form-row">
                         <label>Ambient Mood</label>
-                        <select value={page.bgm?.startsWith('gen:') ? page.bgm : ''} onChange={(e) => updatePage('bgm', e.target.value)}>
+                        <select value={page.bgm?.startsWith('gen:') ? page.bgm : ''} onChange={(e) => setPageProperty('bgm', e.target.value)}>
                             <option value="">Select Mood...</option>
                             <option value="gen:drone">Drone (Deep)</option>
                             <option value="gen:horror">Horror (Tense)</option>
@@ -107,12 +103,12 @@ function PropertyPanel({ activeTab = 'props' }) {
                         </select>
                     </div>
                     <div className="form-row-checkbox">
-                        <label><input type="checkbox" checked={!!page.isLocked} onChange={(e) => updatePage('isLocked', e.target.checked)} /> Locked (skip in flow)</label>
+                        <label><input type="checkbox" checked={!!page.isLocked} onChange={(e) => setPageProperty('isLocked', e.target.checked)} /> Locked (skip in flow)</label>
                     </div>
                     {page.isLocked && (
                         <div className="form-row">
                             <label>Access Password</label>
-                            <input type="text" value={page.password || ''} onChange={(e) => updatePage('password', e.target.value)} placeholder="Mystery code" />
+                            <input type="text" value={page.password || ''} onChange={(e) => setPageProperty('password', e.target.value)} placeholder="Mystery code" />
                         </div>
                     )}
                 </div>
@@ -344,6 +340,23 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <label><input type="checkbox" checked={!!element.locked} onChange={(e) => handleChange('locked', e.target.checked)} /> Locked</label>
                     <label><input type="checkbox" checked={!!element.hidden} onChange={(e) => handleChange('hidden', e.target.checked)} /> Hidden</label>
                 </div>
+            </div>
+
+            <div className="prop-section">
+                <h4>Print treatment</h4>
+                <div className="form-row">
+                    <label>On paper</label>
+                    <select value={element.printMode || 'include'} onChange={(e) => handleChange('printMode', e.target.value)}>
+                        <option value="include">Include as designed</option>
+                        <option value="hide">Digital only — omit</option>
+                        <option value="fallback">Replace with print fallback</option>
+                    </select>
+                </div>
+                {element.printMode === 'fallback' && <div className="form-row">
+                    <label>Print fallback</label>
+                    <input type="text" value={element.printFallback || ''} onChange={(e) => handleChange('printFallback', e.target.value)} placeholder="What should paper readers see?" />
+                </div>}
+                {['video', 'audio-log', 'shader', 'object'].includes(element.type) && !element.printMode && <p className="prop-hint">This is a digital medium. Choose a paper treatment before exporting.</p>}
             </div>
 
             {(element.type === 'text' || element.type === 'balloon') && (

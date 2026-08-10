@@ -40,7 +40,7 @@ const styles = {
 }
 
 function Editor() {
-    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, themes } = useVP()
+    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => updateVpState({ selection: { type: 'page', id: vpState.currentProject?.pages[idx]?.id, pageIdx: idx } })
     const [zoom, setZoom] = useState(100)
@@ -160,6 +160,8 @@ function Editor() {
         }
     }
 
+    const updatePageOrientation = (orientation) => updatePage(pageIdx, { orientation })
+
 
     return (
         <div className="editor" id="editorContainer">
@@ -268,11 +270,7 @@ function Editor() {
                     <div className="zoom-group">
                         <select
                             value={currentPage?.orientation || 'portrait'}
-                            onChange={(e) => {
-                                const o = e.target.value
-                                updateVpState({})
-                                // Orientation could be stored on page: updateElement(pageIdx, ...) - for now leave as portrait
-                            }}
+                            onChange={(e) => updatePageOrientation(e.target.value)}
                             style={styles.orientationSelect}
                         >
                             <option value="portrait">Portrait</option>

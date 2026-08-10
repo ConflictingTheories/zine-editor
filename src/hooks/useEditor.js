@@ -15,21 +15,24 @@ import { useVP } from '../context/VPContext.jsx'
  * @param {number} [zoom=100] initial zoom percentage (100 => 1:1)
  * @returns {object} { startDrag, startResize, startRotate, updateElement, isDragging, isResizing, isRotating }
  */
-export function useEditor(zoom = 100) {
+export function useEditor(zoom = 100, snapOn = true) {
     const { vpState, updateElement, moveLayer } = useVP()
     const [isDragging, setIsDragging] = useState(false)
     const [isResizing, setIsResizing] = useState(false)
     const [isRotating, setIsRotating] = useState(false)
     const zoomRef = useRef(zoom)
+    const snapRef = useRef(snapOn)
 
     useEffect(() => {
         zoomRef.current = zoom || 100
     }, [zoom])
+    useEffect(() => { snapRef.current = snapOn }, [snapOn])
 
     const dragStartPos = useRef({ x: 0, y: 0 })
     const elementStartPos = useRef({ x: 0, y: 0, w: 0, h: 0, rot: 0 })
 
     const getScale = () => Math.max(0.01, (zoomRef.current || 100) / 100)
+    const snap = (value) => snapRef.current ? Math.round(value / 8) * 8 : value
 
     /**
      * Begin dragging an element. This function attaches global mousemove/mouseup
@@ -56,8 +59,8 @@ export function useEditor(zoom = 100) {
             const dy = (moveEvent.clientY - dragStartPos.current.y) / scale
 
             updateElement(pageIdx, el.id, {
-                x: elementStartPos.current.x + dx,
-                y: elementStartPos.current.y + dy
+                x: snap(elementStartPos.current.x + dx),
+                y: snap(elementStartPos.current.y + dy)
             })
         }
 
@@ -92,15 +95,15 @@ export function useEditor(zoom = 100) {
             const dy = (moveEvent.clientY - dragStartPos.current.y) / scale
 
             const updates = {}
-            if (handle.includes('e')) updates.width = Math.max(20, elementStartPos.current.w + dx)
-            if (handle.includes('s')) updates.height = Math.max(20, elementStartPos.current.h + dy)
+            if (handle.includes('e')) updates.width = Math.max(20, snap(elementStartPos.current.w + dx))
+            if (handle.includes('s')) updates.height = Math.max(20, snap(elementStartPos.current.h + dy))
             if (handle.includes('w')) {
-                updates.width = Math.max(20, elementStartPos.current.w - dx)
-                updates.x = elementStartPos.current.x + dx
+                updates.width = Math.max(20, snap(elementStartPos.current.w - dx))
+                updates.x = snap(elementStartPos.current.x + dx)
             }
             if (handle.includes('n')) {
-                updates.height = Math.max(20, elementStartPos.current.h - dy)
-                updates.y = elementStartPos.current.y + dy
+                updates.height = Math.max(20, snap(elementStartPos.current.h - dy))
+                updates.y = snap(elementStartPos.current.y + dy)
             }
 
             updateElement(pageIdx, el.id, updates)

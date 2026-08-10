@@ -286,6 +286,15 @@ const VPProvider = ({ children }) => {
         pushHistory(project)
     }
 
+    // Page metadata (paper size, texture, access, audio) needs the same dirty
+    // state and undo semantics as element edits.
+    const updatePage = (pageIdx, updates) => {
+        if (!vpState.currentProject?.pages?.[pageIdx]) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        Object.assign(project.pages[pageIdx], updates)
+        updateCurrentProject(project)
+    }
+
     const api = async (endpoint, method = 'GET', body = null) => {
         if (!vpState.isOnline) throw new Error('Offline')
         const headers = { 'Content-Type': 'application/json' }
@@ -1230,6 +1239,7 @@ const VPProvider = ({ children }) => {
         redo,
         addElement,
         updateElement,
+        updatePage,
         deleteElement,
         addPage,
         deletePage,

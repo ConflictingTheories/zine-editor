@@ -24,15 +24,16 @@ import { resolvePublicationAsset } from '../utils/assets.js'
  */
 
 const styles = {
-    canvas: (page) => ({
-        background: page.background || '#fff', width: PAGE_W, height: PAGE_H
-    })
+    canvas: (page) => {
+        const landscape = page.orientation === 'landscape'
+        return { background: page.background || '#fff', width: landscape ? PAGE_H : PAGE_W, height: landscape ? PAGE_W : PAGE_H }
+    }
 }
 
 function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
     const { vpState, updateVpState } = useVP()
     const { selection } = vpState
-    const { startDrag, startResize, startRotate, updateElement } = useEditor(zoom)
+    const { startDrag, startResize, startRotate, updateElement } = useEditor(zoom, snapOn)
     const canvasRef = useRef(null)
     const [ctxMenu, setCtxMenu] = useState({ visible: false, x: 0, y: 0, element: null })
 
@@ -48,6 +49,8 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
     const handleContextMenu = (e, el) => {
         e.preventDefault()
         e.stopPropagation()
+        if (el) updateVpState({ selection: { type: 'element', id: el.id, pageIdx } })
+        else updateVpState({ selection: { type: 'page', id: page.id, pageIdx } })
         const rect = canvasRef.current.getBoundingClientRect()
         const scale = Math.max(0.01, zoom / 100)
         setCtxMenu({

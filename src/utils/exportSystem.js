@@ -2,6 +2,7 @@
 import MCPClient from './mcpClient.js'
 import { PAGE_W, PAGE_H } from '../constants.js'
 import { resolvePublicationAsset } from './assets.js'
+import { printElements } from './publication.js'
 
 // Server-side export using MCP (for automation)
 export const exportToHTMLServer = async (project, token) => {
@@ -403,7 +404,8 @@ export const exportToPDF = async (project, embedAssets = false) => {
         } catch (e) { console.warn('Failed to load mushu for PDF export', e); }
 
         const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [PAGE_W, PAGE_H] });
+        const firstLandscape = project.pages[0]?.orientation === 'landscape'
+        const pdf = new jsPDF({ orientation: firstLandscape ? 'landscape' : 'portrait', unit: 'px', format: firstLandscape ? [PAGE_H, PAGE_W] : [PAGE_W, PAGE_H] });
 
         const container = document.createElement('div');
         container.style.cssText = `position:absolute;left:-9999px;top:0;width:${PAGE_W}px;height:${PAGE_H}px;overflow:hidden;background:#fff`;
@@ -412,6 +414,9 @@ export const exportToPDF = async (project, embedAssets = false) => {
         try {
             for (let i = 0; i < project.pages.length; i++) {
                 const p = project.pages[i];
+                const landscape = p.orientation === 'landscape'
+                const pageWidth = landscape ? PAGE_H : PAGE_W
+                const pageHeight = landscape ? PAGE_W : PAGE_H
                 ld.innerHTML = `<div>Generating PDF... Page ${i + 1}/${project.pages.length}</div>`;
 
                 if (mushu) {
@@ -428,9 +433,11 @@ export const exportToPDF = async (project, embedAssets = false) => {
                     }
                 }
 
+                container.style.width = `${pageWidth}px`
+                container.style.height = `${pageHeight}px`
                 container.innerHTML = `<div style="width:100%;height:100%;position:relative;background:${p.background}">
                     ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
-                    ${p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                    ${printElements(p.elements).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
                 </div>`;
 
                 // Allow DOM to settle and images to load
@@ -446,8 +453,8 @@ export const exportToPDF = async (project, embedAssets = false) => {
                 });
                 const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
-                if (i > 0) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, 0, PAGE_W, PAGE_H);
+                if (i > 0) pdf.addPage([pageWidth, pageHeight], landscape ? 'landscape' : 'portrait');
+                pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
 
                 p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; });
             }
@@ -543,7 +550,7 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
                         transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #eee">
                         <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative;">
                             ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
-                            ${(p.elements || []).filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                            ${printElements(p.elements).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
                         </div>
                     </div>`;
                 }

@@ -40,7 +40,10 @@ const styles = {
     toolbarSpacer: { flex: 1 },
     page: (page) => ({
         background: page.background || '#fff',
-        position: 'relative'
+        position: 'relative',
+        width: page.orientation === 'landscape' ? '816px' : '528px',
+        height: page.orientation === 'landscape' ? '528px' : '816px',
+        minHeight: 0
     }),
     texture: (page) => ({
         position: 'absolute', inset: 0,

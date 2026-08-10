@@ -6,6 +6,7 @@
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { exportToHTML, exportToPDF, exportToInteractive, exportToFoldablePDF } from '../utils/exportSystem'
+import { getPrintReadiness } from '../utils/publication.js'
 
 const styles = {
     desc: { marginBottom: 12, fontSize: '0.9em', color: 'var(--vp-text-dim)' },
@@ -26,6 +27,8 @@ function ExportModal({ onClose }) {
     const { currentProject } = vpState
     const [exportTab, setExportTab] = useState('pdf')
     const [embedAssets, setEmbedAssets] = useState(true)
+    const printReadiness = getPrintReadiness(currentProject)
+    const hasLandscapePages = currentProject?.pages?.some(page => page.orientation === 'landscape')
 
     const handleExportHTML = () => {
         if (currentProject) {
@@ -76,7 +79,8 @@ function ExportModal({ onClose }) {
 
                 {exportTab === 'pdf' && (
                     <div className="export-content active">
-                        <p style={styles.desc}>Export as standard 1-page-per-sheet PDF.</p>
+                        <p style={styles.desc}>Export as a static, print-first PDF. Digital-only elements are omitted and fallbacks are substituted.</p>
+                        {(printReadiness.review || printReadiness.hidden || printReadiness.fallbacks) > 0 && <p className="prop-hint">Print audit: {printReadiness.review} element{printReadiness.review === 1 ? '' : 's'} need a chosen treatment; {printReadiness.fallbacks} fallback{printReadiness.fallbacks === 1 ? '' : 's'}; {printReadiness.hidden} omitted.</p>}
                         <button className="topnav-btn" onClick={handleExportPDF} style={styles.btn}>Generate PDF</button>
                     </div>
                 )}
@@ -91,6 +95,7 @@ function ExportModal({ onClose }) {
                         <p style={{ fontSize: '11px', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
                             Incomplete final sheets are padded with blank pages so the fold layout stays correct.
                         </p>
+                        {hasLandscapePages && <p className="prop-hint">Foldable signatures use portrait digest cells. Export landscape pages as Standard PDF for their intended layout.</p>}
                         <button className="topnav-btn" onClick={handleExportFoldable} style={styles.btn}>Generate Foldable PDF</button>
                     </div>
                 )}
