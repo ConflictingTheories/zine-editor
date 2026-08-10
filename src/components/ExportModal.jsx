@@ -65,7 +65,7 @@ function ExportModal({ onClose }) {
                 <h2>Export Zine</h2>
                 <div className="export-tabs">
                     <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Standard)</button>
-                    <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (Saddle Stitch)</button>
+                    <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (One-Sheet Zine)</button>
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
                     <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                 </div>
@@ -87,13 +87,13 @@ function ExportModal({ onClose }) {
                 {exportTab === 'foldable' && (
                     <div className="export-content active">
                         <p style={styles.desc}>
-                            Export as a proper saddle-stitched zine: each sheet has a front and back, carries four pages, and nests with the others for continuous reading order.
+                            Export as a classic single-sheet cut-and-fold zine: one landscape sheet produces an 8-page folded mini-zine.
                             {currentProject?.pages?.length
-                                ? ` This project will produce ${Math.max(1, Math.ceil(currentProject.pages.length / 4))} double-sided sheet${Math.ceil((currentProject.pages.length || 1) / 4) === 1 ? '' : 's'} (${currentProject.pages.length} pages).`
+                                ? ` This project will produce ${Math.max(1, Math.ceil(currentProject.pages.length / 8))} one-sheet zine${Math.ceil((currentProject.pages.length || 1) / 8) === 1 ? '' : 's'} (${currentProject.pages.length} pages).`
                                 : ''}
                         </p>
                         <p style={{ fontSize: '11px', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
-                            Print double-sided, using “flip on short edge.” Stack sheets in PDF order, fold on the blue centre guide, and staple the spine. Incomplete final signatures are padded with blank pages.
+                            Print single-sided. Fold on the blue guides, cut the red centre slit, then push the cut open into an 8-page booklet. Incomplete final sheets are padded with blank pages.
                         </p>
                         {hasLandscapePages && <p className="prop-hint">Foldable signatures use portrait digest cells. Export landscape pages as Standard PDF for their intended layout.</p>}
                         <button className="topnav-btn" onClick={handleExportFoldable} style={styles.btn}>Generate Foldable PDF</button>
