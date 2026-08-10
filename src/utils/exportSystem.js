@@ -477,16 +477,10 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
 
     const SHEET_W = 1056;
     const SHEET_H = 816;
-    const CELL_W = SHEET_W / 4; // 264
-    const CELL_H = SHEET_H / 2; // 408
-    // Canonical one-sheet mini-zine imposition (zero-based source indices).
-    // Printed flat: top (rotated) 5,4,3,2; bottom 6,7,8,1. After the
-    // centre slit and folds, the finished booklet reads 1 through 8.
-    const PAGE_INDEX_MAP = [4, 3, 2, 1, 5, 6, 7, 0];
-    const PAGE_TRANSFORMS = [
-        { x: 0, y: 0, rot: 180 }, { x: CELL_W, y: 0, rot: 180 }, { x: CELL_W * 2, y: 0, rot: 180 }, { x: CELL_W * 3, y: 0, rot: 180 },
-        { x: 0, y: CELL_H, rot: 0 }, { x: CELL_W, y: CELL_H, rot: 0 }, { x: CELL_W * 2, y: CELL_H, rot: 0 }, { x: CELL_W * 3, y: CELL_H, rot: 0 }
-    ];
+    const PAGE_SLOT_W = SHEET_W / 2; // half-letter page on a landscape letter sheet
+    // Saddle-stitch imposition: one physical sheet has a front and a back.
+    // For 8 pages, spreads are [8,1]/[2,7] then [6,3]/[4,5]. Additional
+    // sheets nest inside the outer sheet, keeping reader order continuous.
     const blankPage = () => ({ elements: [], background: '#ffffff', texture: null });
 
     try {
@@ -514,7 +508,9 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
 
         try {
             const sourcePages = project.pages || [];
-            const sheetCount = Math.max(1, Math.ceil(sourcePages.length / 8));
+            const imposedPageCount = Math.max(4, Math.ceil(sourcePages.length / 4) * 4);
+            const pages = Array.from({ length: imposedPageCount }, (_, i) => sourcePages[i] || blankPage());
+            const sheetCount = imposedPageCount / 4;
 
             // Pre-render shaders for every project page once
             if (mushu) {
@@ -535,58 +531,37 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
             }
 
             for (let sheet = 0; sheet < sheetCount; sheet++) {
-                ld.innerHTML = `<div>Generating foldable sheet ${sheet + 1} of ${sheetCount}…</div>`;
+                const outerLeft = imposedPageCount - 1 - (sheet * 2)
+                const outerRight = sheet * 2
+                const innerLeft = sheet * 2 + 1
+                const innerRight = imposedPageCount - 2 - (sheet * 2)
+                const sides = [
+                    { name: 'front', left: pages[outerLeft], right: pages[outerRight] },
+                    { name: 'back', left: pages[innerLeft], right: pages[innerRight] }
+                ]
 
-                const offset = sheet * 8;
-                const pages = [];
-                for (let i = 0; i < 8; i++) {
-                    pages.push(sourcePages[offset + i] || blankPage());
+                for (const side of sides) {
+                    ld.innerHTML = `<div>Generating sheet ${sheet + 1} of ${sheetCount} (${side.name})…</div>`
+                    const pageHTML = (p, x) => `<div style="position:absolute;left:${x}px;top:0;width:${PAGE_SLOT_W}px;height:${SHEET_H}px;background:${p.background || '#fff'};overflow:hidden">
+                        ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
+                        ${printElements(p.elements).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                    </div>`
+                    container.innerHTML = `${pageHTML(side.left, 0)}${pageHTML(side.right, PAGE_SLOT_W)}<div aria-hidden="true" style="position:absolute;left:${PAGE_SLOT_W}px;top:0;height:100%;border-left:0.5px dashed rgba(40,90,180,.65);pointer-events:none"></div>`
+                    await new Promise(r => setTimeout(r, 200))
+
+                    const canvas = await window.html2canvas(container, {
+                        scale: 2, useCORS: true, logging: false, allowTaint: true,
+                        backgroundColor: '#ffffff', imageTimeout: 5000
+                    })
+                    if (sheet > 0 || side.name === 'back') pdf.addPage()
+                    pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, SHEET_W, SHEET_H)
                 }
-
-                let htmlString = '';
-                for (let i = 0; i < 8; i++) {
-                    const p = pages[PAGE_INDEX_MAP[i]];
-                    const tr = PAGE_TRANSFORMS[i];
-                    htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:${CELL_W}px;height:${CELL_H}px;
-                        transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #bbb;box-sizing:border-box">
-                        <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative;">
-                            ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
-                            ${printElements(p.elements).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
-                        </div>
-                    </div>`;
-                }
-
-                // Fold guides make the physical operation explicit. The red
-                // centre segment is the slit: cut only between the inner two
-                // columns, then fold and push the slit open into the booklet.
-                htmlString += `<div aria-hidden="true" style="position:absolute;inset:0;pointer-events:none;z-index:999">
-                    <div style="position:absolute;left:${CELL_W}px;top:0;height:100%;border-left:0.5px dashed rgba(40,90,180,.65)"></div>
-                    <div style="position:absolute;left:${CELL_W * 2}px;top:0;height:100%;border-left:0.5px dashed rgba(40,90,180,.65)"></div>
-                    <div style="position:absolute;left:${CELL_W * 3}px;top:0;height:100%;border-left:0.5px dashed rgba(40,90,180,.65)"></div>
-                    <div style="position:absolute;left:0;top:${CELL_H}px;width:100%;border-top:0.5px dashed rgba(40,90,180,.65)"></div>
-                    <div style="position:absolute;left:${CELL_W}px;top:${CELL_H}px;width:${CELL_W * 2}px;border-top:1.5px solid rgba(185,35,35,.9)"></div>
-                </div>`
-                container.innerHTML = htmlString;
-                await new Promise(r => setTimeout(r, 200));
-
-                const canvas = await window.html2canvas(container, {
-                    scale: 2,
-                    useCORS: true,
-                    logging: false,
-                    allowTaint: true,
-                    backgroundColor: '#ffffff',
-                    imageTimeout: 5000
-                });
-                const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-                if (sheet > 0) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, 0, SHEET_W, SHEET_H);
             }
 
             // Cleanup shader snapshots
             sourcePages.forEach(p => (p.elements || []).forEach(e => { if (e.shaderImage) delete e.shaderImage; }));
 
-            pdf.save('svrn-foldable-zine.pdf');
+            pdf.save('svrn-saddle-stitch-zine.pdf');
         } finally {
             container.remove();
         }
