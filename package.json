@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Void Press - Zine Publishing Platform",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,7 +16,9 @@
     "migrate": "knex migrate:latest --knexfile server/knexfile.cjs",
     "rollback": "knex migrate:rollback --knexfile server/knexfile.cjs",
     "nuke-db": "rm -f server/data/database.sqlite && knex migrate:latest --knexfile server/knexfile.cjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test packages/*/test/*.test.js",
+    "dev:reader": "vite --config apps/reader/vite.config.js",
+    "server:node": "node server/server.cjs"
   },
   "repository": {
     "type": "git",
@@ -34,6 +40,7 @@
     "cors": "^2.8.6",
     "dotenv": "^16.3.1",
     "express": "^5.2.1",
+    "fflate": "^0.8.2",
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.1.0",
     "konva": "^10.2.0",

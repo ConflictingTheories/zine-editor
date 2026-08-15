@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
-import { exportToHTML, exportToPDF, exportToInteractive, exportToFoldablePDF } from '../utils/exportSystem'
+import { exportToHTML, exportToPDF, exportToInteractive, exportToFoldablePDF, exportToSvrn, importFromSvrn } from '../utils/exportSystem'
 import { getPrintReadiness } from '../utils/publication.js'
 
 const styles = {
@@ -23,7 +23,7 @@ const styles = {
  * - onClose: function invoked when the modal should close
  */
 function ExportModal({ onClose }) {
-    const { vpState } = useVP()
+    const { vpState, updateVpState, toast } = useVP()
     const { currentProject } = vpState
     const [exportTab, setExportTab] = useState('pdf')
     const [embedAssets, setEmbedAssets] = useState(true)
@@ -58,6 +58,33 @@ function ExportModal({ onClose }) {
         }
     }
 
+    const handleExportSvrn = async () => {
+        if (!currentProject) return
+        try {
+            await exportToSvrn(currentProject)
+            toast('Portable .svrn package created', 'success')
+            onClose()
+        } catch (error) {
+            const details = error.failures?.map(item => item.source).join(', ')
+            toast(`Could not embed package assets${details ? `: ${details}` : ''}`, 'error')
+        }
+    }
+
+    const handleImportSvrn = async (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        try {
+            const project = await importFromSvrn(file)
+            const imported = { ...project, id: `svrn_${Date.now()}`, _dirty: true }
+            updateVpState({
+                projects: [imported, ...(vpState.projects || [])], currentProject: imported,
+                currentView: 'editor', selection: { type: 'page', id: imported.pages[0]?.id, pageIdx: 0 }
+            })
+            toast('Verified .svrn imported into editor', 'success')
+            onClose()
+        } catch (error) { toast(error.message || 'Could not import .svrn', 'error') }
+    }
+
     return (
         <div className="modal-overlay active">
             <div className="modal-box">
@@ -68,6 +95,7 @@ function ExportModal({ onClose }) {
                     <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (One-Sheet Zine)</button>
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
                     <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
+                    <button className={`export-tab ${exportTab === 'svrn' ? 'active' : ''}`} onClick={() => setExportTab('svrn')}>SVRN Package</button>
                 </div>
 
                 <div style={{ margin: '15px 0', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>
@@ -109,6 +137,15 @@ function ExportModal({ onClose }) {
                     <div className="export-content active">
                         <p style={styles.desc}>Interactive flipbook with page-turn and interactions.</p>
                         <button className="topnav-btn" onClick={handleExportInteractive} style={styles.btn}>Generate Interactive</button>
+                    </div>
+                )}
+                {exportTab === 'svrn' && (
+                    <div className="export-content active">
+                        <p style={styles.desc}>Create a compressed, self-contained <code>.svrn</code> issue. Its assets are verified with SHA-256 hashes when opened by a reader or node.</p>
+                        <button className="topnav-btn" onClick={handleExportSvrn} style={styles.btn}>Download .svrn</button>
+                        <label className="topnav-btn" style={{ ...styles.btn, display: 'inline-block', marginLeft: 8, cursor: 'pointer' }}>
+                            Import .svrn<input type="file" accept=".svrn,application/vnd.svrn+zip,application/zip" onChange={handleImportSvrn} hidden />
+                        </label>
                     </div>
                 )}
             </div>

@@ -1,0 +1,1 @@
+{"name":"@svrn/reader","private":true,"version":"1.0.0","type":"module","scripts":{"dev":"vite --config vite.config.js","build":"vite build --config vite.config.js"}}

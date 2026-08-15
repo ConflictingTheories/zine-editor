@@ -3,6 +3,7 @@ import MCPClient from './mcpClient.js'
 import { PAGE_W, PAGE_H } from '../constants.js'
 import { resolvePublicationAsset } from './assets.js'
 import { printElements } from './publication.js'
+import { packSvrn, unpackSvrn } from '../../packages/svrn-format/src/index.js'
 
 // Server-side export using MCP (for automation)
 export const exportToHTMLServer = async (project, token) => {
@@ -15,6 +16,20 @@ export const exportToHTMLServer = async (project, token) => {
         throw error
     }
 }
+
+/** Create a portable, compressed SVRN issue. All referenced media is embedded. */
+export const exportToSvrn = async (project) => {
+    const { archive, manifest } = await packSvrn(project, { baseUrl: window.location.href })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([archive], { type: 'application/vnd.svrn+zip' }))
+    link.download = `${(manifest.issue.title || 'svrn-zine').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'svrn-zine'}.svrn`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+    return manifest
+}
+
+/** Read a verified .svrn archive into the editor's legacy-compatible project shape. */
+export const importFromSvrn = async (file) => (await unpackSvrn(file)).project
 
 export const exportToPDFServer = async (project, token) => {
     const mcp = new MCPClient()
