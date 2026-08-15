@@ -4,6 +4,7 @@ import { unpackSvrn } from '../../../packages/svrn-format/src/index.js'
 import { SvrnNodeClient } from '../../../packages/svrn-node-client/src/index.js'
 import ShaderElement from '../../../src/components/ShaderElement.jsx'
 import Object3D from '../../../src/components/Object3D.jsx'
+import '../../../src/lib/shaderBridge.js'
 import AudioViz from '../../../src/components/AudioViz.jsx'
 import { resolvePublicationAsset } from '../../../src/utils/assets.js'
 import './styles.css'
@@ -144,8 +145,26 @@ function App() {
   const [nodeToken, setNodeToken] = useState('')
   const [message, setMessage] = useState('')
   const [toggledLabels, setToggledLabels] = useState(new Set())
+  const [activeVfx, setActiveVfx] = useState(null)
+  const [unlockedPages, setUnlockedPages] = useState(new Set())
+  const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
+  const [scale, setScale] = useState(1)
 
   const refresh = async () => setIssues(await all('issues'))
+
+  useEffect(() => {
+    const onResize = () => {
+      const isLandscape = project?.pages[page]?.orientation === 'landscape'
+      const w = isLandscape ? 816 : 528
+      const h = isLandscape ? 528 : 816
+      const wrap = document.getElementById('canvasWrap')
+      if (wrap) setScale(Math.min((wrap.clientWidth - 40) / w, (wrap.clientHeight - 80) / h, 1))
+    }
+    window.addEventListener('resize', onResize)
+    // Run once on next tick after render
+    setTimeout(onResize, 50)
+    return () => window.removeEventListener('resize', onResize)
+  }, [project, page])
 
   useEffect(() => {
     refresh()
@@ -239,108 +258,165 @@ function App() {
   }
 
   const current = project?.pages?.[page]
-  const advance = delta => {
-    const next = Math.min(Math.max(0, page + delta), (project?.pages.length || 1) - 1)
-    setPage(next)
-    if (project) {
-      put('issues', {
-        ...(issues.find(issue => issue.id === project.id) || {}),
-        id: project.id, progress: next,
-        archive: issues.find(issue => issue.id === project.id)?.archive,
-        manifest: issues.find(issue => issue.id === project.id)?.manifest
-      })
+  const advance = (delta, absolute = false) => {
+    let next = absolute ? delta : page + Math.sign(delta)
+    const length = project?.pages.length || 1
+    const dir = Math.sign(delta)
+
+    if (!absolute) {
+      // Skip over locked pages unless unlocked
+      while (next >= 0 && next < length) {
+        const p = project.pages[next]
+        if (!p.isLocked || unlockedPages.has(next)) break
+        next += dir
+      }
+    }
+
+    if (next >= 0 && next < length) {
+      setPage(next)
+      if (project) {
+        put('issues', {
+          ...(issues.find(issue => issue.id === project.id) || {}),
+          id: project.id, progress: next,
+          archive: issues.find(issue => issue.id === project.id)?.archive,
+          manifest: issues.find(issue => issue.id === project.id)?.manifest
+        })
+      }
+    }
+  }
+
+  const handlePasswordSubmit = () => {
+    const targetPage = project.pages[passwordModal.targetIdx]
+    if (targetPage && targetPage.password === passwordModal.value) {
+      setUnlockedPages(prev => new Set(prev).add(passwordModal.targetIdx))
+      advance(passwordModal.targetIdx, true)
+      setPasswordModal({ active: false, targetIdx: -1, value: '' })
+    } else {
+      alert('Incorrect Password')
     }
   }
 
   return (
-    <main>
-      <header>
-        <h1>SVRN Reader</h1>
-        <label className="button">Import .svrn<input type="file" accept=".svrn" onChange={importFile} hidden /></label>
-        <input value={nodeUrl} onChange={e => setNodeUrl(e.target.value)} placeholder="https://publisher.example" />
-        <input value={nodeToken} onChange={e => setNodeToken(e.target.value)} placeholder="Node bearer token (optional)" />
-        <button onClick={subscribe}>Subscribe</button>
-        <button onClick={sync}>Sync</button>
-      </header>
-      {message && <p className="notice">{message}</p>}
-      <section className="layout">
-        <aside>
-          <h2>Library</h2>
-          {issues.map(issue => <button className="issue" key={issue.id} onClick={() => select(issue)}>{issue.manifest?.issue?.title || issue.id}<small>{issue.source}</small></button>)}
-        </aside>
-        <article>
-          {!current ? <p>Import a zine or subscribe to a publishing node.</p> : <>
-            <h2>{project.title}</h2>
-            <div className="page" style={{ position: 'relative', background: current.background, width: current.orientation === 'landscape' ? 816 : 528, height: current.orientation === 'landscape' ? 528 : 816, overflow: 'hidden' }}>
-              {current.texture && (
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${resolveAsset(current.texture)})`, backgroundSize: 'cover', opacity: 0.2, pointerEvents: 'none' }} />
-              )}
-              {current.elements.filter(element => !element.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(el => {
-                const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
-                return (
-                  <div
-                    key={el.id}
-                    className="reader-el reader-el-item"
-                    data-label={el.label || ''}
-                    style={styles.element(el, hiddenByToggle)}
-                    onClick={() => handleInteraction(el)}
-                  >
-                    {el.type === 'text' && (
-                      <div style={{ ...styles.text(el), padding: 4 }}>{contentRender(el)}</div>
-                    )}
-                    {el.type === 'image' && (
-                      <img src={resolveAsset(el.src)} style={styles.image(el)} alt="" />
-                    )}
-                    {el.type === 'panel' && (
-                      <div style={styles.panel(el)} />
-                    )}
-                    {el.type === 'shape' && (
-                      <div style={styles.shape(el)} />
-                    )}
-                    {el.type === 'balloon' && (
-                      <div style={styles.balloon(el)}>{contentRender(el)}</div>
-                    )}
-                    {el.type === 'shader' && (
-                      <ShaderElement preset={el.shaderPreset} customCode={el.customCode} width={el.width} height={el.height} />
-                    )}
-                    {el.type === 'object' && (
-                      <Object3D
-                        model={el.objModel || 'crystal'}
-                        color={el.objColor || '#4488ff'}
-                        autoRotate={el.objSpin !== false}
-                        width={el.width}
-                        height={el.height}
-                      />
-                    )}
-                    {el.type === 'video' && (
-                      el.src
-                        ? <video src={resolveAsset(el.src)} style={{ width: '100%', height: '100%', objectFit: el.objectFit || 'contain' }} controls autoPlay muted />
-                        : <div style={styles.video}>VIDEO: No Source</div>
-                    )}
-                    {(el.type === 'audio-log' || el.type === 'audio-viz') && (
-                      <AudioViz
-                        src={resolveAsset(el.src)}
-                        color={el.color || 'var(--vp-accent)'}
-                        width={el.width}
-                        height={el.height}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+    <div className={`app-container ${activeVfx === 'shake' ? 'shake-anim' : ''} ${activeVfx === 'pulse' ? 'pulse-anim' : ''} ${activeVfx === 'glitch' ? 'glitch-anim' : ''}`}>
+      {activeVfx && (
+        <div className={`vfx-overlay ${activeVfx === 'flash' || activeVfx === 'lightning' ? 'active' : ''}`} style={{
+          background: activeVfx === 'flash' ? '#fff' : (activeVfx === 'blood' ? 'radial-gradient(circle at 50% 50%, rgba(139,0,0,0.5), rgba(60,0,0,0.8) 60%, rgba(20,0,0,0.9))' : 'transparent'),
+          opacity: activeVfx === 'flash' ? 0.8 : 1,
+          pointerEvents: 'none',
+          position: 'fixed', inset: 0, zIndex: 9999,
+          mixBlendMode: 'screen',
+          animation: activeVfx === 'lightning' ? 'vfx-lightning 0.4s' : (activeVfx === 'glitch' ? 'vfx-glitch 0.5s steps(2, end)' : 'none')
+        }} />
+      )}
+
+      {passwordModal.active && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#222', padding: '30px', borderRadius: '12px', border: '1px solid #444', textAlign: 'center', color: '#fff' }}>
+            <h3 style={{ marginTop: 0 }}>Password Required</h3>
+            <input type="password" value={passwordModal.value}
+              autoFocus
+              onChange={(e) => setPasswordModal(p => ({ ...p, value: e.target.value }))}
+              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              placeholder="Enter password..."
+              style={{ padding: '8px', width: '200px', marginBottom: '20px', background: '#111', color: '#fff', border: '1px solid #555' }} />
+            <div>
+              <button onClick={handlePasswordSubmit}>Unlock</button>
+              <button onClick={() => setPasswordModal({ active: false, targetIdx: -1, value: '' })} style={{ background: 'transparent', marginLeft: '10px' }}>Cancel</button>
             </div>
-            <footer>
-              <button onClick={() => advance(-1)}>Previous</button>
-              <span>{page + 1} / {project.pages.length}</span>
-              <button onClick={() => advance(1)}>Next</button>
-            </footer>
-          </>}
-        </article>
-      </section>
-    </main>
+          </div>
+        </div>
+      )}
+
+      <main>
+        <header>
+          <h1>SVRN Reader</h1>
+          <label className="button">Import .svrn<input type="file" accept=".svrn" onChange={importFile} hidden /></label>
+          <input value={nodeUrl} onChange={e => setNodeUrl(e.target.value)} placeholder="https://publisher.example" />
+          <input value={nodeToken} onChange={e => setNodeToken(e.target.value)} placeholder="Node bearer token (optional)" />
+          <button onClick={subscribe}>Subscribe</button>
+          <button onClick={sync}>Sync</button>
+        </header>
+        {message && <p className="notice">{message}</p>}
+        <section className="layout">
+          <aside>
+            <h2>Library</h2>
+            {issues.map(issue => <button className="issue" key={issue.id} onClick={() => select(issue)}>{issue.manifest?.issue?.title || issue.id}<small>{issue.source}</small></button>)}
+          </aside>
+          <article>
+            {!current ? <p>Import a zine or subscribe to a publishing node.</p> : <>
+              <h2 style={{ display: 'none' }}>{project.title}</h2>
+              <div id="canvasWrap" className="reader-canvas-wrap">
+                <div className="page" style={{ position: 'relative', background: current.background, width: current.orientation === 'landscape' ? 816 : 528, height: current.orientation === 'landscape' ? 528 : 816, overflow: 'hidden', transform: `scale(${scale})` }}>
+                  {current.texture && (
+                    <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${resolveAsset(current.texture)})`, backgroundSize: 'cover', opacity: 0.2, pointerEvents: 'none' }} />
+                  )}
+                  {current.elements.filter(element => !element.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(el => {
+                    const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
+                    return (
+                      <div
+                        key={el.id}
+                        className="reader-el reader-el-item"
+                        data-label={el.label || ''}
+                        style={styles.element(el, hiddenByToggle)}
+                        onClick={() => handleInteraction(el)}
+                      >
+                        {el.type === 'text' && (
+                          <div style={{ ...styles.text(el), padding: 4 }}>{contentRender(el)}</div>
+                        )}
+                        {el.type === 'image' && (
+                          <img src={resolveAsset(el.src)} style={styles.image(el)} alt="" />
+                        )}
+                        {el.type === 'panel' && (
+                          <div style={styles.panel(el)} />
+                        )}
+                        {el.type === 'shape' && (
+                          <div style={styles.shape(el)} />
+                        )}
+                        {el.type === 'balloon' && (
+                          <div style={styles.balloon(el)}>{contentRender(el)}</div>
+                        )}
+                        {el.type === 'shader' && (
+                          <ShaderElement preset={el.shaderPreset} customCode={el.customCode} width={el.width} height={el.height} />
+                        )}
+                        {el.type === 'object' && (
+                          <Object3D
+                            model={el.objModel || 'crystal'}
+                            color={el.objColor || '#4488ff'}
+                            autoRotate={el.objSpin !== false}
+                            width={el.width}
+                            height={el.height}
+                          />
+                        )}
+                        {el.type === 'video' && (
+                          el.src
+                            ? <video src={resolveAsset(el.src)} style={{ width: '100%', height: '100%', objectFit: el.objectFit || 'contain' }} controls autoPlay muted />
+                            : <div style={styles.video}>VIDEO: No Source</div>
+                        )}
+                        {(el.type === 'audio-log' || el.type === 'audio-viz') && (
+                          <AudioViz
+                            src={resolveAsset(el.src)}
+                            color={el.color || 'var(--vp-accent)'}
+                            width={el.width}
+                            height={el.height}
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              <footer>
+                <button onClick={() => advance(-1)}>Previous</button>
+                <span>{page + 1} / {project.pages.length}</span>
+                <button onClick={() => advance(1)}>Next</button>
+              </footer>
+            </>}
+          </article>
+        </section>
+      </main>
+    </div>
   )
 }
-
 function contentRender(el) {
   if (el.sfx || el.symbol) return <div className="el-symbol">{el.content}</div>
   return el.content
