@@ -50,18 +50,8 @@ function Editor() {
 
     const project = vpState.currentProject
 
-    // SECURITY: Only allow user to edit their own projects
-    if (!vpState.user) {
-        return <div className="editor-empty">Please log in to edit zines.</div>
-    }
-
     if (!project) {
         return <div className="editor-empty">No project selected. Create or open a zine from the Dashboard.</div>
-    }
-
-    // Verify user owns this project
-    if (project.userId && project.userId !== vpState.user.id) {
-        return <div className="editor-empty">You don't have permission to edit this zine.</div>
     }
 
 

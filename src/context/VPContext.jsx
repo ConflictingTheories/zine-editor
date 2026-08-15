@@ -39,15 +39,15 @@ const VPProvider = ({ children }) => {
         // Parse user and ensure ID is numeric
         user: (() => {
             const stored = localStorage.getItem('vp_user')
-            if (!stored) return { id: 1, username: 'Local_Creator', email: 'local@zinemaker.org', roles: ['admin'], is_premium: 1 }
+            if (!stored) return null
             try {
                 const parsed = JSON.parse(stored)
                 return { ...parsed, id: Number(parsed.id) }
             } catch {
-                return { id: 1, username: 'Local_Creator', email: 'local@zinemaker.org', roles: ['admin'], is_premium: 1 }
+                return null
             }
         })(),
-        token: localStorage.getItem('vp_token') || 'local_offline_token',
+        token: localStorage.getItem('vp_token') || null,
         isOnline: navigator.onLine,
         isSyncing: false,
         toasts: [],
@@ -268,14 +268,7 @@ const VPProvider = ({ children }) => {
         }
     }, [vpState.projects])
 
-    // Auto-sync every 30 seconds when online
-    useEffect(() => {
-        if (!vpState.isOnline || !vpState.token) return
-        const syncInterval = setInterval(() => sync(), 30000)
-        // Also sync once on mount if online
-        sync()
-        return () => clearInterval(syncInterval)
-    }, [vpState.isOnline, vpState.token])
+
 
     const updateCurrentProject = (project) => {
         setVpState(prev => {
@@ -438,8 +431,6 @@ const VPProvider = ({ children }) => {
             const next = [...vpState.projects]
             next[idx] = { ...project, _dirty: true, _lastSaved: new Date().toISOString() }
             setVpState(prev => ({ ...prev, projects: next }))
-            // Trigger sync after saving
-            setTimeout(() => sync(), 300)
         }
         toast('Project saved!', 'success')
     }

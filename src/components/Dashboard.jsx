@@ -47,9 +47,6 @@ function Dashboard() {
     }
 
     const projects = vpState.projects || []
-    const publishedCount = vpState.published?.filter(p => p.author === vpState.user?.username).length || 0
-    const totalReads = vpState.published?.filter(p => p.author === vpState.user?.username).reduce((s, p) => s + (p.reads || 0), 0) || 0
-    const maxPub = vpState.user?.is_premium ? '∞' : '3'
 
     return (
         <div className="dashboard">
@@ -61,18 +58,6 @@ function Dashboard() {
                 <div className="stat-card">
                     <div className="stat-value">{projects.length}</div>
                     <div className="stat-label">Total Zines</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value">{publishedCount}</div>
-                    <div className="stat-label">Published</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value">{totalReads}</div>
-                    <div className="stat-label">Total Reads</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value">{publishedCount}/{maxPub}</div>
-                    <div className="stat-label">Publish Slots ({vpState.user?.is_premium ? 'Premium' : 'Free'})</div>
                 </div>
             </div>
             <div className="zine-grid">
@@ -87,20 +72,17 @@ function Dashboard() {
                 </div>
                 {projects.map((project, index) => {
                     const isPub = project._published || false
-                    const isSyncing = project._dirty && vpState.isSyncing
                     const badge = isPub ? 'badge-published' : 'badge-draft'
-                    const syncStatus = isSyncing ? '☁️↻' : (project._dirty ? '☁️⃠' : '☁️✓')
                     return (
                         <div key={project.id} className="zine-card" onClick={() => handleOpenProject(index)}>
                             <div className="zine-card-cover">
-                                <span className={`zine-card-badge ${badge}`}>{isPub ? '✓ Published' : isPub === null ? 'Syncing...' : 'Draft'}</span>
+                                <span className={`zine-card-badge ${badge}`}>{isPub ? '✓ Published' : 'Draft'}</span>
                                 <div className="cover-icon">📖</div>
                             </div>
                             <div className="zine-card-body">
                                 <h3>{project.title || 'Untitled Zine'}</h3>
                                 <div style={{ fontSize: '0.85em', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
                                     {project.pages?.length || 0} pages · {project.theme || 'classic'}
-                                    {isSyncing && ' (syncing...)'}
                                 </div>
                                 <div className="zine-card-actions">
                                     <button onClick={() => handleOpenProject(index)}>Edit</button>
