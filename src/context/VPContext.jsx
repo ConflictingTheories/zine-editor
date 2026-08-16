@@ -586,6 +586,11 @@ const VPProvider = ({ children }) => {
         // replace it when the source (or its play mode) actually changes.
         if (bgmRef.current && bgmRef.current._src === url) {
             if (typeof bgmRef.current.loop === 'boolean') bgmRef.current.loop = loop
+            // A previous reader lifecycle may have paused the shared player;
+            // navigating must resume it instead of treating it as already active.
+            if (typeof bgmRef.current.play === 'function' && bgmRef.current.paused) {
+                bgmRef.current.play().catch(() => { })
+            }
             return
         }
         stopBGM()
@@ -684,6 +689,12 @@ const VPProvider = ({ children }) => {
             bgmRef.current = null
         }
     }
+
+    // Audio belongs to the provider, so leaving the reader is the one place
+    // that should stop it. Page navigation never reaches this branch.
+    useEffect(() => {
+        if (vpState.currentView !== 'reader') stopBGM()
+    }, [vpState.currentView])
 
     const setBackgroundAudio = (src, name = 'Background audio', loop = true) => {
         if (!vpState.currentProject) return false

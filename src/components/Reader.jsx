@@ -145,9 +145,12 @@ function Reader() {
     const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
     const [toggledLabels, setToggledLabels] = useState(new Set())
     const project = currentProject
-    if (!project) return <div className="reader-empty">No project loaded</div>
-
-    const page = project.pages[pageIdx]
+    // Keep hooks unconditional. Preview can briefly render while the project
+    // changes; returning before the effects below would change hook order and
+    // crash React, leaving the preview blank.
+    const pageCount = project?.pages?.length || 0
+    const safePageIdx = pageCount ? Math.min(pageIdx, pageCount - 1) : 0
+    const page = project?.pages?.[safePageIdx]
 
     // BGM is owned by VPContext, not by an individual page component. Do not
     // stop it in the page effect cleanup: changing pages must not interrupt it.
@@ -156,15 +159,19 @@ function Reader() {
     const audioSrc = typeof backgroundAudio === 'string' ? backgroundAudio : backgroundAudio?.src
     const audioLoop = typeof backgroundAudio === 'object' ? backgroundAudio.loop !== false : true
     useEffect(() => {
+        // A page without its own audio inherits the already-playing project
+        // track. Never stop here: this effect runs on every page navigation.
         if (audioSrc) playBGM({ src: audioSrc, loop: audioLoop })
-        else stopBGM()
     }, [audioSrc, audioLoop])
 
-    // Stop only when leaving the reader entirely, not when navigating pages.
-    useEffect(() => () => stopBGM(), [])
+    useEffect(() => {
+        if (pageCount && pageIdx !== safePageIdx) setPageIdx(safePageIdx)
+    }, [pageCount, pageIdx, safePageIdx])
+
+    if (!project || !page) return <div className="reader-empty">No project loaded</div>
 
     const handleNext = () => {
-        let nextIdx = pageIdx + 1
+        let nextIdx = safePageIdx + 1
         while (nextIdx < project.pages.length) {
             const p = project.pages[nextIdx]
             if (!p.isLocked || unlockedPages.has(nextIdx)) {
@@ -176,7 +183,7 @@ function Reader() {
     }
 
     const handlePrev = () => {
-        let prevIdx = pageIdx - 1
+        let prevIdx = safePageIdx - 1
         while (prevIdx >= 0) {
             const p = project.pages[prevIdx]
             if (!p.isLocked || unlockedPages.has(prevIdx)) {
@@ -257,7 +264,7 @@ function Reader() {
                     else showView('discover')
                 }}>✕ Close</button>
                 <div style={styles.toolbarSpacer}></div>
-                <span>{pageIdx + 1} / {project.pages.length}</span>
+                <span>{safePageIdx + 1} / {project.pages.length}</span>
             </div>
 
             <div className="reader-canvas-wrap">
@@ -265,7 +272,7 @@ function Reader() {
                     {page.texture && (
                         <div style={styles.texture(page)} />
                     )}
-                    {page.elements.filter(e => !e.hidden).map(el => {
+                    {(page.elements || []).filter(e => !e.hidden).map(el => {
                         const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
                         return (
                             <div
