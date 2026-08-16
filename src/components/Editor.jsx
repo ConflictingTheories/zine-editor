@@ -47,6 +47,7 @@ function Editor() {
     const [gridOn, setGridOn] = useState(false)
     const [snapOn, setSnapOn] = useState(true)
     const [propTab, setPropTab] = useState('props')
+    const [audioLoop, setAudioLoop] = useState(true)
 
     const project = vpState.currentProject
 
@@ -161,8 +162,8 @@ function Editor() {
             if (!file) return
             const reader = new FileReader()
             reader.onload = () => {
-                if (scope === 'page') setPageAudio(pageIdx, reader.result, file.name)
-                else setBackgroundAudio(reader.result, file.name)
+                if (scope === 'page') setPageAudio(pageIdx, reader.result, file.name, audioLoop)
+                else setBackgroundAudio(reader.result, file.name, audioLoop)
             }
             reader.readAsDataURL(file)
         }
@@ -188,6 +189,15 @@ function Editor() {
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>🎨 Shader</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>💎 3D</button>
                     <button className="ed-tool" onClick={() => uploadAudio('project')}>♫ Background Audio</button>
+                    <select
+                        value={audioLoop ? 'loop' : 'once'}
+                        onChange={(e) => setAudioLoop(e.target.value === 'loop')}
+                        style={styles.orientationSelect}
+                        title="Background audio playback mode"
+                    >
+                        <option value="loop">Loop</option>
+                        <option value="once">Play once</option>
+                    </select>
                 </div>
                 <div className="ed-tool-group">
                     <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>⊞ Grid</button>

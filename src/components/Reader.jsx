@@ -149,11 +149,19 @@ function Reader() {
 
     const page = project.pages[pageIdx]
 
+    // BGM is owned by VPContext, not by an individual page component. Do not
+    // stop it in the page effect cleanup: changing pages must not interrupt it.
+    const pageAudio = page?.backgroundAudio || (page?.bgm ? { src: page.bgm, loop: true } : null)
+    const backgroundAudio = pageAudio || project?.backgroundAudio || null
+    const audioSrc = typeof backgroundAudio === 'string' ? backgroundAudio : backgroundAudio?.src
+    const audioLoop = typeof backgroundAudio === 'object' ? backgroundAudio.loop !== false : true
     useEffect(() => {
-        if (page?.bgm) playBGM(page.bgm)
+        if (audioSrc) playBGM({ src: audioSrc, loop: audioLoop })
         else stopBGM()
-        return () => stopBGM()
-    }, [pageIdx, page])
+    }, [audioSrc, audioLoop])
+
+    // Stop only when leaving the reader entirely, not when navigating pages.
+    useEffect(() => () => stopBGM(), [])
 
     const handleNext = () => {
         let nextIdx = pageIdx + 1

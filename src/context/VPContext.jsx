@@ -577,13 +577,22 @@ const VPProvider = ({ children }) => {
         setVpState(prev => ({ ...prev, templates }))
     }
 
-    const playBGM = (url) => {
-        if (bgmRef.current && bgmRef.current._src === url) return
-        stopBGM()
+    const playBGM = (source, options = {}) => {
+        const descriptor = typeof source === 'string' ? { src: source } : (source || {})
+        const url = descriptor.src
+        const loop = options.loop ?? descriptor.loop ?? true
         if (!url) return
+        // Keep the existing player alive while the reader changes pages. Only
+        // replace it when the source (or its play mode) actually changes.
+        if (bgmRef.current && bgmRef.current._src === url) {
+            if (typeof bgmRef.current.loop === 'boolean') bgmRef.current.loop = loop
+            return
+        }
+        stopBGM()
 
         // Handle synthesized ambient moods (gen:drone, gen:horror, etc.)
         if (url.startsWith('gen:')) {
+
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)()
                 const gainNode = ctx.createGain()
@@ -662,7 +671,7 @@ const VPProvider = ({ children }) => {
 
         // Normal audio URL
         const a = new Audio(url)
-        a.loop = true
+        a.loop = loop
         a.volume = 0.5
         a._src = url
         a.play().catch(() => { })
@@ -676,19 +685,19 @@ const VPProvider = ({ children }) => {
         }
     }
 
-    const setBackgroundAudio = (src, name = 'Background audio') => {
+    const setBackgroundAudio = (src, name = 'Background audio', loop = true) => {
         if (!vpState.currentProject) return false
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        project.backgroundAudio = src ? { src, name, loop: true } : null
+        project.backgroundAudio = src ? { src, name, loop: Boolean(loop) } : null
         updateCurrentProject(project)
         toast(src ? 'Background audio added' : 'Background audio removed', 'success')
         return true
     }
 
-    const setPageAudio = (pageIdx, src, name = 'Page audio') => {
+    const setPageAudio = (pageIdx, src, name = 'Page audio', loop = true) => {
         if (!vpState.currentProject?.pages?.[pageIdx]) return false
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        if (src) project.pages[pageIdx].backgroundAudio = { src, name, loop: true }
+        if (src) project.pages[pageIdx].backgroundAudio = { src, name, loop: Boolean(loop) }
         else delete project.pages[pageIdx].backgroundAudio
         updateCurrentProject(project)
         toast(src ? 'Page audio override added' : 'Page audio override removed', 'success')
