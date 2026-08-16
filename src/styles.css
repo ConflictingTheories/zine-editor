@@ -2641,3 +2641,42 @@ body.reader-active .topnav {
     gap: 6px;
     font-size: .85em;
 }
+/* Page templates */
+.template-modal { width: min(920px, 94vw); max-height: 88vh; overflow: auto; }
+.template-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border, #ddd); padding: 0 20px; }
+.template-tabs button { border: 0; background: transparent; padding: 12px 4px; cursor: pointer; }
+.template-tabs button.active { color: var(--accent, #8b0000); border-bottom: 2px solid currentColor; }
+.template-toolbar { display: flex; gap: 10px; padding: 16px 20px; }
+.template-toolbar input, .template-toolbar select, .template-save input { flex: 1; padding: 9px; border: 1px solid #ccc; border-radius: 4px; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; padding: 0 20px 20px; }
+.template-card { border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fff; }
+.template-preview { height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 1px solid #eee; margin-bottom: 10px; color: #333; }
+.template-preview small { margin-top: 8px; opacity: .65; }
+.template-card h3 { margin: 5px 0; font-size: 15px; }
+.template-card p { min-height: 34px; margin: 5px 0 10px; font-size: 12px; color: #666; }
+.template-card button, .template-save button, .template-managed button { cursor: pointer; padding: 7px 10px; border: 1px solid #bbb; background: #f5f5f5; border-radius: 4px; }
+.template-manager { padding: 20px; }
+.template-save { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+.template-save h3 { margin-right: auto; }
+.template-managed { display: flex; justify-content: space-between; padding: 12px; border-top: 1px solid #eee; }
+
+/* Template browser and manager */
+.template-modal { width: min(920px, 94vw); max-height: 88vh; overflow: auto; padding: 24px; }
+.template-modal .modal-header { display: flex; justify-content: space-between; align-items: center; }
+.template-modal .modal-header button { font-size: 24px; border: 0; background: transparent; cursor: pointer; }
+.template-tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--vp-border, #ddd); margin: 12px -24px 16px; padding: 0 24px; }
+.template-tabs button { border: 0; background: transparent; padding: 10px 0; cursor: pointer; }
+.template-tabs button.active { color: var(--vp-accent, #8b0000); border-bottom: 2px solid currentColor; }
+.template-toolbar { display: flex; gap: 10px; margin-bottom: 16px; }
+.template-toolbar input, .template-toolbar select, .template-save input { min-width: 0; flex: 1; padding: 9px; border: 1px solid var(--vp-border, #ccc); border-radius: 4px; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.template-card { border: 1px solid var(--vp-border, #ddd); border-radius: 6px; padding: 10px; }
+.template-preview { height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 1px solid #eee; color: #333; }
+.template-preview small { margin-top: 8px; opacity: .65; }
+.template-card h3 { margin: 8px 0 4px; font-size: 15px; }
+.template-card p { min-height: 34px; margin: 4px 0 10px; font-size: 12px; opacity: .75; }
+.template-card button, .template-save button, .template-managed button { cursor: pointer; padding: 7px 10px; border: 1px solid var(--vp-border, #bbb); background: var(--vp-glass-bg, #f5f5f5); border-radius: 4px; }
+.template-manager { padding-top: 4px; }
+.template-save { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+.template-save h3 { margin-right: auto; }
+.template-managed { display: flex; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--vp-border, #eee); }

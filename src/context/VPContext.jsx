@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID } from '../data/tutorialData.js'
+import { createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
 
 /**
  * VPContext
@@ -31,6 +32,7 @@ export const useVP = () => useContext(VPContext)
 const VPProvider = ({ children }) => {
     const [vpState, setVpState] = useState({
         projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
+        templates: getStoredTemplates(),
         published: [],
         currentProject: null,
         isPremium: false,
@@ -221,10 +223,13 @@ const VPProvider = ({ children }) => {
      * is resilient to storage errors (quota/denied) and is intentionally
      * silent on failure.
      */
-    const saveLocal = () => {
+    const saveLocal = (project = null) => {
         setVpState(prev => {
             try {
-                localStorage.setItem('vp_projects', JSON.stringify(prev.projects))
+                const projects = project
+                    ? prev.projects.map(p => p.id === project.id ? { ...project, _dirty: true } : p)
+                    : prev.projects
+                localStorage.setItem('vp_projects', JSON.stringify(projects))
             } catch (e) { }
             return prev
         })
@@ -537,22 +542,38 @@ const VPProvider = ({ children }) => {
         pushHistory(project)
     }
 
-    const addPage = () => {
-        if (!vpState.currentProject) return
+    const addPageFromTemplate = (template) => {
+        if (!vpState.currentProject) {
+            toast('Open a zine before adding a template page', 'error')
+            return false
+        }
         if (vpState.currentProject.pages.length >= 32) {
             toast('Max 32 pages', 'error')
-            return
+            return false
         }
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        const newPage = { id: Date.now(), elements: [], background: '#ffffff', texture: null }
-        project.pages.push(newPage)
+        const newPage = template ? createTemplatePage(template, project.theme || 'classic') : createTemplatePage(null)
+        project.pages = [...(project.pages || []), newPage]
         const pageIdx = project.pages.length - 1
-        setVpState(prev => ({
-            ...prev,
-            currentProject: project,
-            selection: { type: 'page', id: newPage.id, pageIdx }
-        }))
+        setVpState(prev => ({ ...prev, currentProject: project, selection: { type: 'page', id: newPage.id, pageIdx } }))
         pushHistory(project)
+        saveLocal(project)
+        toast(template ? 'Template page added' : 'Blank page added', 'success')
+        return true
+    }
+    const addPage = () => addPageFromTemplate(null)
+    const savePageAsTemplate = (name, pageIdx = vpState.selection?.pageIdx || 0) => {
+        const page = vpState.currentProject?.pages?.[pageIdx]
+        if (!page || !name?.trim()) return false
+        const templates = [...(vpState.templates || []), { id: `custom-${Date.now()}`, name: name.trim(), category: 'My Templates', description: 'Custom page template', themes: [], page: JSON.parse(JSON.stringify(page)) }]
+        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates))
+        setVpState(prev => ({ ...prev, templates }))
+        return true
+    }
+    const deleteTemplate = id => {
+        const templates = (vpState.templates || []).filter(t => t.id !== id)
+        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates))
+        setVpState(prev => ({ ...prev, templates }))
     }
 
     const playBGM = (url) => {
@@ -1233,6 +1254,9 @@ const VPProvider = ({ children }) => {
         updatePage,
         deleteElement,
         addPage,
+        addPageFromTemplate,
+        savePageAsTemplate,
+        deleteTemplate,
         deletePage,
         duplicatePage,
         duplicateElement,

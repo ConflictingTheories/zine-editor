@@ -6,6 +6,7 @@
 import React from 'react'
 import TopNav from './components/TopNav.jsx'
 import Modal from './components/Modal.jsx'
+import TemplateModal from './components/TemplateModal.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Editor from './components/Editor.jsx'
 import Reader from './components/Reader.jsx'
@@ -42,6 +43,7 @@ function App() {
                 {renderView()}
             </main>
             <Modal />
+            <TemplateModal />
             <VfxSystem />
             <Toast />
         </div>

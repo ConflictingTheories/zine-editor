@@ -40,7 +40,7 @@ const styles = {
 }
 
 function Editor() {
-    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, themes } = useVP()
+    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => updateVpState({ selection: { type: 'page', id: vpState.currentProject?.pages[idx]?.id, pageIdx: idx } })
     const [zoom, setZoom] = useState(100)
@@ -206,7 +206,8 @@ function Editor() {
             <div className="ed-left">
                 <div className="ed-panel-section">
                     <h4>Pages</h4>
-                    <button className="ed-panel-btn" onClick={addPage}>+ Add Page</button>
+                    <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
+                    <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Template Page</button>
                     <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
                     <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
                     <div className="page-thumbs" id="pageThumbs">
@@ -223,8 +224,9 @@ function Editor() {
                     </div>
                 </div>
                 <div className="ed-panel-section">
-                    <h4>Templates</h4>
-                    <button className="ed-panel-btn" onClick={() => insertTemplate('cover')}>📕 Cover Page</button>
+                    <h4>Quick Templates</h4>
+                    <button className="ed-panel-btn" onClick={() => showModal('templateModal', 'browse')}>Browse all templates</button>
+                    <button className="ed-panel-btn" onClick={() => insertTemplate('cover')}>📕 Classic Cover</button>
                     <button className="ed-panel-btn" onClick={() => insertTemplate('content')}>📄 Content Page</button>
                     <button className="ed-panel-btn" onClick={() => insertTemplate('back')}>📗 Back Cover</button>
                 </div>
