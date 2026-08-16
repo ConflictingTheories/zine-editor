@@ -258,7 +258,7 @@ function Editor() {
                                 className={`layer-item ${vpState.selection?.id === el.id ? 'active' : ''}`}
                                 onClick={() => updateVpState({ selection: { type: 'element', id: el.id, pageIdx } })}
                             >
-                                <span className="layer-name">{el.locked ? '🔒 ' : ''}{el.type === 'text' ? (el.content || '').substring(0, 15) : el.type}</span>
+                                <span className="layer-name">{el.locked ? '🔒 ' : ''}{el.type === 'text' ? String(el.content ?? '').substring(0, 15) : el.type}</span>
                                 <button className="layer-btn" onClick={(e) => {
                                     e.stopPropagation()
                                     updateElement(pageIdx, el.id, { hidden: !el.hidden })

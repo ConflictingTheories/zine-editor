@@ -1,0 +1,107 @@
+client.ts:19 [vite] connecting...
+client.ts:155 [vite] connected.
+constants.js:98 [SVRN Publishing] 1.0.0
+constants.js:99 API: /api
+An unknown error occurred when fetching the script.
+main.jsx:33 SW registration failed:  AbortError: Failed to register a ServiceWorker for scope ('http://localhost:5173/') with script ('http://localhost:5173/sw.js'): Worker disallowed
+Editor.jsx:261 Uncaught TypeError: (el.content || "").substring is not a function
+    at Editor.jsx:261:127
+    at Array.map (<anonymous>)
+    at Editor (Editor.jsx:255:70)
+    at renderWithHooks (chunk-IZ7ETGX4.js?v=8969dbd6:11568:26)
+    at mountIndeterminateComponent (chunk-IZ7ETGX4.js?v=8969dbd6:14946:21)
+    at beginWork (chunk-IZ7ETGX4.js?v=8969dbd6:15934:22)
+    at HTMLUnknownElement.callCallback2 (chunk-IZ7ETGX4.js?v=8969dbd6:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-IZ7ETGX4.js?v=8969dbd6:3699:24)
+    at invokeGuardedCallback (chunk-IZ7ETGX4.js?v=8969dbd6:3733:39)
+    at beginWork$1 (chunk-IZ7ETGX4.js?v=8969dbd6:19793:15)
+(anonymous) @ Editor.jsx:261
+Editor @ Editor.jsx:255
+renderWithHooks @ chunk-IZ7ETGX4.js?v=8969dbd6:11568
+mountIndeterminateComponent @ chunk-IZ7ETGX4.js?v=8969dbd6:14946
+beginWork @ chunk-IZ7ETGX4.js?v=8969dbd6:15934
+callCallback2 @ chunk-IZ7ETGX4.js?v=8969dbd6:3674
+invokeGuardedCallbackDev @ chunk-IZ7ETGX4.js?v=8969dbd6:3699
+invokeGuardedCallback @ chunk-IZ7ETGX4.js?v=8969dbd6:3733
+beginWork$1 @ chunk-IZ7ETGX4.js?v=8969dbd6:19793
+performUnitOfWork @ chunk-IZ7ETGX4.js?v=8969dbd6:19226
+workLoopSync @ chunk-IZ7ETGX4.js?v=8969dbd6:19165
+renderRootSync @ chunk-IZ7ETGX4.js?v=8969dbd6:19144
+performSyncWorkOnRoot @ chunk-IZ7ETGX4.js?v=8969dbd6:18902
+flushSyncCallbacks @ chunk-IZ7ETGX4.js?v=8969dbd6:9135
+(anonymous) @ chunk-IZ7ETGX4.js?v=8969dbd6:18655
+Editor.jsx:261 Uncaught TypeError: (el.content || "").substring is not a function
+    at Editor.jsx:261:127
+    at Array.map (<anonymous>)
+    at Editor (Editor.jsx:255:70)
+    at renderWithHooks (chunk-IZ7ETGX4.js?v=8969dbd6:11568:26)
+    at mountIndeterminateComponent (chunk-IZ7ETGX4.js?v=8969dbd6:14946:21)
+    at beginWork (chunk-IZ7ETGX4.js?v=8969dbd6:15934:22)
+    at HTMLUnknownElement.callCallback2 (chunk-IZ7ETGX4.js?v=8969dbd6:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-IZ7ETGX4.js?v=8969dbd6:3699:24)
+    at invokeGuardedCallback (chunk-IZ7ETGX4.js?v=8969dbd6:3733:39)
+    at beginWork$1 (chunk-IZ7ETGX4.js?v=8969dbd6:19793:15)
+(anonymous) @ Editor.jsx:261
+Editor @ Editor.jsx:255
+renderWithHooks @ chunk-IZ7ETGX4.js?v=8969dbd6:11568
+mountIndeterminateComponent @ chunk-IZ7ETGX4.js?v=8969dbd6:14946
+beginWork @ chunk-IZ7ETGX4.js?v=8969dbd6:15934
+callCallback2 @ chunk-IZ7ETGX4.js?v=8969dbd6:3674
+invokeGuardedCallbackDev @ chunk-IZ7ETGX4.js?v=8969dbd6:3699
+invokeGuardedCallback @ chunk-IZ7ETGX4.js?v=8969dbd6:3733
+beginWork$1 @ chunk-IZ7ETGX4.js?v=8969dbd6:19793
+performUnitOfWork @ chunk-IZ7ETGX4.js?v=8969dbd6:19226
+workLoopSync @ chunk-IZ7ETGX4.js?v=8969dbd6:19165
+renderRootSync @ chunk-IZ7ETGX4.js?v=8969dbd6:19144
+recoverFromConcurrentError @ chunk-IZ7ETGX4.js?v=8969dbd6:18764
+performSyncWorkOnRoot @ chunk-IZ7ETGX4.js?v=8969dbd6:18907
+flushSyncCallbacks @ chunk-IZ7ETGX4.js?v=8969dbd6:9135
+(anonymous) @ chunk-IZ7ETGX4.js?v=8969dbd6:18655
+chunk-IZ7ETGX4.js?v=8969dbd6:14052 The above error occurred in the <Editor> component:
+
+    at Editor (http://localhost:5173/src/components/Editor.jsx?t=1786862124576:47:318)
+    at main
+    at div
+    at App (http://localhost:5173/src/App.jsx?t=1786862124576:30:34)
+    at XRPayIDProvider (http://localhost:5173/src/context/XRPayIDContext.jsx?t=1786862124576:26:28)
+    at VPProvider (http://localhost:5173/src/context/VPContext.jsx?t=1786862124576:28:23)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+logCapturedError @ chunk-IZ7ETGX4.js?v=8969dbd6:14052
+update.callback @ chunk-IZ7ETGX4.js?v=8969dbd6:14072
+callCallback @ chunk-IZ7ETGX4.js?v=8969dbd6:11268
+commitUpdateQueue @ chunk-IZ7ETGX4.js?v=8969dbd6:11285
+commitLayoutEffectOnFiber @ chunk-IZ7ETGX4.js?v=8969dbd6:17115
+commitLayoutMountEffects_complete @ chunk-IZ7ETGX4.js?v=8969dbd6:18008
+commitLayoutEffects_begin @ chunk-IZ7ETGX4.js?v=8969dbd6:17997
+commitLayoutEffects @ chunk-IZ7ETGX4.js?v=8969dbd6:17948
+commitRootImpl @ chunk-IZ7ETGX4.js?v=8969dbd6:19381
+commitRoot @ chunk-IZ7ETGX4.js?v=8969dbd6:19305
+performSyncWorkOnRoot @ chunk-IZ7ETGX4.js?v=8969dbd6:18923
+flushSyncCallbacks @ chunk-IZ7ETGX4.js?v=8969dbd6:9135
+(anonymous) @ chunk-IZ7ETGX4.js?v=8969dbd6:18655
+chunk-IZ7ETGX4.js?v=8969dbd6:9145 Uncaught TypeError: (el.content || "").substring is not a function
+    at Editor.jsx:261:127
+    at Array.map (<anonymous>)
+    at Editor (Editor.jsx:255:70)
+    at renderWithHooks (chunk-IZ7ETGX4.js?v=8969dbd6:11568:26)
+    at mountIndeterminateComponent (chunk-IZ7ETGX4.js?v=8969dbd6:14946:21)
+    at beginWork (chunk-IZ7ETGX4.js?v=8969dbd6:15934:22)
+    at beginWork$1 (chunk-IZ7ETGX4.js?v=8969dbd6:19781:22)
+    at performUnitOfWork (chunk-IZ7ETGX4.js?v=8969dbd6:19226:20)
+    at workLoopSync (chunk-IZ7ETGX4.js?v=8969dbd6:19165:13)
+    at renderRootSync (chunk-IZ7ETGX4.js?v=8969dbd6:19144:15)
+(anonymous) @ Editor.jsx:261
+Editor @ Editor.jsx:255
+renderWithHooks @ chunk-IZ7ETGX4.js?v=8969dbd6:11568
+mountIndeterminateComponent @ chunk-IZ7ETGX4.js?v=8969dbd6:14946
+beginWork @ chunk-IZ7ETGX4.js?v=8969dbd6:15934
+beginWork$1 @ chunk-IZ7ETGX4.js?v=8969dbd6:19781
+performUnitOfWork @ chunk-IZ7ETGX4.js?v=8969dbd6:19226
+workLoopSync @ chunk-IZ7ETGX4.js?v=8969dbd6:19165
+renderRootSync @ chunk-IZ7ETGX4.js?v=8969dbd6:19144
+recoverFromConcurrentError @ chunk-IZ7ETGX4.js?v=8969dbd6:18764
+performSyncWorkOnRoot @ chunk-IZ7ETGX4.js?v=8969dbd6:18907
+flushSyncCallbacks @ chunk-IZ7ETGX4.js?v=8969dbd6:9135
+(anonymous) @ chunk-IZ7ETGX4.js?v=8969dbd6:18655

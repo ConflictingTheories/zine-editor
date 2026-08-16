@@ -4,7 +4,8 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
-import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID } from '../data/tutorialData.js'
+import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID, DEFAULT_ZINE_IDS } from '../data/tutorialData.js'
+import { getAdditionalDefaultZines } from '../data/defaultZines.js'
 import { createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
 
 /**
@@ -20,6 +21,16 @@ import { createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '..
  * methods documented below.
  */
 
+const normalizeProject = project => ({
+    ...project,
+    pages: (project.pages || []).map(page => ({
+        ...page,
+        elements: (page.elements || []).map(element => element.type === 'text'
+            ? { ...element, content: String(element.content ?? '') }
+            : element)
+    }))
+})
+
 const VPContext = createContext()
 
 /**
@@ -31,7 +42,12 @@ export const useVP = () => useContext(VPContext)
 
 const VPProvider = ({ children }) => {
     const [vpState, setVpState] = useState({
-        projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
+        projects: (() => {
+            try {
+                const stored = JSON.parse(localStorage.getItem('vp_projects') || '[]')
+                return Array.isArray(stored) ? stored.map(normalizeProject) : []
+            } catch { return [] }
+        })(),
         templates: getStoredTemplates(),
         published: [],
         currentProject: null,
@@ -241,7 +257,7 @@ const VPProvider = ({ children }) => {
         const needsSeed = seedVersion !== String(EXAMPLE_SEED_VERSION)
 
         if (!stored) {
-            const initial = [getTutorialData()]
+            const initial = [getTutorialData(), ...getAdditionalDefaultZines()]
             setVpState(prev => ({ ...prev, projects: initial }))
             localStorage.setItem('vp_projects', JSON.stringify(initial))
             localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
@@ -254,9 +270,9 @@ const VPProvider = ({ children }) => {
             const projects = JSON.parse(stored)
             const example = getTutorialData()
             const withoutOld = projects.filter(p =>
-                p.id !== EXAMPLE_PROJECT_ID && p.id !== 'tutorial_zine'
+                !DEFAULT_ZINE_IDS.includes(p.id) && p.id !== 'tutorial_zine'
             )
-            const next = [example, ...withoutOld]
+            const next = [example, ...getAdditionalDefaultZines(), ...withoutOld]
             setVpState(prev => ({ ...prev, projects: next }))
             localStorage.setItem('vp_projects', JSON.stringify(next))
             localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
@@ -1321,6 +1337,62 @@ const VPProvider = ({ children }) => {
             {children}
         </VPContext.Provider>
     )
+}
+
+export { VPContext, VPProvider }
+addAsset,
+    publishZine,
+    themes,
+    setUiTheme,
+    toggleUiTheme
+    }
+
+return (
+    <VPContext.Provider value={value}>
+        {children}
+    </VPContext.Provider>
+)
+}
+
+export { VPContext, VPProvider }
+themes,
+    setUiTheme,
+    toggleUiTheme
+    }
+
+return (
+    <VPContext.Provider value={value}>
+        {children}
+    </VPContext.Provider>
+)
+}
+
+export { VPContext, VPProvider }
+getAssets,
+    addAsset,
+    publishZine,
+    themes,
+    setUiTheme,
+    toggleUiTheme
+    }
+
+return (
+    <VPContext.Provider value={value}>
+        {children}
+    </VPContext.Provider>
+)
+}
+
+export { VPContext, VPProvider }
+}
+
+export { VPContext, VPProvider }
+}
+
+export { VPContext, VPProvider }
+}
+
+export { VPContext, VPProvider }
 }
 
 export { VPContext, VPProvider }
