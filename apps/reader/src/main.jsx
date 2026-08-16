@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { unpackSvrn } from '../../../packages/svrn-format/src/index.js'
 import { SvrnNodeClient } from '../../../packages/svrn-node-client/src/index.js'
@@ -149,6 +149,8 @@ function App() {
   const [unlockedPages, setUnlockedPages] = useState(new Set())
   const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
   const [scale, setScale] = useState(1)
+  const audioRef = useRef(null)
+  const audioSourceRef = useRef(null)
 
   const refresh = async () => setIssues(await all('issues'))
 
@@ -259,6 +261,24 @@ function App() {
 
   const current = project?.pages?.[page]
   const currentAudio = current?.backgroundAudio?.src || project?.backgroundAudio?.src
+  const resolvedAudio = currentAudio ? resolveAsset(currentAudio) : ''
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !resolvedAudio) return
+    if (audioSourceRef.current !== resolvedAudio) {
+      audio.src = resolvedAudio
+      audioSourceRef.current = resolvedAudio
+      audio.load()
+    }
+    audio.play().catch(() => {})
+    const resume = () => { audio.muted = false; audio.play().catch(() => {}) }
+    window.addEventListener('pointerdown', resume, { once: true })
+    window.addEventListener('keydown', resume, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', resume)
+      window.removeEventListener('keydown', resume)
+    }
+  }, [resolvedAudio])
   const advance = (delta, absolute = false) => {
     let next = absolute ? delta : page + Math.sign(delta)
     const length = project?.pages.length || 1
@@ -347,7 +367,7 @@ function App() {
             {!current ? <p>Import a zine or subscribe to a publishing node.</p> : <>
               <h2>{project.title}</h2>
               {(project.series || project.volume || project.issue) && <p className="issue-meta">{[project.series, project.volume && `Volume ${project.volume}`, project.issue && `Issue ${project.issue}`].filter(Boolean).join(' · ')}</p>}
-              {currentAudio && <audio key={currentAudio} src={resolveAsset(currentAudio)} controls loop style={{ maxWidth: '100%', marginBottom: 12 }} />}
+              {resolvedAudio && <audio ref={audioRef} autoPlay loop playsInline muted aria-hidden="true" style={{ display: 'none' }} />}
               <div id="canvasWrap" className="reader-canvas-wrap">
                 <div className="page" style={{ position: 'relative', background: current.background, width: current.orientation === 'landscape' ? 816 : 528, height: current.orientation === 'landscape' ? 528 : 816, overflow: 'hidden', transform: `scale(${scale})` }}>
                   {current.texture && (
