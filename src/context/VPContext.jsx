@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID, DEFAULT_ZINE_IDS } from '../data/tutorialData.js'
 import { getAdditionalDefaultZines } from '../data/defaultZines.js'
 import { createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
+import { packSvrn } from '../../packages/svrn-format/src/index.js'
 
 /**
  * VPContext
@@ -907,6 +908,19 @@ const VPProvider = ({ children }) => {
         return map[type] || []
     }
 
+    const publishToNode = async (nodeUrl, nodeToken = vpState.token) => {
+        if (!vpState.currentProject) throw new Error('No project open')
+        if (!nodeUrl) throw new Error('Publishing node URL is required')
+        const { archive } = await packSvrn(vpState.currentProject, { baseUrl: window.location.href })
+        const response = await fetch(`${nodeUrl.replace(/\/$/, '')}/svrn/v1/issues`, {
+            method: 'POST',
+            headers: { ...(nodeToken ? { Authorization: `Bearer ${nodeToken}` } : {}), 'Content-Type': 'application/vnd.svrn+zip' },
+            body: new Blob([archive], { type: 'application/vnd.svrn+zip' })
+        })
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`)
+        return response.json()
+    }
+
     const publishZine = async (formData) => {
         if (!vpState.currentProject) {
             toast('No project open', 'error')
@@ -1315,6 +1329,7 @@ const VPProvider = ({ children }) => {
         getAssets,
         addAsset,
         publishZine,
+        publishToNode,
         themes,
         setUiTheme,
         toggleUiTheme

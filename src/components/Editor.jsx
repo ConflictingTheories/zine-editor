@@ -42,7 +42,12 @@ const styles = {
 function Editor() {
     const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
-    const setCurrentPageIdx = (idx) => updateVpState({ selection: { type: 'page', id: vpState.currentProject?.pages[idx]?.id, pageIdx: idx } })
+    const setCurrentPageIdx = (idx) => {
+        const pages = vpState.currentProject?.pages || []
+        if (!pages.length) return
+        const safeIdx = Math.min(Math.max(idx, 0), pages.length - 1)
+        updateVpState({ selection: { type: 'page', id: pages[safeIdx]?.id, pageIdx: safeIdx } })
+    }
     const [zoom, setZoom] = useState(100)
     const [gridOn, setGridOn] = useState(false)
     const [snapOn, setSnapOn] = useState(true)
@@ -50,24 +55,20 @@ function Editor() {
     const [audioLoop, setAudioLoop] = useState(true)
 
     const project = vpState.currentProject
-
-    if (!project) {
-        return <div className="editor-empty">No project selected. Create or open a zine from the Dashboard.</div>
-    }
-
-
-    const currentPage = project.pages[pageIdx]
-    const themeStatus = themes[project.theme || 'classic']?.status || 'STABLE'
+    const pages = project?.pages || []
+    const safePageIdx = pages.length ? Math.min(Math.max(pageIdx, 0), pages.length - 1) : 0
+    const currentPage = pages[safePageIdx] || { id: 'empty-page', elements: [], background: '#fff', orientation: 'portrait' }
+    const themeStatus = themes[project?.theme || 'classic']?.status || 'STABLE'
 
     useEffect(() => {
         const onKey = (e) => {
-            if (!project) return
+            if (!project || !pages.length) return
             const tag = e.target?.tagName
             const editing = e.target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 
             if (e.shiftKey && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                 const selection = vpState.selection
-                const page = project.pages[pageIdx]
+                const page = pages[safePageIdx]
                 const element = selection?.type === 'element' && page?.elements?.find(el => el.id === selection.id)
                 if (element) {
                     e.preventDefault()
@@ -94,7 +95,17 @@ function Editor() {
         }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
-    }, [project, pageIdx, currentPage?.id, undo, redo, copyElement, pasteElement, saveProject, deleteElement])
+    }, [project, pages, safePageIdx, currentPage?.id, undo, redo, copyElement, pasteElement, saveProject, deleteElement])
+
+    useEffect(() => {
+        if (pages.length && pageIdx !== safePageIdx) {
+            updateVpState({ selection: { type: 'page', id: pages[safePageIdx]?.id, pageIdx: safePageIdx } })
+        }
+    }, [pages.length, pageIdx, safePageIdx])
+
+    if (!project || !pages.length) {
+        return <div className="editor-empty">No project selected. Create or open a zine from the Dashboard.</div>
+    }
 
     const handleAddText = () => {
         addElement(pageIdx, {
@@ -139,7 +150,7 @@ function Editor() {
 
     const handleZoomFit = () => {
         const wrap = document.getElementById('canvasWrap')
-        if (wrap) {
+        if (wrap && currentPage) {
             const canvas = wrap.querySelector('.ed-canvas')
             if (canvas) {
                 const isLandscape = currentPage?.orientation === 'landscape'
@@ -240,7 +251,7 @@ function Editor() {
                     <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio Override</button>
                     {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Stop / Remove Audio</button>}
                     <div className="page-thumbs" id="pageThumbs">
-                        {project.pages.map((p, i) => (
+                        {pages.map((p, i) => (
                             <div
                                 key={p.id}
                                 className={`page-thumb ${i === pageIdx ? 'active' : ''}`}
@@ -301,7 +312,7 @@ function Editor() {
                 </div>
                 <div className="ed-canvas-wrap" id="canvasWrap">
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}>
-                        <Canvas page={currentPage} pageIdx={pageIdx} snapOn={snapOn} gridOn={gridOn} zoom={zoom} />
+                        <Canvas page={currentPage} pageIdx={safePageIdx} snapOn={snapOn} gridOn={gridOn} zoom={zoom} />
                     </div>
                 </div>
             </div>
@@ -320,10 +331,10 @@ function Editor() {
 
             {/* Footer */}
             <div className="ed-footer">
-                <span>Page <b id="pageNum">{pageIdx + 1}</b> of <b id="pageTotal">{project.pages.length}</b></span>
+                <span>Page <b id="pageNum">{safePageIdx + 1}</b> of <b id="pageTotal">{pages.length}</b></span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.max(0, pageIdx - 1))}>◀ Prev</button>
-                    <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.min(project.pages.length - 1, pageIdx + 1))}>Next ▶</button>
+                    <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.max(0, safePageIdx - 1))}>◀ Prev</button>
+                    <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.min(pages.length - 1, safePageIdx + 1))}>Next ▶</button>
                 </div>
                 <span className="status-text" id="statusText">REALITY: {themeStatus}</span>
             </div>

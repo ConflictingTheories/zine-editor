@@ -107,9 +107,15 @@ const authenticateToken = (req, res, next) => {
 // this server can be deployed as a standalone SVRN node.
 app.get('/.well-known/svrn-node.json', (req, res) => {
     res.json({ protocolVersion: '1.0', name: process.env.SVRN_NODE_NAME || 'SVRN Publishing Node',
-        endpoints: { catalog: '/svrn/v1/catalog', feed: '/svrn/v1/feed', packages: '/svrn/v1/issues/:id/package' },
-        access: { publicCatalog: true, bearerProfiles: true }, capabilities: ['package-hosting', 'html-view'] });
+        endpoints: { catalog: '/svrn/v1/catalog', search: '/svrn/v1/search', feed: '/svrn/v1/feed', packages: '/svrn/v1/issues/:id/package', profile: '/api/profile' },
+        access: { publicCatalog: true, bearerProfiles: true }, capabilities: ['package-hosting', 'html-view', 'search', 'profiles', 'subscriptions'] });
 });
+
+app.get('/svrn/v1/search', (req, res) => {
+    const q = String(req.query.q || '').toLowerCase()
+    const items = readSvrnIndex().filter(issue => !q || [issue.title, issue.author, issue.description, ...(issue.tags || [])].join(' ').toLowerCase().includes(q))
+    res.json({ items: items.slice(0, 100) })
+})
 
 app.get('/svrn/v1/catalog', (req, res) => {
     const catalog = readSvrnIndex().map(({ id, title, author, description, tags, publishedAt, size, sha256 }) =>
@@ -178,6 +184,48 @@ app.get('/svrn/v1/issues/:id/view', (req, res) => {
 });
 
 // API Routes
+
+// Federated profile and node subscription APIs
+app.get('/api/profile/:username', async (req, res) => {
+    const profile = await db('users').select('id', 'username', 'display_name', 'bio', 'avatar_url', 'profile_url', 'created_at').where({ username: req.params.username }).first()
+    if (!profile) return res.status(404).json({ error: 'Profile not found' })
+    res.json(profile)
+})
+
+app.get('/api/profile', authenticateToken, async (req, res) => {
+    const profile = await db('users').select('id', 'username', 'email', 'display_name', 'bio', 'avatar_url', 'profile_url', 'created_at').where({ id: req.user.id }).first()
+    res.json(profile)
+})
+
+app.put('/api/profile', authenticateToken, async (req, res) => {
+    const { display_name, bio, avatar_url, profile_url } = req.body
+    await db('users').where({ id: req.user.id }).update({ display_name, bio, avatar_url, profile_url })
+    res.json(await db('users').select('id', 'username', 'email', 'display_name', 'bio', 'avatar_url', 'profile_url', 'created_at').where({ id: req.user.id }).first())
+})
+
+app.get('/api/search', async (req, res) => {
+    const q = String(req.query.q || '').trim()
+    if (!q) return res.json({ items: [] })
+    const items = await db('zines').where({ is_published: 1 }).andWhere(builder => builder.where('title', 'like', `%${q}%`).orWhere('author_name', 'like', `%${q}%`).orWhere('tags', 'like', `%${q}%`)).orderBy('published_at', 'desc').limit(50)
+    res.json({ items })
+})
+
+app.get('/api/node-subscriptions', authenticateToken, async (req, res) => {
+    const rows = await db('node_subscriptions').where({ user_id: req.user.id })
+    res.json(rows.map(row => ({ ...row, credentials: row.credentials_json ? JSON.parse(row.credentials_json) : null })))
+})
+
+app.post('/api/node-subscriptions', authenticateToken, async (req, res) => {
+    const { node_url, node_name, credentials } = req.body
+    if (!node_url) return res.status(400).json({ error: 'node_url is required' })
+    await db('node_subscriptions').insert({ user_id: req.user.id, node_url: node_url.replace(/\/$/, ''), node_name: node_name || null, credentials_json: credentials ? JSON.stringify(credentials) : null }).onConflict(['user_id', 'node_url']).merge()
+    res.status(201).json({ status: 'subscribed' })
+})
+
+app.delete('/api/node-subscriptions/:id', authenticateToken, async (req, res) => {
+    await db('node_subscriptions').where({ id: req.params.id, user_id: req.user.id }).del()
+    res.json({ status: 'unsubscribed' })
+})
 
 // Register
 app.post('/api/auth/register', async (req, res) => {

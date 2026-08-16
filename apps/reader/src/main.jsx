@@ -144,6 +144,8 @@ function App() {
   const [nodeUrl, setNodeUrl] = useState('')
   const [nodeToken, setNodeToken] = useState('')
   const [message, setMessage] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
   const [toggledLabels, setToggledLabels] = useState(new Set())
   const [activeVfx, setActiveVfx] = useState(null)
   const [unlockedPages, setUnlockedPages] = useState(new Set())
@@ -203,6 +205,21 @@ function App() {
       setNodeUrl('')
       setNodeToken('')
       setMessage(`Subscribed to ${discovery.name}`)
+    } catch (error) { setMessage(error.message) }
+  }
+
+  const search = async () => {
+    try {
+      const profiles = await all('profiles')
+      const results = []
+      for (const profile of profiles) {
+        const client = new SvrnNodeClient(profile.url, profile.token)
+        const result = await client.catalog()
+        const q = searchQuery.toLowerCase()
+        results.push(...(result.items || []).filter(item => !q || JSON.stringify(item).toLowerCase().includes(q)).map(item => ({ ...item, nodeUrl: profile.url })))
+      }
+      setSearchResults(results)
+      setMessage(`${results.length} result(s) found across subscribed nodes.`)
     } catch (error) { setMessage(error.message) }
   }
 
@@ -356,6 +373,9 @@ function App() {
           <input value={nodeToken} onChange={e => setNodeToken(e.target.value)} placeholder="Node bearer token (optional)" />
           <button onClick={subscribe}>Subscribe</button>
           <button onClick={sync}>Sync</button>
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search subscribed nodes" />
+          <button onClick={search}>Search</button>
+          {searchResults.length > 0 && <span className="notice">{searchResults.slice(0, 3).map(item => item.title || item.id).join(' · ')}</span>}
         </header>
         {message && <p className="notice">{message}</p>}
         <section className="layout">
