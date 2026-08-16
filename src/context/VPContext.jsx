@@ -21,16 +21,6 @@ import { createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '..
  * methods documented below.
  */
 
-const normalizeProject = project => ({
-    ...project,
-    pages: (project.pages || []).map(page => ({
-        ...page,
-        elements: (page.elements || []).map(element => element.type === 'text'
-            ? { ...element, content: String(element.content ?? '') }
-            : element)
-    }))
-})
-
 const VPContext = createContext()
 
 /**
@@ -42,12 +32,7 @@ export const useVP = () => useContext(VPContext)
 
 const VPProvider = ({ children }) => {
     const [vpState, setVpState] = useState({
-        projects: (() => {
-            try {
-                const stored = JSON.parse(localStorage.getItem('vp_projects') || '[]')
-                return Array.isArray(stored) ? stored.map(normalizeProject) : []
-            } catch { return [] }
-        })(),
+        projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
         templates: getStoredTemplates(),
         published: [],
         currentProject: null,
@@ -586,25 +571,10 @@ const VPProvider = ({ children }) => {
         setVpState(prev => ({ ...prev, templates }))
         return true
     }
-    const updateTemplates = templates => {
+    const deleteTemplate = id => {
+        const templates = (vpState.templates || []).filter(t => t.id !== id)
         localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates))
         setVpState(prev => ({ ...prev, templates }))
-    }
-
-    const renameTemplate = (id, name) => {
-        const value = name?.trim()
-        if (!value) return false
-        updateTemplates((vpState.templates || []).map(t => t.id === id ? { ...t, name: value } : t))
-        return true
-    }
-
-    const updateTemplate = (id, updates) => {
-        updateTemplates((vpState.templates || []).map(t => t.id === id ? { ...t, ...updates, id: t.id, page: updates.page || t.page } : t))
-        return true
-    }
-
-    const deleteTemplate = id => {
-        updateTemplates((vpState.templates || []).filter(t => t.id !== id))
     }
 
     const playBGM = (url) => {
@@ -1307,8 +1277,6 @@ const VPProvider = ({ children }) => {
         addPageFromTemplate,
         savePageAsTemplate,
         deleteTemplate,
-        renameTemplate,
-        updateTemplate,
         deletePage,
         duplicatePage,
         duplicateElement,
@@ -1337,62 +1305,6 @@ const VPProvider = ({ children }) => {
             {children}
         </VPContext.Provider>
     )
-}
-
-export { VPContext, VPProvider }
-addAsset,
-    publishZine,
-    themes,
-    setUiTheme,
-    toggleUiTheme
-    }
-
-return (
-    <VPContext.Provider value={value}>
-        {children}
-    </VPContext.Provider>
-)
-}
-
-export { VPContext, VPProvider }
-themes,
-    setUiTheme,
-    toggleUiTheme
-    }
-
-return (
-    <VPContext.Provider value={value}>
-        {children}
-    </VPContext.Provider>
-)
-}
-
-export { VPContext, VPProvider }
-getAssets,
-    addAsset,
-    publishZine,
-    themes,
-    setUiTheme,
-    toggleUiTheme
-    }
-
-return (
-    <VPContext.Provider value={value}>
-        {children}
-    </VPContext.Provider>
-)
-}
-
-export { VPContext, VPProvider }
-}
-
-export { VPContext, VPProvider }
-}
-
-export { VPContext, VPProvider }
-}
-
-export { VPContext, VPProvider }
 }
 
 export { VPContext, VPProvider }

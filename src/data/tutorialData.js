@@ -3,7 +3,7 @@
 
 const gen = () => 'da_' + Math.random().toString(36).substr(2, 9)
 
-export const EXAMPLE_SEED_VERSION = 5
+export const EXAMPLE_SEED_VERSION = 7
 export const EXAMPLE_PROJECT_ID = 'devils_atlas_example'
 export const DEFAULT_ZINE_IDS = ['devils_atlas_example', 'operation_popeye', 'neon_umbra']
 
