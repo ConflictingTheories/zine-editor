@@ -40,7 +40,7 @@ const styles = {
 }
 
 function Editor() {
-    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, themes } = useVP()
+    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => updateVpState({ selection: { type: 'page', id: vpState.currentProject?.pages[idx]?.id, pageIdx: idx } })
     const [zoom, setZoom] = useState(100)
@@ -152,6 +152,22 @@ function Editor() {
 
     const updatePageOrientation = (orientation) => updatePage(pageIdx, { orientation })
 
+    const uploadAudio = (scope = 'project') => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'audio/*'
+        input.onchange = (event) => {
+            const file = event.target.files?.[0]
+            if (!file) return
+            const reader = new FileReader()
+            reader.onload = () => {
+                if (scope === 'page') setPageAudio(pageIdx, reader.result, file.name)
+                else setBackgroundAudio(reader.result, file.name)
+            }
+            reader.readAsDataURL(file)
+        }
+        input.click()
+    }
 
     return (
         <div className="editor" id="editorContainer">
@@ -171,6 +187,7 @@ function Editor() {
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>✦ Symbol</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>🎨 Shader</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>💎 3D</button>
+                    <button className="ed-tool" onClick={() => uploadAudio('project')}>♫ Background Audio</button>
                 </div>
                 <div className="ed-tool-group">
                     <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>⊞ Grid</button>
@@ -210,6 +227,8 @@ function Editor() {
                     <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Template Page</button>
                     <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
                     <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
+                    <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio Override</button>
+                    {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Stop / Remove Audio</button>}
                     <div className="page-thumbs" id="pageThumbs">
                         {project.pages.map((p, i) => (
                             <div

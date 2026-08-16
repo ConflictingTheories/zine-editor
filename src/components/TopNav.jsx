@@ -23,10 +23,6 @@ function TopNav() {
         showView(view)
     }
 
-    const handleAuth = () => {
-        showModal('authModal')
-    }
-
     const handleHelp = () => {
         showModal('helpModal')
     }
@@ -69,20 +65,12 @@ function TopNav() {
                     {vpState.isOnline ? '☁️' : '☁️⃠'}
                 </div>
                 <button className="topnav-btn secondary" onClick={handleHelp}>Help</button>
-                <div className="user-profile">
-                    {vpState.user ? (
-                        <div style={styles.userProfile}>
-                            <div className="topnav-avatar">{vpState.user.username[0]}</div>
-                            <button onClick={logout} className="btn-secondary" style={{ padding: '4px 12px', fontSize: '12px' }}>
-                                Logout
-                            </button>
-                        </div>
-                    ) : (
-                        <button onClick={handleAuth} className="btn-premium" style={styles.loginBtn}>
-                            Login
-                        </button>
-                    )}
-                </div>
+                {vpState.user && <div className="user-profile">
+                    <div style={styles.userProfile}>
+                        <div className="topnav-avatar">{vpState.user.username[0]}</div>
+                        <button onClick={logout} className="btn-secondary" style={{ padding: '4px 12px', fontSize: '12px' }}>Logout</button>
+                    </div>
+                </div>}
             </div>
         </nav>
     )

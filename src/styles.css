@@ -2680,3 +2680,15 @@ body.reader-active .topnav {
 .template-save { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
 .template-save h3 { margin-right: auto; }
 .template-managed { display: flex; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--vp-border, #eee); }
+
+/* Theme-safe modal surfaces. These variables follow the editor's current UI theme. */
+.modal-overlay { color: var(--vp-text, #171717); }
+.modal-box, .modal-content { color: var(--vp-text, #171717); background: var(--vp-surface, #fff); border-color: var(--vp-border, #d7d7d7); }
+.modal-box input, .modal-box select, .modal-box textarea, .modal-content input, .modal-content select, .modal-content textarea { color: var(--vp-text, #171717); background: var(--vp-surface2, #f5f5f5); border-color: var(--vp-border, #d7d7d7); }
+.modal-box button, .modal-content button { color: inherit; }
+.modal-box .template-preview, .modal-content .template-preview { color: var(--vp-text, #171717); }
+[data-theme='dark'] .modal-box, [data-theme='dark'] .modal-content, .dark .modal-box, .dark .modal-content { background: #171a20; color: #eef2f7; border-color: #3a424d; }
+[data-theme='dark'] .modal-box input, [data-theme='dark'] .modal-box select, [data-theme='dark'] .modal-box textarea, .dark .modal-box input, .dark .modal-box select, .dark .modal-box textarea { background: #232832; color: #eef2f7; border-color: #4b5665; }
+[data-theme='dark'] .template-card, .dark .template-card { background: #20252d; border-color: #414b59; }
+[data-theme='dark'] .template-card p, .dark .template-card p { color: #b8c2cf; }
+.reader-audio-stop { margin-left: 10px; }

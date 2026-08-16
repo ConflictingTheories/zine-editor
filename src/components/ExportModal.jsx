@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
-import { exportToHTML, exportToPDF, exportToInteractive, exportToFoldablePDF, exportToSvrn, importFromSvrn } from '../utils/exportSystem'
+import { exportToHTML, exportToPDF, exportToFoldablePDF, exportToSvrn, importFromSvrn } from '../utils/exportSystem'
 import { getPrintReadiness } from '../utils/publication.js'
 
 const styles = {
@@ -51,13 +51,6 @@ function ExportModal({ onClose }) {
         }
     }
 
-    const handleExportInteractive = () => {
-        if (currentProject) {
-            exportToInteractive(currentProject, embedAssets)
-            onClose()
-        }
-    }
-
     const handleExportSvrn = async () => {
         if (!currentProject) return
         try {
@@ -94,7 +87,6 @@ function ExportModal({ onClose }) {
                     <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Standard)</button>
                     <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (One-Sheet Zine)</button>
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
-                    <button className={`export-tab ${exportTab === 'interactive' ? 'active' : ''}`} onClick={() => setExportTab('interactive')}>Interactive</button>
                     <button className={`export-tab ${exportTab === 'svrn' ? 'active' : ''}`} onClick={() => setExportTab('svrn')}>SVRN Package</button>
                 </div>
 
@@ -131,12 +123,6 @@ function ExportModal({ onClose }) {
                     <div className="export-content active">
                         <p style={styles.desc}>Export as standalone HTML with navigation.</p>
                         <button className="topnav-btn" onClick={handleExportHTML} style={styles.btn}>Generate HTML</button>
-                    </div>
-                )}
-                {exportTab === 'interactive' && (
-                    <div className="export-content active">
-                        <p style={styles.desc}>Interactive flipbook with page-turn and interactions.</p>
-                        <button className="topnav-btn" onClick={handleExportInteractive} style={styles.btn}>Generate Interactive</button>
                     </div>
                 )}
                 {exportTab === 'svrn' && (

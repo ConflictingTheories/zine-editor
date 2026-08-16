@@ -570,10 +570,25 @@ const VPProvider = ({ children }) => {
         setVpState(prev => ({ ...prev, templates }))
         return true
     }
-    const deleteTemplate = id => {
-        const templates = (vpState.templates || []).filter(t => t.id !== id)
+    const updateTemplates = templates => {
         localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates))
         setVpState(prev => ({ ...prev, templates }))
+    }
+
+    const renameTemplate = (id, name) => {
+        const value = name?.trim()
+        if (!value) return false
+        updateTemplates((vpState.templates || []).map(t => t.id === id ? { ...t, name: value } : t))
+        return true
+    }
+
+    const updateTemplate = (id, updates) => {
+        updateTemplates((vpState.templates || []).map(t => t.id === id ? { ...t, ...updates, id: t.id, page: updates.page || t.page } : t))
+        return true
+    }
+
+    const deleteTemplate = id => {
+        updateTemplates((vpState.templates || []).filter(t => t.id !== id))
     }
 
     const playBGM = (url) => {
@@ -673,6 +688,25 @@ const VPProvider = ({ children }) => {
             bgmRef.current.pause()
             bgmRef.current = null
         }
+    }
+
+    const setBackgroundAudio = (src, name = 'Background audio') => {
+        if (!vpState.currentProject) return false
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        project.backgroundAudio = src ? { src, name, loop: true } : null
+        updateCurrentProject(project)
+        toast(src ? 'Background audio added' : 'Background audio removed', 'success')
+        return true
+    }
+
+    const setPageAudio = (pageIdx, src, name = 'Page audio') => {
+        if (!vpState.currentProject?.pages?.[pageIdx]) return false
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        if (src) project.pages[pageIdx].backgroundAudio = { src, name, loop: true }
+        else delete project.pages[pageIdx].backgroundAudio
+        updateCurrentProject(project)
+        toast(src ? 'Page audio override added' : 'Page audio override removed', 'success')
+        return true
     }
 
     const playSFX = (url) => {
@@ -1257,6 +1291,8 @@ const VPProvider = ({ children }) => {
         addPageFromTemplate,
         savePageAsTemplate,
         deleteTemplate,
+        renameTemplate,
+        updateTemplate,
         deletePage,
         duplicatePage,
         duplicateElement,
@@ -1267,6 +1303,8 @@ const VPProvider = ({ children }) => {
         insertTemplate,
         playBGM,
         stopBGM,
+        setBackgroundAudio,
+        setPageAudio,
         playSFX,
         activeVfx,
         triggerVfx,

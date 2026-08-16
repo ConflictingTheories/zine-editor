@@ -34,9 +34,11 @@ export function normalizeProject(input) {
     theme: source.theme || 'classic',
     author: source.author || source.author_name || '',
     description: source.description || '',
+    series: source.series || source.seriesTitle || '', volume: source.volume || source.volumeNumber || '', issue: source.issue || source.issueNumber || '',
     tags: Array.isArray(source.tags) ? source.tags : String(source.tags || '').split(',').map(tag => tag.trim()).filter(Boolean),
+    backgroundAudio: source.backgroundAudio || null,
     pages: pages.map((page, pageIndex) => ({
-      id: String(page.id || `page-${pageIndex + 1}`), background: page.background || '#ffffff', texture: page.texture || null,
+      id: String(page.id || `page-${pageIndex + 1}`), background: page.background || '#ffffff', backgroundAudio: page.backgroundAudio || null, texture: page.texture || null,
       orientation: page.orientation || 'portrait', bgm: page.bgm || null, isLocked: Boolean(page.isLocked),
       password: page.password || null, elements: Array.isArray(page.elements) ? page.elements : []
     }))
@@ -46,7 +48,7 @@ export function normalizeProject(input) {
 export function capabilitiesFor(project) {
   const elements = project.pages.flatMap(page => page.elements || [])
   return [...new Set(elements.map(element => element.type).filter(Boolean).concat(
-    project.pages.some(page => page.bgm) ? ['audio'] : [],
+    project.backgroundAudio || project.pages.some(page => page.bgm || page.backgroundAudio) ? ['audio'] : [],
     elements.some(element => element.action) ? ['interactions'] : []
   ))]
 }
@@ -59,8 +61,10 @@ function dataUrlBytes(url) {
 }
 
 function visitAssetFields(project, visitor) {
+  if (project.backgroundAudio?.src) visitor(project.backgroundAudio, 'src')
   project.pages.forEach(page => {
     for (const key of ['texture', 'bgm']) if (page[key]) visitor(page, key)
+    if (page.backgroundAudio?.src) visitor(page.backgroundAudio, 'src')
     page.elements.forEach(element => {
       for (const key of ['src', 'poster', 'audioSrc', 'fontSrc']) if (element[key]) visitor(element, key)
       if (element.type === 'sfx' && element.actionVal) visitor(element, 'actionVal')
@@ -118,7 +122,7 @@ export async function packSvrn(projectInput, { baseUrl } = {}) {
   const content = encoder.encode(JSON.stringify(project))
   const contentHash = await sha256(content)
   const manifest = {
-    formatVersion: FORMAT_VERSION, issue: { id: project.id, title: project.title, author: project.author, description: project.description, tags: project.tags },
+    formatVersion: FORMAT_VERSION, issue: { id: project.id, title: project.title, author: project.author, description: project.description, tags: project.tags, series: project.series, volume: project.volume, issue: project.issue },
     entry: CONTENT_PATH, assets, hashes: { [CONTENT_PATH]: contentHash, ...Object.fromEntries(assets.map(asset => [asset.path, asset.sha256])) },
     capabilities: capabilitiesFor(project), signature: null
   }

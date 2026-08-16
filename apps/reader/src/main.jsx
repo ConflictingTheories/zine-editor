@@ -224,7 +224,7 @@ function App() {
       const urlCache = {}
       for (const [path, bytes] of Object.entries(unpacked.entries)) {
         if (path !== 'content/zine.json' && path !== 'manifest.json') {
-          // Identify mime implicitly by extension? Blob lets browser guess usually 
+          // Identify mime implicitly by extension? Blob lets browser guess usually
           urlCache[path] = URL.createObjectURL(new Blob([bytes]))
         }
       }
@@ -258,6 +258,7 @@ function App() {
   }
 
   const current = project?.pages?.[page]
+  const currentAudio = current?.backgroundAudio?.src || project?.backgroundAudio?.src
   const advance = (delta, absolute = false) => {
     let next = absolute ? delta : page + Math.sign(delta)
     const length = project?.pages.length || 1
@@ -340,11 +341,13 @@ function App() {
         <section className="layout">
           <aside>
             <h2>Library</h2>
-            {issues.map(issue => <button className="issue" key={issue.id} onClick={() => select(issue)}>{issue.manifest?.issue?.title || issue.id}<small>{issue.source}</small></button>)}
+            {[...issues].sort((a, b) => `${a.manifest?.issue?.series || ''}${a.manifest?.issue?.volume || ''}${a.manifest?.issue?.issue || ''}`.localeCompare(`${b.manifest?.issue?.series || ''}${b.manifest?.issue?.volume || ''}${b.manifest?.issue?.issue || ''}`)).map(issue => <button className="issue" key={issue.id} onClick={() => select(issue)}>{issue.manifest?.issue?.title || issue.id}<small>{[issue.manifest?.issue?.series, issue.manifest?.issue?.volume && `Vol. ${issue.manifest.issue.volume}`, issue.manifest?.issue?.issue && `Issue ${issue.manifest.issue}`, issue.source].filter(Boolean).join(' · ')}</small></button>)}
           </aside>
           <article>
             {!current ? <p>Import a zine or subscribe to a publishing node.</p> : <>
-              <h2 style={{ display: 'none' }}>{project.title}</h2>
+              <h2>{project.title}</h2>
+              {(project.series || project.volume || project.issue) && <p className="issue-meta">{[project.series, project.volume && `Volume ${project.volume}`, project.issue && `Issue ${project.issue}`].filter(Boolean).join(' · ')}</p>}
+              {currentAudio && <audio key={currentAudio} src={resolveAsset(currentAudio)} controls loop style={{ maxWidth: '100%', marginBottom: 12 }} />}
               <div id="canvasWrap" className="reader-canvas-wrap">
                 <div className="page" style={{ position: 'relative', background: current.background, width: current.orientation === 'landscape' ? 816 : 528, height: current.orientation === 'landscape' ? 528 : 816, overflow: 'hidden', transform: `scale(${scale})` }}>
                   {current.texture && (

@@ -5,7 +5,7 @@ import { useVP } from '../context/VPContext.jsx'
 const titleCase = value => value.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
 export default function TemplateModal() {
-    const { vpState, closeModal, addPageFromTemplate, savePageAsTemplate, deleteTemplate, toast } = useVP()
+    const { vpState, closeModal, addPageFromTemplate, savePageAsTemplate, renameTemplate, updateTemplate, deleteTemplate, toast } = useVP()
     const [category, setCategory] = useState('All')
     const [query, setQuery] = useState('')
     const [tab, setTab] = useState('browse')
@@ -19,6 +19,8 @@ export default function TemplateModal() {
     if (!active) return null
     const add = template => { if (addPageFromTemplate(template)) closeModal('templateModal') }
     const save = () => { if (!name.trim()) return toast('Give the template a name', 'error'); if (savePageAsTemplate(name.trim())) { setName(''); toast('Template saved', 'success') } }
+    const rename = template => { const value = window.prompt('Rename template', template.name); if (value && renameTemplate(template.id, value)) toast('Template renamed', 'success') }
+    const edit = template => { const value = window.prompt('Edit description', template.description || ''); if (value !== null) { updateTemplate(template.id, { description: value }); toast('Template updated', 'success') } }
     const previewPage = template => { const page = createTemplatePage(template, theme); return { background: page.background, count: page.elements?.length || 0 } }
     return <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && closeModal('templateModal')}>
         <div className="modal-box template-modal">
@@ -27,7 +29,7 @@ export default function TemplateModal() {
             {tab === 'browse' ? <>
                 <div className="template-toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search templates..." /> <select value={category} onChange={e => setCategory(e.target.value)}>{categories.map(c => <option key={c}>{c}</option>)}</select></div>
                 <div className="template-grid">{visible.map(t => <article className="template-card" key={t.id}><div className="template-preview" style={{ background: previewPage(t).background }}><strong>{t.name || titleCase(t.id)}</strong><small>{t.category} · {previewPage(t).count} elements</small></div><h3>{t.name}</h3><p>{t.description}</p><button onClick={() => add(t)}>＋ Add page</button></article>)}</div>
-            </> : <div className="template-manager"><div className="template-save"><h3>Save the current page</h3><input value={name} onChange={e => setName(e.target.value)} placeholder="Template name" /><button onClick={save}>Save as template</button></div>{custom.length ? custom.map(t => <div className="template-managed" key={t.id}><span>{t.name}</span><button onClick={() => deleteTemplate(t.id)}>Delete</button></div>) : <p>No custom templates yet. Save a page to build your personal library.</p>}</div>}
+            </> : <div className="template-manager"><div className="template-save"><h3>Save the current page</h3><input value={name} onChange={e => setName(e.target.value)} placeholder="Template name" /><button onClick={save}>Save as template</button></div>{custom.length ? custom.map(t => <div className="template-managed" key={t.id}><span>{t.name}</span><button onClick={() => rename(t)}>Rename</button><button onClick={() => edit(t)}>Edit</button><button onClick={() => { if (window.confirm(`Delete “${t.name}”?`)) deleteTemplate(t.id) }}>Delete</button></div>) : <p>No custom templates yet. Save a page to build your personal library.</p>}</div>}
         </div>
     </div>
 }
