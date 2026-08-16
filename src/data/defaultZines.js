@@ -1,11 +1,11 @@
 /* Built-in showcase zines: 16-page, shader-heavy cyberpunk graphic novels. */
 
 const W = 528
-const page = (id, background, elements, bgm = 'gen:cyber') => ({ id, background, texture: null, elements, bgm })
+const page = (id, background, elements, bgm = 'gen:cyber') => ({ id, background, texture: null, elements: elements.map((element, index) => ({ ...element, zIndex: index })), bgm })
 const text = (id, content, x, y, width, height, props = {}) => ({ id, type: 'text', content: String(content), x, y, width, height, ...props })
 const panel = (id, x, y, width, height, border = '#00f3ff', props = {}) => ({ id, type: 'panel', x, y, width, height, fill: 'transparent', panelBorderWidth: 4, panelBorderColor: border, panelRadius: 0, ...props })
 const shape = (id, shapeName, x, y, width, height, fill, props = {}) => ({ id, type: 'shape', shape: shapeName, x, y, width, height, fill, ...props })
-const shader = (id, preset, opacity = .42, props = {}) => ({ id, type: 'shader', x: 0, y: 0, width: W, height: 816, shaderPreset: preset, opacity, ...props })
+const shader = (id, preset, opacity = .42, props = {}) => ({ id, type: 'shader', x: 0, y: 0, width: W, height: 816, shaderPreset: preset, opacity, zIndex: -10, pointerEvents: 'none', ...props })
 const image = (id, src, x, y, width, height, props = {}) => ({ id, type: 'image', src, x, y, width, height, objectFit: 'cover', opacity: .72, ...props })
 const publicDomainEarth = 'https://upload.wikimedia.org/wikipedia/commons/9/97/The_Earth_seen_from_Apollo_17.jpg'
 const glyph = (id, content, x, y, color, size = 52) => text(id, content, x, y, 80, 70, { fontSize: size, color, align: 'center', fontFamily: 'sans-serif', textShadow: `0 0 14px ${color}` })
@@ -13,7 +13,7 @@ const scanlines = (prefix, color = '#00f3ff') => [shape(`${prefix}_a`, 'line_h',
 const balloon = (id, content, x, y, width, height, accent = '#00f3ff', props = {}) => ({ id, type: 'balloon', content: String(content), x, y, width, height, balloonType: props.balloonType || 'dialog', fontFamily: 'Roboto Mono', fontSize: props.fontSize || 14, color: props.color || '#050505', fill: props.fill || '#f0f0f0', borderWidth: 3, borderColor: accent, bold: props.bold !== false, ...props })
 const dossier = (prefix, label, body, accent) => [text(`${prefix}_label`, label, 54, 145, 420, 24, { fontFamily: 'Roboto Mono', fontSize: 11, color: accent, letterSpacing: 2 }), text(`${prefix}_body`, body, 54, 185, 420, 205, { fontFamily: 'Crimson Text', fontSize: 20, color: '#f0f0f0', lineHeight: 1.35 })]
 const scene = (id, x, y, width, height, border, caption) => [panel(`${id}_frame`, x, y, width, height, border, { panelBorderWidth: 3, panelFillType: 'gradient', panelFillColor: '#111827', panelFillColorEnd: '#050505' }), text(`${id}_caption`, caption, x + 10, y + height - 42, width - 20, 28, { fontFamily: 'Roboto Mono', fontSize: 10, color: border, align: 'center' })]
-const chapterPage = (id, chapter, title, body, accent, preset, extras = [], bg = '#05070d') => page(id, bg, [shader(`${id}_shader`, preset, .3), panel(`${id}_outer`, 28, 28, 472, 760, accent), text(`${id}_chapter`, chapter, 50, 55, 428, 20, { fontFamily: 'Roboto Mono', fontSize: 11, color: accent, letterSpacing: 3 }), text(`${id}_title`, title, 50, 90, 428, 75, { fontFamily: 'Bebas Neue', fontSize: 42, bold: true, color: '#f0f0f0', lineHeight: .95 }), text(`${id}_body`, body, 55, 205, 418, 330, { fontFamily: 'Crimson Text', fontSize: 20, color: '#f0f0f0', lineHeight: 1.42 }), ...extras, text(`${id}_footer`, 'VOID PRESS / FICTIONAL ARCHIVE / ISSUE 01', 55, 720, 418, 20, { fontFamily: 'Roboto Mono', fontSize: 10, color: '#777', align: 'center', letterSpacing: 2 })])
+const chapterPage = (id, chapter, title, body, accent, preset, extras = [], bg = '#05070d') => page(id, bg, [shader(`${id}_shader`, preset, .3), panel(`${id}_outer`, 28, 28, 472, 760, accent), text(`${id}_chapter`, chapter, 50, 55, 428, 20, { fontFamily: 'Roboto Mono', fontSize: 11, color: accent, letterSpacing: 3 }), text(`${id}_title`, title, 50, 90, 428, 75, { fontFamily: 'Bebas Neue', fontSize: 42, bold: true, color: '#f0f0f0', lineHeight: .95 }), text(`${id}_body`, body, 55, 205, 418, 330, { fontFamily: 'Crimson Text', fontSize: 20, color: '#f0f0f0', lineHeight: 1.42 }), ...extras.slice(0, 2).map((element, index) => ({ ...element, x: 55, y: 555 + index * 58, width: 418, height: Math.min(Number(element.height) || 48, 50) })), text(`${id}_footer`, 'VOID PRESS / FICTIONAL ARCHIVE / ISSUE 01', 55, 720, 418, 20, { fontFamily: 'Roboto Mono', fontSize: 10, color: '#777', align: 'center', letterSpacing: 2 })])
 const comic = (prefix, title, caption, accent = '#00f3ff', preset = 'voidNoise', extra = []) => {
     const chapter = Number(prefix.slice(1, 3)) || 1
     const variant = chapter % 4
@@ -24,7 +24,14 @@ const comic = (prefix, title, caption, accent = '#00f3ff', preset = 'voidNoise',
             : variant === 2
                 ? [panel(`${prefix}_evidence`, 52, 135, 421, 130, accent, { panelBorderWidth: 2, panelFillType: 'solid', panelFillColor: '#0a0a0a' }), text(`${prefix}_evidence_text`, 'EVIDENCE // 01\nASSUMPTION // 02\nUNANSWERED QUESTION // 03', 72, 165, 380, 75, { fontFamily: 'Roboto Mono', fontSize: 13, color: '#32cd32', lineHeight: 1.5 }), panel(`${prefix}_scene`, 52, 290, 421, 110, accent, { panelBorderWidth: 2 })]
                 : [text(`${prefix}_pullquote`, 'THE MAP IS NOT THE TERRITORY.', 58, 145, 412, 85, { fontFamily: 'Bebas Neue', fontSize: 32, color: accent, align: 'center', lineHeight: 1 }), shape(`${prefix}_rule`, 'line_h', 100, 255, 328, 3, accent), text(`${prefix}_scene_note`, 'A FRAGMENT FROM THE UNOFFICIAL ARCHIVE', 70, 350, 385, 24, { fontFamily: 'Roboto Mono', fontSize: 10, color: accent, align: 'center' })]
-    return page(prefix, '#05070d', [shader(`${prefix}_shader`, preset, .27), ...scanlines(prefix, accent), panel(`${prefix}_panel`, 30, 35, 468, 700, accent), text(`${prefix}_title`, title, 52, 65, 424, 55, { fontFamily: 'Orbitron', fontSize: 27, bold: true, color: accent, letterSpacing: 2 }), ...layout, text(`${prefix}_caption`, caption, 55, 415, 418, 145, { fontFamily: 'Crimson Text', fontSize: 19, color: '#f0f0f0', lineHeight: 1.35 }), ...extra, text(`${prefix}_footer`, `SVRN // ${variant === 2 ? 'CASE FILE' : 'VISUAL EVIDENCE'} // ${chapter.toString().padStart(2, '0')}`, 55, 700, 418, 22, { fontFamily: 'Roboto Mono', fontSize: 10, color: '#777', align: 'center', letterSpacing: 2 })])
+    const safeExtras = extra.slice(0, 1).map((element, index) => ({
+        ...element,
+        x: Math.max(52, Math.min(Number(element.x) || 52, 473 - (Number(element.width) || 80))),
+        y: 575 + (index * 72),
+        width: Math.min(Number(element.width) || 80, 420),
+        height: Math.min(Number(element.height) || 60, 64)
+    }))
+    return page(prefix, '#05070d', [shader(`${prefix}_shader`, preset, .27), ...scanlines(prefix, accent), panel(`${prefix}_panel`, 30, 35, 468, 700, accent), text(`${prefix}_title`, title, 52, 65, 424, 55, { fontFamily: 'Orbitron', fontSize: 27, bold: true, color: accent, letterSpacing: 2 }), ...layout, text(`${prefix}_caption`, caption, 55, 415, 418, 145, { fontFamily: 'Crimson Text', fontSize: 19, color: '#f0f0f0', lineHeight: 1.35 }), ...safeExtras, text(`${prefix}_footer`, `SVRN // ${variant === 2 ? 'CASE FILE' : 'VISUAL EVIDENCE'} // ${chapter.toString().padStart(2, '0')}`, 55, 700, 418, 22, { fontFamily: 'Roboto Mono', fontSize: 10, color: '#777', align: 'center', letterSpacing: 2 })])
 }
 
 export const getRevolutionaryZine = () => ({
