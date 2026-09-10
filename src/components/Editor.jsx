@@ -357,7 +357,8 @@ function Editor() {
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'audio')}>Browse audio library</button>
                     <div className="media-library-summary"><strong>{vpState.library?.imported?.length || 0}</strong><span>images saved</span><strong>{vpState.library?.audio?.length || 0}</strong><span>audio files saved</span></div>
                     <div className="settings-divider">Page audio</div>
-                    <button className="ed-panel-btn" onClick={() => openAudioPicker('page')}>Choose page audio</button>
+                    <button className="ed-panel-btn" onClick={() => openAudioPicker('page')}>♫ Choose page audio</button>
+                    {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
                     <select value={audioLoop ? 'loop' : 'once'} onChange={event => setAudioLoop(event.target.value === 'loop')} className="media-loop-select"><option value="loop">Loop playback</option><option value="once">Play once</option></select>
                 </div>}
                 {workspaceMode === 'compose' && <>
@@ -379,11 +380,12 @@ function Editor() {
                         <h4>Pages <span>{pages.length}</span></h4>
                         <div className="ed-panel-actions">
                             <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
+                            <button className="ed-panel-btn" onClick={() => insertTemplate('cover')}>📕 Cover Page</button>
+                            <button className="ed-panel-btn" onClick={() => insertTemplate('content')}>📄 Theme Page</button>
+                            <button className="ed-panel-btn" onClick={() => insertTemplate('back')}>📗 Back Cover</button>
                             <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
                             <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
                             <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
-                            <button className="ed-panel-btn" onClick={() => openAudioPicker('page')}>♫ Choose Page Audio</button>
-                            {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
                         </div>
                         <div className="page-thumbs" id="pageThumbs">
                             {pages.map((p, i) => <PageThumbnail key={p.id} page={p} index={i} active={i === pageIdx} onSelect={() => setCurrentPageIdx(i)} />)}
