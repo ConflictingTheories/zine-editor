@@ -356,7 +356,7 @@ const VPProvider = ({ children }) => {
 
                 return { ...prev, projects: [...remoteProjects, ...projects] }
             })
-        }).catch(() => {})
+        }).catch(() => { })
 
         return () => { cancelled = true }
     }, [vpState.isOnline, vpState.token])

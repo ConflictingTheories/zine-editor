@@ -336,8 +336,8 @@ function App() {
       audioSourceRef.current = resolvedAudio
       audio.load()
     }
-    audio.play().catch(() => {})
-    const resume = () => { audio.muted = false; audio.play().catch(() => {}) }
+    audio.play().catch(() => { })
+    const resume = () => { audio.muted = false; audio.play().catch(() => { }) }
     window.addEventListener('pointerdown', resume, { once: true })
     window.addEventListener('keydown', resume, { once: true })
     return () => {
