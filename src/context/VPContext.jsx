@@ -51,7 +51,7 @@ const VPProvider = ({ children }) => {
                 return null
             }
         })(),
-        token: localStorage.getItem('vp_token') || null,
+        token: localStorage.getItem('vp_token') || (import.meta.env.DEV ? 'local_offline_token' : null),
         isOnline: navigator.onLine,
         isSyncing: false,
         toasts: [],
@@ -315,10 +315,51 @@ const VPProvider = ({ children }) => {
                 localStorage.removeItem('vp_token')
                 localStorage.removeItem('vp_user')
             }
-            throw new Error(errorText || `HTTP ${res.status}`)
+            let message = errorText || `HTTP ${res.status}`
+            try {
+                message = JSON.parse(errorText).error || message
+            } catch (e) { }
+            const error = new Error(message)
+            error.status = res.status
+            throw error
         }
         return res.json()
     }
+
+    useEffect(() => {
+        if (!vpState.isOnline || !vpState.token) return
+
+        let cancelled = false
+        api('/zines').then(rows => {
+            if (cancelled || !Array.isArray(rows)) return
+
+            setVpState(prev => {
+                const remoteById = new Map(rows.map(row => [String(row.id), row]))
+                const projects = prev.projects.map(project => {
+                    const row = project.serverId && remoteById.get(String(project.serverId))
+                    return row
+                        ? { ...project, title: row.title, _published: Boolean(row.is_published) }
+                        : project
+                })
+                const knownIds = new Set(projects.map(project => String(project.serverId || '')))
+                const remoteProjects = rows
+                    .filter(row => !knownIds.has(String(row.id)))
+                    .map(row => ({
+                        id: `remote-${row.id}`,
+                        serverId: row.id,
+                        title: row.title || 'Untitled Zine',
+                        theme: 'classic',
+                        pages: [],
+                        _remote: true,
+                        _published: Boolean(row.is_published)
+                    }))
+
+                return { ...prev, projects: [...remoteProjects, ...projects] }
+            })
+        }).catch(() => {})
+
+        return () => { cancelled = true }
+    }, [vpState.isOnline, vpState.token])
 
     const login = async (email, password) => {
         try {
@@ -397,7 +438,9 @@ const VPProvider = ({ children }) => {
             api(`/zines/${p.serverId}`).then(res => {
                 // Backend returns { ...zine, data: parsedPages }
                 // data is the array of pages
-                const pages = Array.isArray(res.data) ? res.data : (res.pages || [])
+                const pages = Array.isArray(res.data)
+                    ? res.data
+                    : (res.data?.pages || res.pages || [])
                 const project = { ...p, pages, _remote: false }
                 const nextProjects = [...projects]
                 nextProjects[idx] = project
@@ -440,6 +483,24 @@ const VPProvider = ({ children }) => {
             setVpState(prev => ({ ...prev, projects: next }))
         }
         toast('Project saved!', 'success')
+    }
+
+    const deleteProject = async project => {
+        if (project.serverId && vpState.token) {
+            try {
+                await api(`/zines/${project.serverId}`, 'DELETE')
+            } catch (error) {
+                if (error.status !== 404) throw error
+            }
+        }
+        setVpState(prev => ({
+            ...prev,
+            projects: prev.projects.filter(item => item.id !== project.id)
+        }))
+        if (vpState.currentProject?.id === project.id) {
+            setVpState(prev => ({ ...prev, currentProject: null, currentView: 'dashboard' }))
+        }
+        toast('Zine deleted', 'success')
     }
 
     const sync = async () => {
@@ -1300,6 +1361,7 @@ const VPProvider = ({ children }) => {
         createProject,
         openProject,
         saveProject,
+        deleteProject,
         sync,
         undo,
         redo,
@@ -1342,4 +1404,4 @@ const VPProvider = ({ children }) => {
     )
 }
 
-export { VPContext, VPProvider }
+export { VPProvider }

@@ -138,7 +138,7 @@ const styles = {
  * gating (paywalls/passwords), media playback, and element interactions.
  */
 function Reader() {
-    const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx } = useVP()
+    const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx, toast } = useVP()
     const { currentProject, readerMode } = vpState
     const [pageIdx, setPageIdx] = useState(0)
     const [unlockedPages, setUnlockedPages] = useState(new Set())
@@ -252,7 +252,7 @@ function Reader() {
             setPageIdx(passwordModal.targetIdx)
             setPasswordModal({ active: false, targetIdx: -1, value: '' })
         } else {
-            alert('Incorrect Password')
+            toast('Incorrect password', 'error')
         }
     }
 

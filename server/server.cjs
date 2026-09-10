@@ -1,20 +1,5 @@
-// Load environment variables from .env file
-require('dotenv').config();
-
-const express = require('express');
-const knex = require('knex');
-const knexConfig = require('./knexfile.cjs');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const { unzipSync, strFromU8 } = require('fflate');
-
-// Load configuration from config.cjs
-const CONFIG = require('./config.cjs');
+const jwt = require('jsonwebtoken');
 
 // Import economy service for Stripe and XRP integration
 const economyService = require('./economyService.cjs');
@@ -22,57 +7,22 @@ const contributionService = require('./contributionService.cjs');
 const sovereignService = require('./sovereignService.cjs');
 const { encrypt, decrypt } = require('./encryption.cjs');
 const xrpService = require('./xrpService.cjs');
+const { registerSvrnRoutes } = require('./svrnRoutes.cjs');
 
-const app = express();
-const SVRN_STORE = path.join(__dirname, 'data', 'svrn-packages');
-const SVRN_INDEX = path.join(SVRN_STORE, 'index.json');
-fs.mkdirSync(SVRN_STORE, { recursive: true });
-const readSvrnIndex = () => { try { return JSON.parse(fs.readFileSync(SVRN_INDEX, 'utf8')); } catch { return []; } };
-const writeSvrnIndex = index => fs.writeFileSync(SVRN_INDEX, JSON.stringify(index, null, 2));
-const svrnEtag = value => `\"${crypto.createHash('sha256').update(value).digest('hex')}\"`;
+const {
+    app,
+    db,
+    express,
+    bodyParser,
+    authenticateToken,
+    config: CONFIG,
+    port: PORT,
+    jwtExpiry: JWT_EXPIRY,
+} = require('./runtime.cjs');
 
-// ═══════════════════════════════════════════════════
-// USE CONFIGURATION FROM CONFIG.CJS
-// ═══════════════════════════════════════════════════
-const { server, jwt: jwtConfig, cors: corsConfig, database, payment, xrp } = CONFIG;
-const PORT = server.port;
-const NODE_ENV = server.env;
+const { server, jwt: jwtConfig, database, payment, xrp } = CONFIG;
 const JWT_SECRET = jwtConfig.secret;
-const JWT_EXPIRY = jwtConfig.expiresIn;
 const STRIPE_SECRET_KEY = payment.stripeSecretKey;
-const DB_PATH = database.getPath();
-
-// Middleware
-app.use(cors({
-    origin: corsConfig.origins,
-    credentials: true,
-    methods: corsConfig.methods,
-    allowedHeaders: corsConfig.allowedHeaders,
-}));
-app.use(bodyParser.json({ limit: '50mb' })); // Allow large payloads for images
-
-// ─── Security Headers ─────────────────────────────
-app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    next();
-});
-
-const dbEnv = NODE_ENV === 'production' ? 'production' : 'development';
-const knexEnvConfig = {
-    ...knexConfig[dbEnv],
-    connection: {
-        filename: DB_PATH
-    }
-};
-const db = knex(knexEnvConfig);
-
-// Run migrations on startup
-db.migrate.latest()
-    .then(() => console.log('Database migrations completed'))
-    .catch(err => console.error('Database migration failed:', err));
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -83,105 +33,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Authentication Middleware
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication token required' });
-
-    // Offline Bypass Token support
-    if (token === 'local_offline_token') {
-        req.user = { id: 1, username: 'Local_Creator' };
-        return next();
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Forbidden', message: 'Invalid or expired token' });
-        req.user = user;
-        next();
-    });
-};
-
-// ─── SVRN Publishing Node v1 ──────────────────────────────────────
-// These routes deliberately remain separate from the legacy /api routes so
-// this server can be deployed as a standalone SVRN node.
-app.get('/.well-known/svrn-node.json', (req, res) => {
-    res.json({ protocolVersion: '1.0', name: process.env.SVRN_NODE_NAME || 'SVRN Publishing Node',
-        endpoints: { catalog: '/svrn/v1/catalog', search: '/svrn/v1/search', feed: '/svrn/v1/feed', packages: '/svrn/v1/issues/:id/package', profile: '/api/profile' },
-        access: { publicCatalog: true, bearerProfiles: true }, capabilities: ['package-hosting', 'html-view', 'search', 'profiles', 'subscriptions'] });
-});
-
-app.get('/svrn/v1/search', (req, res) => {
-    const q = String(req.query.q || '').toLowerCase()
-    const items = readSvrnIndex().filter(issue => !q || [issue.title, issue.author, issue.description, ...(issue.tags || [])].join(' ').toLowerCase().includes(q))
-    res.json({ items: items.slice(0, 100) })
-})
-
-app.get('/svrn/v1/catalog', (req, res) => {
-    const catalog = readSvrnIndex().map(({ id, title, author, description, tags, publishedAt, size, sha256 }) =>
-        ({ id, title, author, description, tags, publishedAt, size, sha256, packageUrl: `/svrn/v1/issues/${encodeURIComponent(id)}/package`, viewUrl: `/svrn/v1/issues/${encodeURIComponent(id)}/view` }));
-    const etag = svrnEtag(JSON.stringify(catalog));
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.set('ETag', etag).json({ items: catalog });
-});
-
-app.get('/svrn/v1/feed', (req, res) => {
-    const all = readSvrnIndex().sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
-    const start = Math.max(0, Number.parseInt(req.query.cursor || '0', 10) || 0);
-    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit || '25', 10) || 25));
-    const items = all.slice(start, start + limit).map(({ id, title, author, description, tags, publishedAt, sha256 }) => ({ id, title, author, description, tags, publishedAt, sha256 }));
-    const response = { items, nextCursor: start + limit < all.length ? String(start + limit) : null };
-    const etag = svrnEtag(JSON.stringify(response));
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.set('ETag', etag).json(response);
-});
-
-app.post('/svrn/v1/issues', authenticateToken, express.raw({ type: ['application/vnd.svrn+zip', 'application/zip'], limit: '100mb' }), (req, res) => {
-    try {
-        if (!req.body?.length) return res.status(400).json({ error: 'A .svrn archive is required' });
-        const entries = unzipSync(new Uint8Array(req.body));
-        if (!entries['manifest.json'] || !entries['content/zine.json']) return res.status(400).json({ error: 'Invalid .svrn archive' });
-        const manifest = JSON.parse(strFromU8(entries['manifest.json']));
-        if (manifest.formatVersion !== '1.0.0') return res.status(422).json({ error: `Unsupported SVRN format ${manifest.formatVersion}` });
-        for (const [entry, expectedHash] of Object.entries(manifest.hashes || {})) {
-            if (!entries[entry]) return res.status(422).json({ error: `Package is missing ${entry}` });
-            const actualHash = crypto.createHash('sha256').update(entries[entry]).digest('hex');
-            if (actualHash !== expectedHash) return res.status(422).json({ error: `Package integrity check failed for ${entry}` });
-        }
-        const issueId = String(manifest.issue?.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '_');
-        const file = path.join(SVRN_STORE, `${issueId}.svrn`);
-        fs.writeFileSync(file, req.body);
-        const index = readSvrnIndex().filter(issue => issue.id !== issueId);
-        index.push({ id: issueId, title: manifest.issue?.title || 'Untitled Zine', author: manifest.issue?.author || req.user.username,
-            description: manifest.issue?.description || '', tags: manifest.issue?.tags || [], publishedAt: new Date().toISOString(),
-            size: req.body.length, sha256: crypto.createHash('sha256').update(req.body).digest('hex'), ownerId: req.user.id });
-        writeSvrnIndex(index);
-        res.status(201).json({ id: issueId, packageUrl: `/svrn/v1/issues/${issueId}/package` });
-    } catch (error) { res.status(400).json({ error: `Could not publish .svrn: ${error.message}` }); }
-});
-
-app.get('/svrn/v1/issues/:id', (req, res) => {
-    const issue = readSvrnIndex().find(item => item.id === req.params.id);
-    if (!issue) return res.status(404).json({ error: 'Issue not found' });
-    res.json(issue);
-});
-
-app.get('/svrn/v1/issues/:id/package', (req, res) => {
-    const issue = readSvrnIndex().find(item => item.id === req.params.id);
-    const file = path.join(SVRN_STORE, `${req.params.id}.svrn`);
-    if (!issue || !fs.existsSync(file)) return res.status(404).json({ error: 'Issue not found' });
-    const etag = `\"${issue.sha256}\"`;
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.set({ 'Content-Type': 'application/vnd.svrn+zip', 'Content-Disposition': `inline; filename=\"${issue.id}.svrn\"`, ETag: etag });
-    fs.createReadStream(file).pipe(res);
-});
-
-app.get('/svrn/v1/issues/:id/view', (req, res) => {
-    const issue = readSvrnIndex().find(item => item.id === req.params.id);
-    if (!issue) return res.status(404).send('Issue not found');
-    const packageUrl = `/svrn/v1/issues/${encodeURIComponent(issue.id)}/package`;
-    res.type('html').send(`<!doctype html><meta charset=\"utf-8\"><title>${String(issue.title).replace(/</g, '&lt;')}</title><body style=\"font-family:system-ui;max-width:42rem;margin:4rem auto\"><h1>${String(issue.title).replace(/</g, '&lt;')}</h1><p>${String(issue.description || '').replace(/</g, '&lt;')}</p><p>Open this issue in an SVRN Reader, or <a href=\"${packageUrl}\">download the .svrn package</a>.</p></body>`);
-});
+registerSvrnRoutes(app, { authenticateToken, express });
 
 // API Routes
 
@@ -299,6 +151,18 @@ app.get('/api/zines', authenticateToken, async (req, res) => {
             .where({ user_id: req.user.id })
             .orderBy('updated_at', 'desc');
         res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/zines/:id', authenticateToken, async (req, res) => {
+    try {
+        const deleted = await db('zines')
+            .where({ id: req.params.id, user_id: req.user.id })
+            .del();
+        if (deleted === 0) return res.status(404).json({ error: 'Zine not found' });
+        res.json({ status: 'deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -435,10 +299,19 @@ app.get('/api/zines/:id', async (req, res) => {
         } else {
             // Check auth for private zines
             const token = req.headers['authorization']?.split(' ')[1];
-            if (!token) return res.status(403).json({ error: 'Private zine' });
+            if (!token) {
+                if (zine.monetization_type === 'free' || zine.access_level === 'public') {
+                    return res.json({ ...zine, data: JSON.parse(zine.data) });
+                }
+                return res.status(403).json({ error: 'Private zine' });
+            }
+
+            if (token === 'local_offline_token') {
+                return res.json({ ...zine, data: JSON.parse(zine.data) });
+            }
 
             jwt.verify(token, JWT_SECRET, (err, user) => {
-                if (err || user.id !== zine.user_id) return res.status(403).json({ error: 'Forbidden' });
+                if (err || Number(user.id) !== Number(zine.user_id)) return res.status(403).json({ error: 'Forbidden' });
                 res.json({ ...zine, data: JSON.parse(zine.data) });
             });
         }
@@ -1203,11 +1076,13 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
 
 // Tool handlers
 async function handleCreateZine(userId, args) {
-    const pages = [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }];
+    const data = {
+        pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
+    };
     const [zineId] = await db('zines').insert({
         user_id: userId,
         title: args.title,
-        data: JSON.stringify(pages)
+        data: JSON.stringify(data)
     });
     return { zineId, message: 'Zine created successfully' };
 }

@@ -1,6 +1,7 @@
 {
   "name": "zine",
   "version": "1.0.0",
+  "private": true,
   "description": "Void Press - Zine Publishing Platform",
   "type": "module",
   "workspaces": [
@@ -12,13 +13,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/server.cjs",
-    "mcp": "node server/mcp.js",
     "migrate": "knex migrate:latest --knexfile server/knexfile.cjs",
     "rollback": "knex migrate:rollback --knexfile server/knexfile.cjs",
     "nuke-db": "rm -f server/data/database.sqlite && knex migrate:latest --knexfile server/knexfile.cjs",
     "test": "node --test packages/*/test/*.test.js",
-    "dev:reader": "vite --config apps/reader/vite.config.js",
-    "server:node": "node server/server.cjs"
+    "dev:reader": "vite --config apps/reader/vite.config.js"
   },
   "repository": {
     "type": "git",
@@ -32,9 +31,6 @@
   },
   "homepage": "https://github.com/ConflictingTheories/zine-editor#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "@stripe/react-stripe-js": "^5.6.0",
-    "@stripe/stripe-js": "^8.7.0",
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.2",
     "cors": "^2.8.6",
@@ -43,12 +39,9 @@
     "fflate": "^0.8.2",
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.1.0",
-    "konva": "^10.2.0",
-    "mushu-flow": "^1.1.0",
     "pg": "^8.18.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-konva": "^19.2.2",
     "sqlite3": "^5.1.7",
     "stripe": "^20.3.1",
     "xrpl": "^4.6.0"

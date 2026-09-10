@@ -58,7 +58,8 @@ Void Press is an all-in-one platform for creating, reading, and publishing inter
 ## 🏗 Getting Started
 
 1. **Install Dependencies**: `npm install` or `yarn`
-2. **Start Server**: `node server/server.js`
-3. **Launch**: Open `index.html` in your browser.
+2. **Start the API**: `yarn server`
+3. **Start the editor**: `yarn dev`
+4. **Start the reader**: `yarn dev:reader`
 
 *Void Press automatically loads a "Making your first Zine" tutorial for new voyagers.*

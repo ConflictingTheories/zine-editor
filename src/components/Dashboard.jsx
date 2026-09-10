@@ -16,7 +16,7 @@ const styles = {
  * or manage zines.
  */
 function Dashboard() {
-    const { vpState, updateVpState, showView, showModal, createProject, openProject, saveLocal } = useVP()
+    const { vpState, updateVpState, showView, showModal, createProject, openProject, saveLocal, deleteProject, toast } = useVP()
 
     const handleCreateZine = () => {
         showModal('themePicker')
@@ -37,12 +37,15 @@ function Dashboard() {
         }
     }
 
-    const handleDeleteProject = (e, index) => {
+    const handleDeleteProject = async (e, index) => {
         e.stopPropagation()
         if (confirm('Delete this zine permanently?')) {
-            const updatedProjects = vpState.projects.filter((_, i) => i !== index)
-            updateVpState({ projects: updatedProjects })
-            localStorage.setItem('vp_projects', JSON.stringify(updatedProjects))
+            try {
+                await deleteProject(vpState.projects[index])
+                saveLocal()
+            } catch (error) {
+                toast(`Could not delete zine: ${error.message}`, 'error')
+            }
         }
     }
 
@@ -82,7 +85,7 @@ function Dashboard() {
                             <div className="zine-card-body">
                                 <h3>{project.title || 'Untitled Zine'}</h3>
                                 <div style={{ fontSize: '0.85em', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
-                                    {project.pages?.length || 0} pages · {project.theme || 'classic'}
+                                    {project._remote ? 'Stored on server' : `${project.pages?.length || 0} pages · ${project.theme || 'classic'}`}
                                 </div>
                                 <div className="zine-card-actions">
                                     <button onClick={() => handleOpenProject(index)}>Edit</button>

@@ -10,12 +10,59 @@ import { resolvePublicationAsset } from '../../../src/utils/assets.js'
 import './styles.css'
 
 const DB = 'svrn-reader-v1'
-const store = (mode, value) => new Promise((resolve, reject) => {
-  const request = indexedDB.open(DB, 1)
-  request.onupgradeneeded = () => { const db = request.result; db.createObjectStore('issues', { keyPath: 'id' }); db.createObjectStore('profiles', { keyPath: 'url' }) }
-  request.onerror = () => reject(request.error)
-  request.onsuccess = () => { const tx = request.result.transaction(mode, value === undefined ? 'readonly' : 'readwrite'); const target = tx.objectStore(mode); const operation = value === undefined ? target.getAll() : target.put(value); operation.onsuccess = () => resolve(operation.result); operation.onerror = () => reject(operation.error) }
-})
+const memoryStore = { issues: new Map(), profiles: new Map() }
+let databasePromise
+
+const openDatabase = () => {
+  if (databasePromise) return databasePromise
+  databasePromise = new Promise(resolve => {
+    try {
+      const request = indexedDB.open(DB, 1)
+      request.onupgradeneeded = () => {
+        const database = request.result
+        if (!database.objectStoreNames.contains('issues')) database.createObjectStore('issues', { keyPath: 'id' })
+        if (!database.objectStoreNames.contains('profiles')) database.createObjectStore('profiles', { keyPath: 'url' })
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => resolve(null)
+      request.onblocked = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  })
+  return databasePromise
+}
+
+const store = async (mode, value) => {
+  const database = await openDatabase()
+  if (!database) {
+    if (value === undefined) return [...memoryStore[mode].values()]
+    memoryStore[mode].set(value.id || value.url, value)
+    return value
+  }
+
+  return new Promise(resolve => {
+    try {
+      const transaction = database.transaction(mode, value === undefined ? 'readonly' : 'readwrite')
+      const target = transaction.objectStore(mode)
+      const operation = value === undefined ? target.getAll() : target.put(value)
+      operation.onsuccess = () => resolve(operation.result)
+      operation.onerror = () => {
+        if (value === undefined) resolve([...memoryStore[mode].values()])
+        else {
+          memoryStore[mode].set(value.id || value.url, value)
+          resolve(value)
+        }
+      }
+    } catch {
+      if (value === undefined) resolve([...memoryStore[mode].values()])
+      else {
+        memoryStore[mode].set(value.id || value.url, value)
+        resolve(value)
+      }
+    }
+  })
+}
 const all = mode => store(mode)
 const put = (mode, value) => store(mode, value)
 
@@ -199,9 +246,11 @@ function App() {
 
   const subscribe = async () => {
     try {
-      const client = new SvrnNodeClient(nodeUrl, nodeToken || null)
+      const localNode = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(nodeUrl.replace(/\/$/, ''))
+      const token = nodeToken || (localNode ? 'local_offline_token' : null)
+      const client = new SvrnNodeClient(nodeUrl, token)
       const discovery = await client.discover()
-      await put('profiles', { url: nodeUrl.replace(/\/$/, ''), token: nodeToken || null, cursor: '', discovery, cachePolicy: 'offline' })
+      await put('profiles', { url: nodeUrl.replace(/\/$/, ''), token, cursor: '', discovery, cachePolicy: 'offline' })
       setNodeUrl('')
       setNodeToken('')
       setMessage(`Subscribed to ${discovery.name}`)
