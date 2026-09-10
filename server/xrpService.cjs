@@ -3,7 +3,7 @@ const xrpl = require('xrpl');
 // Configuration
 const XRPL_NODE_URL = process.env.XRPL_NODE_URL || 'wss://s.altnet.rippletest.net:51233';
 const PLATFORM_SEED = process.env.PLATFORM_WALLET_SEED;
-const PLATFORM_CURRENCY = 'VPC'; // Void Press Credits
+const PLATFORM_CURRENCY = 'VPC'; // SVRN Publisher Credits
 
 /**
  * Connect to XRPL and perform actions

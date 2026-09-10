@@ -94,7 +94,7 @@ function validateConfig() {
 // Startup
 function logConfig() {
     console.log(`\n${'═'.repeat(60)}`);
-    console.log(`VOID PRESS - Server Configuration`);
+    console.log(`SVRN PUBLISHER - Server Configuration`);
     console.log(`${'═'.repeat(60)}`);
     console.log(`Environment: ${CONFIG.server.env.toUpperCase()}`);
     console.log(`Port: ${CONFIG.server.port}`);

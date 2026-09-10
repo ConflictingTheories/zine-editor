@@ -1,6 +1,6 @@
-# 📖 Void Press - Zine Publishing Platform
+# SVRN Publisher - Zine Publishing Platform
 
-Void Press is an all-in-one platform for creating, reading, and publishing interactive narrative zines. From classic layouts to branching mysteries with hidden passwords and rhythmic shaders, Void Press empowers creators to build rich digital experiences.
+SVRN Publisher is an all-in-one platform for creating, reading, and publishing interactive narrative zines. From classic layouts to branching mysteries with hidden passwords and rhythmic shaders, SVRN Publisher empowers creators to build rich digital experiences.
 
 ---
 
@@ -62,4 +62,14 @@ Void Press is an all-in-one platform for creating, reading, and publishing inter
 3. **Start the editor**: `yarn dev`
 4. **Start the reader**: `yarn dev:reader`
 
-*Void Press automatically loads a "Making your first Zine" tutorial for new voyagers.*
+*SVRN Publisher automatically loads a "Making your first Zine" tutorial for new voyagers.*
+
+## Desktop Installers
+
+The desktop builds package the frontend, local Express API, SQLite database, and migrations into installable applications. User data is stored in the operating system's application-data directory.
+
+- `npm run dist:editor`: build the editor installer for the current platform.
+- `npm run dist:reader`: build the standalone reader installer for the current platform.
+- `npm run desktop -- --reader`: launch the reader locally during development.
+
+Electron native dependencies and application signing are platform-specific. Build macOS artifacts on macOS, Windows artifacts on Windows, and Linux artifacts on Linux in release CI. Configure Apple Developer ID and Windows signing credentials before distribution.

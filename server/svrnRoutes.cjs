@@ -3,7 +3,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { unzipSync, strFromU8 } = require('fflate');
 
-const store = path.join(__dirname, 'data', 'svrn-packages');
+const store = process.env.SVRN_PACKAGES_PATH || path.join(__dirname, 'data', 'svrn-packages');
 const indexFile = path.join(store, 'index.json');
 fs.mkdirSync(store, { recursive: true });
 

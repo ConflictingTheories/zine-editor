@@ -2,7 +2,7 @@
   "name": "zine",
   "version": "1.0.0",
   "private": true,
-  "description": "Void Press - Zine Publishing Platform",
+  "description": "SVRN Publisher - Zine Publishing Platform",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -11,6 +11,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:editor": "vite build --outDir dist-editor",
+    "build:reader": "vite build --config apps/reader/vite.config.js",
+    "build:desktop": "npm run build:editor && npm run build:reader",
+    "desktop": "npm run build:desktop && electron .",
+    "dist:desktop": "npm run dist:editor",
+    "dist:editor": "npm run build:desktop && electron-builder",
+    "dist:reader": "npm run build:desktop && electron-builder --config desktop/electron-builder.reader.json",
     "preview": "vite preview",
     "server": "node server/server.cjs",
     "migrate": "knex migrate:latest --knexfile server/knexfile.cjs",
@@ -48,6 +55,39 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
     "vite": "^4.3.9"
+  },
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "com.svrn.publisher",
+    "productName": "SVRN Publisher",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sqlite3/**/*"
+    ],
+    "files": [
+      "desktop/**/*",
+      "dist-editor/**/*",
+      "dist-reader/**/*",
+      "server/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.cjs"
+    },
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "linux": {
+      "category": "Graphics",
+      "target": ["AppImage", "deb"]
+    }
   }
 }

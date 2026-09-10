@@ -1,4 +1,4 @@
-# Void Press - Routing Architecture
+# SVRN Publisher - Routing Architecture
 
 This document explains how the frontend routing works in both development and Docker environments.
 

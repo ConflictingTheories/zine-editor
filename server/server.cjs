@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 
 // Import economy service for Stripe and XRP integration
 const economyService = require('./economyService.cjs');
@@ -2669,12 +2670,15 @@ app.post('/api/zines/:id/fund', authenticateToken, async (req, res) => {
     }
 });
 
-// Serve static files from React app
-
-// Serve index.html (index.html) for unknown routes (SPA)
-// app.get('(.*)', (req, res) => {
-//     res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
-// });
+// Serve a packaged frontend when the desktop host provides one.
+if (process.env.APP_DIST) {
+    const frontendRoot = path.resolve(process.env.APP_DIST);
+    app.use(express.static(frontendRoot));
+    app.use((req, res, next) => {
+        if (req.path.startsWith('/api/') || req.path.startsWith('/mcp/')) return next();
+        res.sendFile(path.join(frontendRoot, 'index.html'));
+    });
+}
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

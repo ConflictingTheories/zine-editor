@@ -48,8 +48,8 @@ async function createCheckoutSession(userId, amountUSD, userEmail) {
                     price_data: {
                         currency: 'usd',
                         product_data: {
-                            name: 'Void Press Credits',
-                            description: `${vpcAmount} credits for Void Press platform`
+                            name: 'SVRN Publisher Credits',
+                            description: `${vpcAmount} credits for SVRN Publisher platform`
                         },
                         unit_amount: Math.round(amountUSD * 100)
                     },
