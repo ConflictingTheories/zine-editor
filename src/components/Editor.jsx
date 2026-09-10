@@ -90,7 +90,7 @@ function PageThumbnail({ page, index, active, onSelect }) {
 }
 
 function Editor() {
-    const { vpState, updateVpState, addElement, addPage, addPageFromTemplate, addImportedAsset, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
+    const { vpState, updateVpState, updateProjectSettings, addElement, addPage, addPageFromTemplate, addImportedAsset, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => {
         const pages = vpState.currentProject?.pages || []
@@ -103,6 +103,7 @@ function Editor() {
     const [snapOn, setSnapOn] = useState(true)
     const [propTab, setPropTab] = useState('props')
     const [leftTab, setLeftTab] = useState('pages')
+    const [workspaceMode, setWorkspaceMode] = useState('compose')
     const [audioLoop, setAudioLoop] = useState(true)
 
     const project = vpState.currentProject
@@ -202,6 +203,34 @@ function Editor() {
         input.click()
     }
 
+    const importFiles = (files) => {
+        Array.from(files || []).forEach(file => {
+            if (!file.type.startsWith('image/')) return
+            const reader = new FileReader()
+            reader.onload = (event) => {
+                const asset = { id: `imported-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: file.name, src: event.target.result, addedAt: new Date().toISOString() }
+                addImportedAsset(asset)
+                addElement(pageIdx, { type: 'image', src: asset.src, x: 80, y: 80, width: 240, height: 180, objectFit: 'contain' })
+            }
+            reader.readAsDataURL(file)
+        })
+    }
+
+    const importAudioFiles = (files) => {
+        Array.from(files || []).forEach(file => {
+            if (!file.type.startsWith('audio/')) return
+            const reader = new FileReader()
+            reader.onload = (event) => addImportedAsset({
+                id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                name: file.name,
+                src: event.target.result,
+                kind: 'audio',
+                addedAt: new Date().toISOString()
+            })
+            reader.readAsDataURL(file)
+        })
+    }
+
     const handleZoomFit = () => {
         const wrap = document.getElementById('canvasWrap')
         if (wrap && currentPage) {
@@ -237,132 +266,164 @@ function Editor() {
 
     return (
         <div className="editor" id="editorContainer">
-            {/* Top toolbar */}
             <div className="ed-toolbar-top">
-                <div className="ed-tool-group">
-                    <button className="ed-tool" title="Undo (Ctrl+Z)" onClick={undo}>↩ Undo</button>
-                    <button className="ed-tool" title="Redo (Ctrl+Shift+Z)" onClick={redo}>↪ Redo</button>
+                <div className="ed-workspace-modes" role="tablist" aria-label="Editor workspace">
+                    {[['compose', 'Compose'], ['media', 'Media'], ['settings', 'Zine settings']].map(([mode, label]) => (
+                        <button key={mode} type="button" role="tab" aria-selected={workspaceMode === mode} className={`ed-workspace-tab ${workspaceMode === mode ? 'active' : ''}`} onClick={() => setWorkspaceMode(mode)}>{label}</button>
+                    ))}
                 </div>
-                <div className="ed-tool-group">
-                    <button className="ed-tool" onClick={handleAddText}>T Text</button>
-                    <button className="ed-tool" onClick={handleAddImage}>🖼 Import Image</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'imported')}>▤ Asset Library</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>▣ Panel</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>◆ Shape</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>💬 Balloon</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>💥 SFX</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>✦ Symbol</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>🎨 Shader</button>
-                    <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>💎 3D</button>
-                    <button className="ed-tool" onClick={() => uploadAudio('project')}>♫ Background Audio</button>
-                    <select
-                        value={audioLoop ? 'loop' : 'once'}
-                        onChange={(e) => setAudioLoop(e.target.value === 'loop')}
-                        style={styles.orientationSelect}
-                        title="Background audio playback mode"
-                    >
-                        <option value="loop">Loop</option>
-                        <option value="once">Play once</option>
-                    </select>
+                <div className="ed-toolbar-context">
+                    {workspaceMode === 'compose' && <>
+                        <button className="ed-tool" title="Undo (Ctrl+Z)" onClick={undo}>↩</button>
+                        <button className="ed-tool" title="Redo (Ctrl+Shift+Z)" onClick={redo}>↪</button>
+                        <span className="ed-toolbar-label">Elements</span>
+                        <button className="ed-tool" onClick={handleAddText}>Text</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>Panel</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>Shape</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>Balloon</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>SFX</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>Symbol</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>Shader</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>3D object</button>
+                        <span className="ed-toolbar-label">View</span>
+                        <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>Grid</button>
+                        <button className={`ed-tool ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(!snapOn)}>Snap</button>
+                    </>}
+                    {workspaceMode === 'media' && <>
+                        <button className="ed-tool" onClick={handleAddImage}>Import image</button>
+                        <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = event => importFiles(event.target.files); input.click() }}>Bulk images</button>
+                        <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.multiple = true; input.onchange = event => importAudioFiles(event.target.files); input.click() }}>Import audio</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'imported')}>Image library</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'audio')}>Audio library</button>
+                        <button className="ed-tool" onClick={() => uploadAudio('project')}>Set background audio</button>
+                    </>}
+                    {workspaceMode === 'settings' && <span className="ed-toolbar-label">Project-wide configuration</span>}
                 </div>
-                <div className="ed-tool-group">
-                    <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>⊞ Grid</button>
-                    <button className={`ed-tool ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(!snapOn)}>⊡ Snap</button>
-                </div>
-                <div className="ed-tool-group">
-                    <select
-                        value={project.theme || 'classic'}
-                        onChange={(e) => applyTheme(e.target.value)}
-                        style={styles.themeSelect}
-                    >
-                        <option value="classic">Classic Literature</option>
-                        <option value="editorial">Editorial Light</option>
-                        <option value="fantasy">Medieval Fantasy</option>
-                        <option value="cyberpunk">Cyberpunk</option>
-                        <option value="conspiracy">Dark Conspiracies</option>
-                        <option value="worldbuilding">World Building</option>
-                        <option value="comics">Comics</option>
-                        <option value="arcane">Arcane Lore</option>
-                    </select>
-                </div>
-                <div style={{ flex: 1 }}></div>
-                <div className="ed-tool-group">
-                    <button className="ed-tool" onClick={() => showModal('helpModal')}>❓ Help</button>
-                    <button className="ed-tool" onClick={saveProject}>💾 Save</button>
-                    <button className="ed-tool" onClick={() => previewProject()}>👁 Preview</button>
-                    <button className="ed-tool" onClick={() => showModal('exportModal')}>📤 Export</button>
-                    <button className="ed-tool" onClick={() => showModal('publishModal')} style={styles.publishBtn}>Publish</button>
+                <div className="ed-toolbar-actions">
+                    <button className="ed-tool" onClick={saveProject}>Save</button>
+                    <button className="ed-tool" onClick={() => previewProject()}>Preview</button>
+                    <button className="ed-tool" onClick={() => showModal('exportModal')}>Export</button>
+                    <button className="ed-tool primary" onClick={() => showModal('publishModal')}>Publish</button>
                 </div>
             </div>
 
             {/* Left panel */}
             <div className="ed-left">
-                <div className="ed-left-tabs" role="tablist" aria-label="Editor sidebar">
-                    {['pages', 'templates', 'layers'].map(tab => (
-                        <button
-                            key={tab}
-                            type="button"
-                            role="tab"
-                            aria-selected={leftTab === tab}
-                            className={`ed-left-tab ${leftTab === tab ? 'active' : ''}`}
-                            onClick={() => setLeftTab(tab)}
-                        >
-                            {tab[0].toUpperCase() + tab.slice(1)}
-                        </button>
-                    ))}
-                </div>
-                {leftTab === 'pages' && <div className="ed-panel-section ed-left-pane">
-                    <h4>Pages <span>{pages.length}</span></h4>
-                    <div className="ed-panel-actions">
-                        <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
-                        <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
-                        <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
-                        <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
-                        <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio</button>
-                        {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
+                {workspaceMode === 'settings' && <div className="ed-panel-section ed-left-pane zine-settings-pane">
+                    <h4>Zine settings</h4>
+                    <div className="form-row">
+                        <label>Title</label>
+                        <input type="text" value={project.title || ''} onChange={event => updateProjectSettings({ title: event.target.value })} />
                     </div>
-                    <div className="page-thumbs" id="pageThumbs">
-                        {pages.map((p, i) => <PageThumbnail key={p.id} page={p} index={i} active={i === pageIdx} onSelect={() => setCurrentPageIdx(i)} />)}
+                    <div className="form-row">
+                        <label>Design theme</label>
+                        <select value={project.theme || 'classic'} onChange={event => applyTheme(event.target.value)}>
+                            {Object.keys(themes).map(theme => <option key={theme} value={theme}>{theme.replace(/(^|[-_])\w/g, value => value.toUpperCase())}</option>)}
+                        </select>
                     </div>
+                    <div className="settings-divider">Publishing defaults</div>
+                    <div className="form-row">
+                        <label>Author</label>
+                        <input type="text" value={project.publishSettings?.author || ''} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, author: event.target.value } })} placeholder="Your name or pseudonym" />
+                    </div>
+                    <div className="form-row">
+                        <label>Description</label>
+                        <textarea rows="4" value={project.publishSettings?.description || ''} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, description: event.target.value } })} placeholder="What is this zine about?" />
+                    </div>
+                    <div className="form-row">
+                        <label>Monetization</label>
+                        <select value={project.publishSettings?.monetizationType || 'free'} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, monetizationType: event.target.value } })}>
+                            <option value="free">Free</option>
+                            <option value="crowdfund">Crowdfund</option>
+                            <option value="one_time">One-time payment</option>
+                            <option value="subscription">Subscription</option>
+                            <option value="token">Token gated</option>
+                        </select>
+                    </div>
+                    <div className="form-row">
+                        <label>Tags</label>
+                        <input type="text" value={project.publishSettings?.tags || ''} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, tags: event.target.value } })} placeholder="art, fiction, field-notes" />
+                    </div>
+                    <p className="prop-hint">These values prefill the publishing form and are saved with this zine.</p>
                 </div>}
-                {leftTab === 'templates' && <div className="ed-panel-section ed-left-pane">
-                    <h4>Template Library <span>{templateOptions.length}</span></h4>
-                    <p className="ed-pane-hint">Add a prepared page to your project.</p>
-                    <div className="template-side-list">
-                        {templateOptions.map(template => (
+                {workspaceMode === 'media' && <div className="ed-panel-section ed-left-pane media-pane">
+                    <h4>Media library</h4>
+                    <p className="ed-pane-hint">Images and audio stay reusable across this workspace.</p>
+                    <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'imported')}>Browse image library</button>
+                    <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'audio')}>Browse audio library</button>
+                    <div className="media-library-summary"><strong>{vpState.library?.imported?.length || 0}</strong><span>images saved</span><strong>{vpState.library?.audio?.length || 0}</strong><span>audio files saved</span></div>
+                    <div className="settings-divider">Page audio</div>
+                    <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>Set page audio</button>
+                    <select value={audioLoop ? 'loop' : 'once'} onChange={event => setAudioLoop(event.target.value === 'loop')} className="media-loop-select"><option value="loop">Loop playback</option><option value="once">Play once</option></select>
+                </div>}
+                {workspaceMode === 'compose' && <>
+                    <div className="ed-left-tabs" role="tablist" aria-label="Editor sidebar">
+                        {['pages', 'templates', 'layers'].map(tab => (
                             <button
-                                key={template.id}
+                                key={tab}
                                 type="button"
-                                className="template-side-item"
-                                onClick={() => addPageFromTemplate(template)}
+                                role="tab"
+                                aria-selected={leftTab === tab}
+                                className={`ed-left-tab ${leftTab === tab ? 'active' : ''}`}
+                                onClick={() => setLeftTab(tab)}
                             >
-                                <span className="template-side-item-heading">
-                                    <strong>{template.name}</strong>
-                                    <span>{template.category || 'My Templates'}</span>
-                                </span>
-                                <span>{template.description || 'Custom page template'}</span>
+                                {tab[0].toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
                     </div>
-                </div>}
-                {leftTab === 'layers' && <div className="ed-panel-section ed-left-pane layers-pane">
-                    <h4>Layers <span>{currentPage.elements?.length || 0}</span></h4>
-                    <div id="layerList" className="layer-list">
-                        {[...(currentPage.elements || [])].reverse().map(el => (
-                            <div
-                                key={el.id}
-                                className={`layer-item ${vpState.selection?.id === el.id ? 'active' : ''}`}
-                                onClick={() => updateVpState({ selection: { type: 'element', id: el.id, pageIdx } })}
-                            >
-                                <span className="layer-name">{el.locked ? '🔒 ' : ''}{el.type === 'text' ? String(el.content ?? '').substring(0, 15) : el.type}</span>
-                                <button className="layer-btn" onClick={(e) => {
-                                    e.stopPropagation()
-                                    updateElement(pageIdx, el.id, { hidden: !el.hidden })
-                                }} title="Toggle visibility">👁</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>}
+                    {leftTab === 'pages' && <div className="ed-panel-section ed-left-pane">
+                        <h4>Pages <span>{pages.length}</span></h4>
+                        <div className="ed-panel-actions">
+                            <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
+                            <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
+                            <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
+                            <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
+                            <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio</button>
+                            {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
+                        </div>
+                        <div className="page-thumbs" id="pageThumbs">
+                            {pages.map((p, i) => <PageThumbnail key={p.id} page={p} index={i} active={i === pageIdx} onSelect={() => setCurrentPageIdx(i)} />)}
+                        </div>
+                    </div>}
+                    {leftTab === 'templates' && <div className="ed-panel-section ed-left-pane">
+                        <h4>Template Library <span>{templateOptions.length}</span></h4>
+                        <p className="ed-pane-hint">Add a prepared page to your project.</p>
+                        <div className="template-side-list">
+                            {templateOptions.map(template => (
+                                <button
+                                    key={template.id}
+                                    type="button"
+                                    className="template-side-item"
+                                    onClick={() => addPageFromTemplate(template)}
+                                >
+                                    <span className="template-side-item-heading">
+                                        <strong>{template.name}</strong>
+                                        <span>{template.category || 'My Templates'}</span>
+                                    </span>
+                                    <span>{template.description || 'Custom page template'}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>}
+                    {leftTab === 'layers' && <div className="ed-panel-section ed-left-pane layers-pane">
+                        <h4>Layers <span>{currentPage.elements?.length || 0}</span></h4>
+                        <div id="layerList" className="layer-list">
+                            {[...(currentPage.elements || [])].reverse().map(el => (
+                                <div
+                                    key={el.id}
+                                    className={`layer-item ${vpState.selection?.id === el.id ? 'active' : ''}`}
+                                    onClick={() => updateVpState({ selection: { type: 'element', id: el.id, pageIdx } })}
+                                >
+                                    <span className="layer-name">{el.locked ? '🔒 ' : ''}{el.type === 'text' ? String(el.content ?? '').substring(0, 15) : el.type}</span>
+                                    <button className="layer-btn" onClick={(e) => {
+                                        e.stopPropagation()
+                                        updateElement(pageIdx, el.id, { hidden: !el.hidden })
+                                    }} title="Toggle visibility">👁</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>}
+                </>}
             </div>
 
             {/* Canvas Area */}
@@ -387,7 +448,7 @@ function Editor() {
                 </div>
                 <div className="ed-canvas-wrap" id="canvasWrap">
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}>
-                        <Canvas page={currentPage} pageIdx={safePageIdx} snapOn={snapOn} gridOn={gridOn} zoom={zoom} />
+                        <Canvas page={currentPage} pageIdx={safePageIdx} snapOn={snapOn} gridOn={gridOn} zoom={zoom} importFiles={importFiles} />
                     </div>
                 </div>
             </div>
@@ -395,9 +456,9 @@ function Editor() {
             {/* Right Panel */}
             <div className="ed-right">
                 <div className="prop-tabs" id="propTabs">
-                    <button className={`prop-tab ${propTab === 'props' ? 'active' : ''}`} onClick={() => setPropTab('props')}>Props</button>
+                    <button className={`prop-tab ${propTab === 'props' ? 'active' : ''}`} onClick={() => setPropTab('props')}>Design</button>
                     <button className={`prop-tab ${propTab === 'effects' ? 'active' : ''}`} onClick={() => setPropTab('effects')}>Effects</button>
-                    <button className={`prop-tab ${propTab === 'logic' ? 'active' : ''}`} onClick={() => setPropTab('logic')}>Logic</button>
+                    <button className={`prop-tab ${propTab === 'logic' ? 'active' : ''}`} onClick={() => setPropTab('logic')}>Interactions</button>
                 </div>
                 <div className="prop-pane active">
                     <PropertyPanel activeTab={propTab} />

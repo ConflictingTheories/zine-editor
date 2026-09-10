@@ -37,10 +37,11 @@ const readAssetLibrary = () => {
         return {
             colors: Array.isArray(stored.colors) ? stored.colors : [],
             fonts: Array.isArray(stored.fonts) ? stored.fonts : [],
-            imported: Array.isArray(stored.imported) ? stored.imported : []
+            imported: Array.isArray(stored.imported) ? stored.imported : [],
+            audio: Array.isArray(stored.audio) ? stored.audio : []
         }
     } catch {
-        return { colors: [], fonts: [], imported: [] }
+        return { colors: [], fonts: [], imported: [], audio: [] }
     }
 }
 
@@ -113,8 +114,9 @@ const VPProvider = ({ children }) => {
 
     const addImportedAsset = (asset) => {
         if (!asset?.src) return
-        const imported = [asset, ...(vpState.library?.imported || []).filter(value => value.id !== asset.id)].slice(0, 60)
-        updateAssetLibrary({ imported })
+        const collection = asset.kind === 'audio' ? 'audio' : 'imported'
+        const next = [asset, ...(vpState.library?.[collection] || []).filter(value => value.id !== asset.id)].slice(0, 60)
+        updateAssetLibrary({ [collection]: next })
     }
 
     /**
@@ -328,6 +330,13 @@ const VPProvider = ({ children }) => {
             return { ...prev, currentProject: project, projects: nextProjects }
         })
         pushHistory(project)
+    }
+
+    const updateProjectSettings = (updates) => {
+        if (!vpState.currentProject) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        Object.assign(project, updates)
+        updateCurrentProject(project)
     }
 
     // Page metadata (paper size, texture, access, audio) needs the same dirty
@@ -844,6 +853,9 @@ const VPProvider = ({ children }) => {
         if (type === 'imported') {
             return (vpState.library?.imported || []).map(asset => ({ ...asset, kind: 'image', preview: `<img src="${asset.src}" alt="" />` }))
         }
+        if (type === 'audio') {
+            return (vpState.library?.audio || []).map(asset => ({ ...asset, preview: '<span style="font-size:28px">♫</span>' }))
+        }
         const panels = [
             { id: 'rect', preview: '<div style="width:80%;height:80%;border:3px solid #ccc"></div>', name: 'Rect' },
             { id: 'rect-rounded', preview: '<div style="width:80%;height:80%;border:3px solid #ccc;border-radius:10px"></div>', name: 'Rounded' },
@@ -1153,6 +1165,10 @@ const VPProvider = ({ children }) => {
             const asset = (getAssets('imported') || []).find(item => item.id === assetId)
             if (!asset) return
             el = { ...base, type: 'image', src: asset.src, width: 240, height: 180, objectFit: 'contain' }
+        } else if (type === 'audio') {
+            const asset = (getAssets('audio') || []).find(item => item.id === assetId)
+            if (!asset) return
+            el = { ...base, type: 'audio-log', src: asset.src, name: asset.name, width: 260, height: 100 }
         } else if (type === 'objects') {
             const colors = {
                 crystal: '#4488ff',
@@ -1412,6 +1428,7 @@ const VPProvider = ({ children }) => {
         createProject,
         openProject,
         saveProject,
+        updateProjectSettings,
         deleteProject,
         sync,
         undo,

@@ -84,4 +84,46 @@ export const getNeonUmbraZine = () => ({
     ]
 })
 
-export const getAdditionalDefaultZines = () => [getRevolutionaryZine(), getNeonUmbraZine()]
+const getChooseYourDungeon = () => ({
+    id: 'choose_your_dungeon',
+    title: 'The Hidden Room',
+    theme: 'fantasy',
+    created: '2026-09-09T00:00:00.000Z',
+    flags: {},
+    inventory: [],
+    achievements: [],
+    pages: [
+        page('d01', '#17131f', [
+            text('d01_title', 'THE HIDDEN ROOM', 54, 120, 420, 70, { fontFamily: 'Cinzel', fontSize: 36, color: '#ffd166', align: 'center', bold: true }),
+            text('d01_body', 'A choose-your-own dungeon adventure. The gate is open, but the map is not honest.', 72, 250, 384, 120, { fontFamily: 'Crimson Text', fontSize: 21, color: '#f5f1e8', align: 'center', lineHeight: 1.35 }),
+            text('d01_enter', 'ENTER THE DUNGEON', 144, 520, 240, 42, { fontFamily: 'Roboto Mono', fontSize: 14, color: '#17131f', fill: '#ffd166', align: 'center', bold: true, action: 'goto', actionVal: '2' })
+        ]),
+        page('d02', '#111827', [
+            text('d02_title', 'THE FORKED HALL', 54, 80, 420, 55, { fontFamily: 'Cinzel', fontSize: 30, color: '#8ecae6', align: 'center', bold: true }),
+            text('d02_body', 'A cold draft slips from behind a loose stone. The obvious door leads onward. The wall may lead somewhere better.', 62, 190, 404, 150, { fontFamily: 'Crimson Text', fontSize: 20, color: '#f5f1e8', align: 'center' }),
+            text('d02_hidden', 'SEARCH THE LOOSE STONE', 100, 430, 328, 40, { fontFamily: 'Roboto Mono', fontSize: 13, color: '#111827', fill: '#8ecae6', align: 'center', action: 'set-flag', actionVal: 'found-hidden-room' }),
+            text('d02_next', 'TAKE THE OBVIOUS DOOR', 100, 520, 328, 40, { fontFamily: 'Roboto Mono', fontSize: 13, color: '#111827', fill: '#ffd166', align: 'center', action: 'goto', actionVal: '3' })
+        ]),
+        page('d03', '#20151b', [
+            text('d03_title', 'THE SUMMON', 54, 80, 420, 55, { fontFamily: 'Cinzel', fontSize: 30, color: '#ff9f1c', align: 'center', bold: true }),
+            text('d03_story', 'The corridor ends at a sealed arch. If you searched the loose stone, a small silver bell waits in the dark.', 62, 180, 404, 150, { fontFamily: 'Crimson Text', fontSize: 20, color: '#f5f1e8', align: 'center' }),
+            text('d03_summon', 'RING THE SILVER BELL', 100, 430, 328, 40, { fontFamily: 'Roboto Mono', fontSize: 13, color: '#20151b', fill: '#ff9f1c', align: 'center', action: 'set-flag', actionVal: 'summon-awake', requiredFlag: 'found-hidden-room' }),
+            text('d03_reward', 'A quiet companion joins you.', 80, 525, 368, 35, { fontFamily: 'Crimson Text', fontSize: 18, color: '#ff9f1c', align: 'center', requiredFlag: 'summon-awake' }),
+            text('d03_next', 'DESCEND', 160, 650, 208, 38, { fontFamily: 'Roboto Mono', fontSize: 13, color: '#20151b', fill: '#ffd166', align: 'center', action: 'goto', actionVal: '4' })
+        ]),
+        page('d04', '#0b1320', [
+            text('d04_title', 'THE GATEKEEPER', 54, 90, 420, 55, { fontFamily: 'Cinzel', fontSize: 30, color: '#90be6d', align: 'center', bold: true }),
+            text('d04_body', 'A stone guardian asks what you brought from the room above. The summoned companion answers before you can speak.', 62, 205, 404, 160, { fontFamily: 'Crimson Text', fontSize: 20, color: '#f5f1e8', align: 'center' }),
+            text('d04_test', 'PROVE THE SUMMON', 110, 470, 308, 40, { fontFamily: 'Roboto Mono', fontSize: 13, color: '#0b1320', fill: '#90be6d', align: 'center', action: 'set-flag', actionVal: 'gate-open', requiredFlag: 'summon-awake' }),
+            text('d04_locked', 'The gate remains silent.', 100, 570, 328, 32, { fontFamily: 'Crimson Text', fontSize: 18, color: '#f5f1e8', align: 'center', requiredFlag: 'gate-open' }),
+            text('d04_next', 'ENTER THE UNDERCOURT', 120, 660, 288, 38, { fontFamily: 'Roboto Mono', fontSize: 12, color: '#0b1320', fill: '#90be6d', align: 'center', action: 'goto', actionVal: '5', requiredFlag: 'gate-open' })
+        ]),
+        page('d05', '#191528', [
+            text('d05_title', 'THE UNDERCOURT', 54, 120, 420, 65, { fontFamily: 'Cinzel', fontSize: 34, color: '#ffd166', align: 'center', bold: true }),
+            text('d05_body', 'The hidden room was never a room. It was a promise that the dungeon would notice what you chose to notice.', 68, 265, 392, 150, { fontFamily: 'Crimson Text', fontSize: 22, color: '#f5f1e8', align: 'center', lineHeight: 1.4, requiredFlag: 'gate-open' }),
+            text('d05_end', 'ACHIEVEMENT: FINDER OF HIDDEN ROOMS', 70, 590, 388, 28, { fontFamily: 'Roboto Mono', fontSize: 11, color: '#ffd166', align: 'center', action: 'award', actionVal: 'finder-of-hidden-rooms', requiredFlag: 'gate-open' })
+        ])
+    ]
+})
+
+export const getAdditionalDefaultZines = () => [getRevolutionaryZine(), getNeonUmbraZine(), getChooseYourDungeon()]

@@ -265,6 +265,9 @@ function PropertyPanel({ activeTab = 'props' }) {
                             <option value="unlock">Unlock Page</option>
                             <option value="password">Password Prompt</option>
                             <option value="toggle">Toggle Element</option>
+                            <option value="set-flag">Set Flag</option>
+                            <option value="add-item">Add Inventory Item</option>
+                            <option value="award">Award Achievement</option>
                             <option value="vfx">Screen Effect</option>
                             <option value="sfx">Play SFX</option>
                             <option value="link">Open URL</option>
@@ -295,6 +298,12 @@ function PropertyPanel({ activeTab = 'props' }) {
                             </div>
                             <p className="prop-hint">Only elements with a Label appear here.</p>
                         </>
+                    )}
+                    {['set-flag', 'add-item', 'award'].includes(element.action) && (
+                        <div className="prop-row">
+                            <label>{element.action === 'set-flag' ? 'Flag name' : element.action === 'add-item' ? 'Inventory item' : 'Achievement name'}</label>
+                            <input type="text" value={element.actionVal || ''} onChange={(e) => handleChange('actionVal', e.target.value)} placeholder={element.action === 'set-flag' ? 'found-summon' : 'hidden-room-key'} />
+                        </div>
                     )}
                     {element.action === 'vfx' && (
                         <div className="prop-row">
@@ -337,6 +346,10 @@ function PropertyPanel({ activeTab = 'props' }) {
                         onChange={(e) => handleChange('label', e.target.value)}
                         placeholder="ID for interactions (e.g. toggle target)"
                     />
+                </div>
+                <div className="form-row prop-row">
+                    <label>Required Flag</label>
+                    <input type="text" value={element.requiredFlag || ''} onChange={(e) => handleChange('requiredFlag', e.target.value)} placeholder="Optional: found-summon" />
                 </div>
             </div>
             <div className="prop-section">

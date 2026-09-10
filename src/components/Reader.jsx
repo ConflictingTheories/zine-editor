@@ -144,6 +144,9 @@ function Reader() {
     const [unlockedPages, setUnlockedPages] = useState(new Set())
     const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
     const [toggledLabels, setToggledLabels] = useState(new Set())
+    const [flags, setFlags] = useState(() => ({ ...(currentProject?.flags || {}) }))
+    const [inventory, setInventory] = useState(() => new Set(currentProject?.inventory || []))
+    const [achievements, setAchievements] = useState(() => new Set(currentProject?.achievements || []))
     const project = currentProject
     // Keep hooks unconditional. Preview can briefly render while the project
     // changes; returning before the effects below would change hook order and
@@ -240,6 +243,15 @@ function Reader() {
                     return next
                 })
                 break
+            case 'set-flag':
+                if (actionVal) setFlags(prev => ({ ...prev, [actionVal]: true }))
+                break
+            case 'add-item':
+                if (actionVal) setInventory(prev => new Set(prev).add(actionVal))
+                break
+            case 'award':
+                if (actionVal) setAchievements(prev => new Set(prev).add(actionVal))
+                break
             default:
                 break
         }
@@ -274,12 +286,13 @@ function Reader() {
                     )}
                     {(page.elements || []).filter(e => !e.hidden).map(el => {
                         const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
+                        const hiddenByFlag = el.requiredFlag && !flags[el.requiredFlag]
                         return (
                             <div
                                 key={el.id}
                                 className="reader-el reader-el-item"
                                 data-label={el.label || ''}
-                                style={styles.element(el, hiddenByToggle)}
+                                style={styles.element(el, hiddenByToggle || hiddenByFlag)}
                                 onClick={() => handleInteraction(el)}
                             >
                                 {el.type === 'text' && (

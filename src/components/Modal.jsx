@@ -3,7 +3,7 @@
  * Generic overlay container for dialogs, forms, and transient UI flows.
  */
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import AssetModal from './AssetModal.jsx'
 import ExportModal from './ExportModal.jsx'
@@ -50,6 +50,20 @@ function Modal() {
     })
     const [publishStep, setPublishStep] = useState(1) // 1 = details, 2 = monetization
     const [helpTab, setHelpTab] = useState('shortcuts')
+
+    useEffect(() => {
+        if (!vpState.modals?.publishModal?.active || !vpState.currentProject) return
+        const settings = vpState.currentProject.publishSettings || {}
+        setPublishData(prev => ({
+            ...prev,
+            title: prev.title || vpState.currentProject.title || '',
+            author: prev.author || settings.author || '',
+            description: prev.description || settings.description || '',
+            genre: settings.genre || vpState.currentProject.theme || prev.genre,
+            tags: prev.tags || settings.tags || '',
+            monetizationType: settings.monetizationType || prev.monetizationType
+        }))
+    }, [vpState.modals?.publishModal?.active, vpState.currentProject?.id])
 
     const handleAuthSubmit = async (e) => {
         e.preventDefault()
@@ -161,7 +175,7 @@ function Modal() {
                         <input
                             type="text"
                             placeholder="Your name or pseudonym..."
-                            value={publishData.author}
+                            value={publishData.author || vpState.currentProject?.publishSettings?.author || ''}
                             onChange={(e) => setPublishData({ ...publishData, author: e.target.value })}
                         />
                     </div>
@@ -170,14 +184,14 @@ function Modal() {
                         <textarea
                             placeholder="What is this void about?"
                             rows="3"
-                            value={publishData.description}
+                            value={publishData.description || vpState.currentProject?.publishSettings?.description || ''}
                             onChange={(e) => setPublishData({ ...publishData, description: e.target.value })}
                         />
                     </div>
                     <div className="form-row">
                         <label>Genre / Theme</label>
                         <select
-                            value={publishData.genre}
+                            value={publishData.genre || vpState.currentProject?.theme || 'classic'}
                             onChange={(e) => setPublishData({ ...publishData, genre: e.target.value })}
                         >
                             <option value="classic">Classic Literature</option>
@@ -194,7 +208,7 @@ function Modal() {
                         <input
                             type="text"
                             placeholder="art, zine, underground... (comma separated)"
-                            value={publishData.tags}
+                            value={publishData.tags || vpState.currentProject?.publishSettings?.tags || ''}
                             onChange={(e) => setPublishData({ ...publishData, tags: e.target.value })}
                         />
                     </div>

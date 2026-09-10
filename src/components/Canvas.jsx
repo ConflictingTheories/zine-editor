@@ -30,8 +30,8 @@ const styles = {
     }
 }
 
-function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
-    const { vpState, updateVpState } = useVP()
+function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, importFiles }) {
+    const { vpState, updateVpState, addImportedAsset, setPageAudio } = useVP()
     const { selection } = vpState
     const { startDrag, startResize, startRotate, updateElement } = useEditor(zoom, snapOn)
     const canvasRef = useRef(null)
@@ -44,6 +44,23 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
 
     const handleCanvasClick = () => {
         updateVpState({ selection: { type: 'page', id: page.id, pageIdx } })
+    }
+
+    const handleDrop = (event) => {
+        event.preventDefault()
+        const files = Array.from(event.dataTransfer.files || [])
+        const imageFiles = files.filter(file => file.type.startsWith('image/'))
+        const audioFiles = files.filter(file => file.type.startsWith('audio/'))
+        if (imageFiles.length && importFiles) importFiles(imageFiles)
+        audioFiles.forEach((audioFile, index) => {
+            const reader = new FileReader()
+            reader.onload = (loadEvent) => {
+                const asset = { id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: audioFile.name, src: loadEvent.target.result, kind: 'audio', addedAt: new Date().toISOString() }
+                addImportedAsset(asset)
+                if (index === 0) setPageAudio(pageIdx, asset.src, asset.name, true)
+            }
+            reader.readAsDataURL(audioFile)
+        })
     }
 
     const handleContextMenu = (e, el) => {
@@ -68,6 +85,8 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100 }) {
                 style={styles.canvas(page)}
                 onClick={handleCanvasClick}
                 onContextMenu={e => handleContextMenu(e, null)}
+                onDragOver={event => event.preventDefault()}
+                onDrop={handleDrop}
                 ref={canvasRef}
             >
                 {page.texture && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: `url(${resolvePublicationAsset(page.texture)})`, backgroundSize: 'cover', opacity: 0.2 }} />}
