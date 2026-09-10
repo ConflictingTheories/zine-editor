@@ -160,7 +160,7 @@ function Reader() {
     const pageAudio = page?.backgroundAudio || (page?.bgm ? { src: page.bgm, loop: true } : null)
     const backgroundAudio = pageAudio || project?.backgroundAudio || null
     const audioSrc = typeof backgroundAudio === 'string' ? backgroundAudio : backgroundAudio?.src
-    const audioLoop = typeof backgroundAudio === 'object' ? backgroundAudio.loop !== false : true
+    const audioLoop = backgroundAudio && typeof backgroundAudio === 'object' ? backgroundAudio.loop !== false : true
     useEffect(() => {
         // A page without its own audio inherits the already-playing project
         // track. Never stop here: this effect runs on every page navigation.
@@ -170,6 +170,18 @@ function Reader() {
     useEffect(() => {
         if (pageCount && pageIdx !== safePageIdx) setPageIdx(safePageIdx)
     }, [pageCount, pageIdx, safePageIdx])
+
+    useEffect(() => {
+        setFlags({ ...(currentProject?.flags || {}) })
+        setInventory(new Set(currentProject?.inventory || []))
+        setAchievements(new Set(currentProject?.achievements || []))
+    }, [currentProject?.id])
+
+    useEffect(() => {
+        if (!page) return
+        page.interactions?.forEach(handleInteraction)
+        page.elements?.filter(element => element.trigger === 'page-enter').forEach(handleInteraction)
+    }, [page?.id, safePageIdx])
 
     if (!project || !page) return <div className="reader-empty">No project loaded</div>
 
@@ -197,9 +209,9 @@ function Reader() {
         }
     }
 
-    const handleInteraction = (el) => {
+    function handleInteraction(el) {
         const { action, actionVal } = el
-        if (!action) return
+        if (!action || (el.conditionFlag && !flags[el.conditionFlag])) return
 
         switch (action) {
             case 'goto': {
@@ -293,7 +305,8 @@ function Reader() {
                                 className="reader-el reader-el-item"
                                 data-label={el.label || ''}
                                 style={styles.element(el, hiddenByToggle || hiddenByFlag)}
-                                onClick={() => handleInteraction(el)}
+                                onClick={() => (!el.trigger || el.trigger === 'click') && handleInteraction(el)}
+                                onMouseEnter={() => el.trigger === 'hover' && handleInteraction(el)}
                             >
                                 {el.type === 'text' && (
                                     <div style={styles.text(el)}>{el.content}</div>

@@ -37,10 +37,11 @@ export function normalizeProject(input) {
     series: source.series || source.seriesTitle || '', volume: source.volume || source.volumeNumber || '', issue: source.issue || source.issueNumber || '',
     tags: Array.isArray(source.tags) ? source.tags : String(source.tags || '').split(',').map(tag => tag.trim()).filter(Boolean),
     backgroundAudio: source.backgroundAudio || null,
+    flags: source.flags || {}, inventory: Array.isArray(source.inventory) ? source.inventory : [], achievements: Array.isArray(source.achievements) ? source.achievements : [],
     pages: pages.map((page, pageIndex) => ({
       id: String(page.id || `page-${pageIndex + 1}`), background: page.background || '#ffffff', backgroundAudio: page.backgroundAudio || null, texture: page.texture || null,
       orientation: page.orientation || 'portrait', bgm: page.bgm || null, isLocked: Boolean(page.isLocked),
-      password: page.password || null, elements: Array.isArray(page.elements) ? page.elements : []
+      password: page.password || null, interactions: Array.isArray(page.interactions) ? page.interactions : [], elements: Array.isArray(page.elements) ? page.elements : []
     }))
   }
 }
@@ -91,9 +92,9 @@ async function embeddedAssets(project, baseUrl) {
         payloadPromise = isDataUrl(assetSource)
           ? Promise.resolve(dataUrlBytes(assetSource))
           : fetch(absolute).then(async response => {
-              if (!response.ok) throw new Error(`HTTP ${response.status}`)
-              return { mime: response.headers.get('content-type') || 'application/octet-stream', bytes: new Uint8Array(await response.arrayBuffer()) }
-            })
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            return { mime: response.headers.get('content-type') || 'application/octet-stream', bytes: new Uint8Array(await response.arrayBuffer()) }
+          })
         cache.set(absolute, payloadPromise)
       }
       const payload = await payloadPromise

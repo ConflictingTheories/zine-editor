@@ -90,7 +90,7 @@ function PageThumbnail({ page, index, active, onSelect }) {
 }
 
 function Editor() {
-    const { vpState, updateVpState, updateProjectSettings, addElement, addPage, addPageFromTemplate, addImportedAsset, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
+    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => {
         const pages = vpState.currentProject?.pages || []
@@ -204,15 +204,31 @@ function Editor() {
     }
 
     const importFiles = (files) => {
-        Array.from(files || []).forEach(file => {
-            if (!file.type.startsWith('image/')) return
+        const imageFiles = Array.from(files || []).filter(file => file.type.startsWith('image/'))
+        const reads = imageFiles.map(file => new Promise(resolve => {
             const reader = new FileReader()
-            reader.onload = (event) => {
-                const asset = { id: `imported-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: file.name, src: event.target.result, addedAt: new Date().toISOString() }
-                addImportedAsset(asset)
-                addElement(pageIdx, { type: 'image', src: asset.src, x: 80, y: 80, width: 240, height: 180, objectFit: 'contain' })
-            }
+            reader.onload = event => resolve({ file, src: event.target.result })
+            reader.onerror = () => resolve(null)
             reader.readAsDataURL(file)
+        }))
+        Promise.all(reads).then(results => {
+            const imported = results.filter(Boolean).map(({ file, src }, index) => ({
+                id: `imported-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+                name: file.name,
+                src,
+                addedAt: new Date().toISOString()
+            }))
+            if (!imported.length) return
+            addImportedAssets(imported)
+            addElements(pageIdx, imported.map((asset, index) => ({
+                type: 'image',
+                src: asset.src,
+                x: 80 + ((index % 3) * 28),
+                y: 80 + ((index % 3) * 28),
+                width: 240,
+                height: 180,
+                objectFit: 'contain'
+            })))
         })
     }
 
@@ -247,21 +263,9 @@ function Editor() {
 
     const updatePageOrientation = (orientation) => updatePage(pageIdx, { orientation })
 
-    const uploadAudio = (scope = 'project') => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = 'audio/*'
-        input.onchange = (event) => {
-            const file = event.target.files?.[0]
-            if (!file) return
-            const reader = new FileReader()
-            reader.onload = () => {
-                if (scope === 'page') setPageAudio(pageIdx, reader.result, file.name, audioLoop)
-                else setBackgroundAudio(reader.result, file.name, audioLoop)
-            }
-            reader.readAsDataURL(file)
-        }
-        input.click()
+    const openAudioPicker = (scope) => {
+        const target = scope === 'page' ? 'audio-page' : 'audio-background'
+        showModal('assetModal', `${target}-${audioLoop ? 'loop' : 'once'}`)
     }
 
     return (
@@ -295,7 +299,7 @@ function Editor() {
                         <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.multiple = true; input.onchange = event => importAudioFiles(event.target.files); input.click() }}>Import audio</button>
                         <button className="ed-tool" onClick={() => showModal('assetModal', 'imported')}>Image library</button>
                         <button className="ed-tool" onClick={() => showModal('assetModal', 'audio')}>Audio library</button>
-                        <button className="ed-tool" onClick={() => uploadAudio('project')}>Set background audio</button>
+                        <button className="ed-tool" onClick={() => openAudioPicker('project')}>Set background audio</button>
                     </>}
                     {workspaceMode === 'settings' && <span className="ed-toolbar-label">Project-wide configuration</span>}
                 </div>
@@ -353,7 +357,7 @@ function Editor() {
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'audio')}>Browse audio library</button>
                     <div className="media-library-summary"><strong>{vpState.library?.imported?.length || 0}</strong><span>images saved</span><strong>{vpState.library?.audio?.length || 0}</strong><span>audio files saved</span></div>
                     <div className="settings-divider">Page audio</div>
-                    <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>Set page audio</button>
+                    <button className="ed-panel-btn" onClick={() => openAudioPicker('page')}>Choose page audio</button>
                     <select value={audioLoop ? 'loop' : 'once'} onChange={event => setAudioLoop(event.target.value === 'loop')} className="media-loop-select"><option value="loop">Loop playback</option><option value="once">Play once</option></select>
                 </div>}
                 {workspaceMode === 'compose' && <>
@@ -378,7 +382,7 @@ function Editor() {
                             <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
                             <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
                             <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
-                            <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio</button>
+                            <button className="ed-panel-btn" onClick={() => openAudioPicker('page')}>♫ Choose Page Audio</button>
                             {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
                         </div>
                         <div className="page-thumbs" id="pageThumbs">

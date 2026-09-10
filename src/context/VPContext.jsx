@@ -112,12 +112,23 @@ const VPProvider = ({ children }) => {
         updateAssetLibrary({ fonts })
     }
 
-    const addImportedAsset = (asset) => {
-        if (!asset?.src) return
-        const collection = asset.kind === 'audio' ? 'audio' : 'imported'
-        const next = [asset, ...(vpState.library?.[collection] || []).filter(value => value.id !== asset.id)].slice(0, 60)
-        updateAssetLibrary({ [collection]: next })
+    const addImportedAssets = (assets) => {
+        const validAssets = (assets || []).filter(asset => asset?.src)
+        if (!validAssets.length) return
+        setVpState(prev => {
+            const library = { ...prev.library }
+            validAssets.forEach(asset => {
+                const collection = asset.kind === 'audio' ? 'audio' : 'imported'
+                library[collection] = [asset, ...(library[collection] || []).filter(value => value.id !== asset.id)].slice(0, 60)
+            })
+            try {
+                localStorage.setItem('vp_asset_library', JSON.stringify(library))
+            } catch { }
+            return { ...prev, library }
+        })
     }
+
+    const addImportedAsset = (asset) => addImportedAssets([asset])
 
     /**
      * Push the provided `project` snapshot into the in-memory history stack.
@@ -587,27 +598,32 @@ const VPProvider = ({ children }) => {
 
     const genId = () => 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
 
-    const addElement = (pageIdx, element) => {
-        if (!vpState.currentProject) return
-        const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        const page = project.pages[pageIdx]
-        if (!page) return
-        const el = { ...element, id: element.id || genId(), zIndex: page.elements.length }
-        if (!page.elements) page.elements = []
-        page.elements.push(el)
-        setVpState(prev => ({
-            ...prev,
-            currentProject: project,
-            selection: { type: 'element', id: el.id, pageIdx }
-        }))
-        pushHistory(project)
-        const projIdx = vpState.projects.findIndex(p => p.id === project.id)
-        if (projIdx >= 0) {
-            const next = [...vpState.projects]
-            next[projIdx] = { ...project, _dirty: true }
-            setVpState(prev2 => ({ ...prev2, projects: next }))
-        }
+    const addElements = (pageIdx, elements) => {
+        if (!elements?.length) return
+        setVpState(prev => {
+            if (!prev.currentProject) return prev
+            const project = JSON.parse(JSON.stringify(prev.currentProject))
+            const page = project.pages[pageIdx]
+            if (!page) return prev
+            if (!page.elements) page.elements = []
+            const added = elements.map((element, index) => ({
+                ...element,
+                id: element.id || genId(),
+                zIndex: page.elements.length + index
+            }))
+            page.elements.push(...added)
+            const projects = prev.projects.map(item => item.id === project.id ? { ...project, _dirty: true } : item)
+            pushHistory(project)
+            return {
+                ...prev,
+                currentProject: project,
+                projects,
+                selection: { type: 'element', id: added[added.length - 1].id, pageIdx }
+            }
+        })
     }
+
+    const addElement = (pageIdx, element) => addElements(pageIdx, [element])
 
     const updateElement = (pageIdx, elementId, updates) => {
         setVpState(prev => {
@@ -1434,6 +1450,7 @@ const VPProvider = ({ children }) => {
         undo,
         redo,
         addElement,
+        addElements,
         updateElement,
         updatePage,
         deleteElement,
@@ -1461,6 +1478,7 @@ const VPProvider = ({ children }) => {
         rememberColor,
         rememberFont,
         addImportedAsset,
+        addImportedAssets,
         publishZine,
         publishToNode,
         themes,

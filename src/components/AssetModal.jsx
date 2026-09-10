@@ -16,8 +16,10 @@ import { useVP } from '../context/VPContext.jsx'
  * - onClose: function() called when the modal is dismissed
  */
 function AssetModal({ type: initialType, onClose }) {
-    const { getAssets, addAsset } = useVP()
-    const [currentType, setCurrentType] = useState(initialType || 'panels')
+    const { vpState, getAssets, addAsset, addImportedAssets, setBackgroundAudio, setPageAudio } = useVP()
+    const audioIntent = initialType?.startsWith('audio-page') ? 'page' : initialType?.startsWith('audio-background') ? 'background' : null
+    const audioLoop = !initialType?.endsWith('-once')
+    const [currentType, setCurrentType] = useState(audioIntent ? 'audio' : (initialType || 'panels'))
     const [searchQuery, setSearchQuery] = useState('')
 
     const assetTypes = [
@@ -43,8 +45,30 @@ function AssetModal({ type: initialType, onClose }) {
     }, [allAssets, searchQuery])
 
     const handleSelect = (asset) => {
-        addAsset(currentType, asset.id)
+        if (currentType === 'audio' && audioIntent) {
+            if (audioIntent === 'page') setPageAudio(vpState.selection?.pageIdx ?? 0, asset.src, asset.name, audioLoop)
+            else setBackgroundAudio(asset.src, asset.name, audioLoop)
+        } else {
+            addAsset(currentType, asset.id)
+        }
         onClose()
+    }
+
+    const importAudio = () => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'audio/*'
+        input.multiple = true
+        input.onchange = event => {
+            const reads = Array.from(event.target.files || []).map(file => new Promise(resolve => {
+                const reader = new FileReader()
+                reader.onload = loadEvent => resolve({ id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: file.name, src: loadEvent.target.result, kind: 'audio', addedAt: new Date().toISOString() })
+                reader.onerror = () => resolve(null)
+                reader.readAsDataURL(file)
+            }))
+            Promise.all(reads).then(assets => addImportedAssets(assets.filter(Boolean)))
+        }
+        input.click()
     }
 
     return (
@@ -70,6 +94,7 @@ function AssetModal({ type: initialType, onClose }) {
                                 {t.label}
                             </button>
                         ))}
+                        {currentType === 'audio' && <button type="button" className="asset-sidebar-import" onClick={importAudio}>+ Import audio files</button>}
                     </aside>
 
                     <main className="asset-main">
@@ -96,7 +121,7 @@ function AssetModal({ type: initialType, onClose }) {
                                                     <div className="asset-category">{asset.category}</div>
                                                 )}
                                                 <div
-                                                    className="asset-item"
+                                                    className={`asset-item ${asset.kind === 'image' ? 'asset-item-image' : ''}`}
                                                     onClick={() => handleSelect(asset)}
                                                     title={asset.name}
                                                 >

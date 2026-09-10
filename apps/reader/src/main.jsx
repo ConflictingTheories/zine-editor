@@ -196,6 +196,9 @@ function App() {
   const [toggledLabels, setToggledLabels] = useState(new Set())
   const [activeVfx, setActiveVfx] = useState(null)
   const [unlockedPages, setUnlockedPages] = useState(new Set())
+  const [flags, setFlags] = useState({})
+  const [inventory, setInventory] = useState(new Set())
+  const [achievements, setAchievements] = useState(new Set())
   const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
   const [scale, setScale] = useState(1)
   const audioRef = useRef(null)
@@ -298,17 +301,41 @@ function App() {
       }
       setBlobUrls(urlCache)
       setProject(unpacked.project)
+      setFlags({ ...(unpacked.project.flags || {}) })
+      setInventory(new Set(unpacked.project.inventory || []))
+      setAchievements(new Set(unpacked.project.achievements || []))
       setPage(issue.progress || 0)
     } catch (error) { setMessage(error.message) }
   }
 
-  const handleInteraction = (el) => {
+  function handleInteraction(el) {
     const { action, actionVal } = el
-    if (!action) return
+    if (!action || (el.conditionFlag && !flags[el.conditionFlag])) return
     switch (action) {
       case 'goto': {
         const target = parseInt(actionVal, 10) - 1
         if (!isNaN(target)) advance(target - page)
+        break
+      }
+      case 'unlock': {
+        const target = parseInt(actionVal, 10) - 1
+        if (!isNaN(target)) setUnlockedPages(prev => new Set(prev).add(target))
+        break
+      }
+      case 'password': {
+        const target = parseInt(actionVal, 10) - 1
+        if (!isNaN(target)) setPasswordModal({ active: true, targetIdx: target, value: '' })
+        break
+      }
+      case 'vfx':
+        setActiveVfx(actionVal || 'flash')
+        window.setTimeout(() => setActiveVfx(null), 600)
+        break
+      case 'sfx': {
+        if (actionVal) {
+          const audio = new Audio(resolveAsset(actionVal))
+          audio.play().catch(() => { })
+        }
         break
       }
       case 'link':
@@ -322,10 +349,24 @@ function App() {
           return next
         })
         break
+      case 'set-flag':
+        if (actionVal) setFlags(prev => ({ ...prev, [actionVal]: true }))
+        break
+      case 'add-item':
+        if (actionVal) setInventory(prev => new Set(prev).add(actionVal))
+        break
+      case 'award':
+        if (actionVal) setAchievements(prev => new Set(prev).add(actionVal))
+        break
     }
   }
 
   const current = project?.pages?.[page]
+  useEffect(() => {
+    if (!current) return
+    current.interactions?.forEach(handleInteraction)
+    current.elements?.filter(element => element.trigger === 'page-enter').forEach(handleInteraction)
+  }, [current?.id])
   const currentAudio = current?.backgroundAudio?.src || project?.backgroundAudio?.src
   const resolvedAudio = currentAudio ? resolveAsset(currentAudio) : ''
   useEffect(() => {
@@ -442,7 +483,7 @@ function App() {
                   {current.texture && (
                     <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${resolveAsset(current.texture)})`, backgroundSize: 'cover', opacity: 0.2, pointerEvents: 'none' }} />
                   )}
-                  {current.elements.filter(element => !element.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(el => {
+                  {current.elements.filter(element => !element.hidden && (!element.requiredFlag || flags[element.requiredFlag])).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(el => {
                     const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
                     return (
                       <div
@@ -450,7 +491,8 @@ function App() {
                         className="reader-el reader-el-item"
                         data-label={el.label || ''}
                         style={styles.element(el, hiddenByToggle)}
-                        onClick={() => handleInteraction(el)}
+                        onClick={() => (!el.trigger || el.trigger === 'click') && handleInteraction(el)}
+                        onMouseEnter={() => el.trigger === 'hover' && handleInteraction(el)}
                       >
                         {el.type === 'text' && (
                           <div style={{ ...styles.text(el), padding: 4 }}>{contentRender(el)}</div>

@@ -52,6 +52,51 @@ const normalizeColor = (color) => {
 
 const panelFillType = (element) => element.panelFillType || (element.fill && element.fill !== 'transparent' ? 'solid' : 'transparent')
 
+const INTERACTION_GROUPS = [
+    {
+        label: 'Navigation',
+        options: [
+            ['goto', 'Go to page'],
+            ['unlock', 'Unlock page'],
+            ['password', 'Ask for password']
+        ]
+    },
+    {
+        label: 'Progress',
+        options: [
+            ['set-flag', 'Set flag'],
+            ['add-item', 'Add inventory item'],
+            ['award', 'Award achievement']
+        ]
+    },
+    {
+        label: 'Presentation',
+        options: [
+            ['toggle', 'Show / hide element'],
+            ['vfx', 'Play screen effect'],
+            ['sfx', 'Play sound'],
+            ['link', 'Open link']
+        ]
+    }
+]
+
+const interactionKey = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
+
+const interactionValidation = (action, value, numPages, labeledElements) => {
+    if (!action) return { tone: 'neutral', message: 'No interaction. This element is not clickable in the reader.' }
+    if (!value) return { tone: 'error', message: 'Choose a target or enter a value to finish this interaction.' }
+    if (['goto', 'unlock', 'password'].includes(action)) {
+        const target = Number(value)
+        if (!Number.isInteger(target) || target < 1 || target > numPages) return { tone: 'error', message: `Choose a page from 1 to ${numPages}.` }
+        return { tone: 'success', message: `Reader will use page ${target}.` }
+    }
+    if (action === 'toggle' && !labeledElements.some(item => item.label === value)) return { tone: 'error', message: 'Choose a labeled element from this page.' }
+    if (action === 'vfx') return { tone: 'success', message: `Reader will play the ${value || 'flash'} effect.` }
+    if (action === 'link' && !/^https?:\/\//i.test(value)) return { tone: 'error', message: 'Links must start with http:// or https://.' }
+    if (action === 'sfx' && !(/^(https?:\/\/|data:audio\/)/i.test(value))) return { tone: 'error', message: 'Use an audio URL or choose an imported audio asset.' }
+    return { tone: 'success', message: 'Interaction is configured and ready for the reader.' }
+}
+
 function ColorHistory({ colors, onSelect }) {
     if (!colors.length) return null
     return (
@@ -67,6 +112,47 @@ function ColorHistory({ colors, onSelect }) {
                     aria-label={`Use colour ${color}`}
                 />
             ))}
+        </div>
+    )
+}
+
+function PageInteractionEditor({ interaction, index, numPages, knownKeys, onChange, onRemove }) {
+    const update = (key, value) => onChange({ ...interaction, [key]: value })
+    const action = interaction.action || ''
+    return (
+        <div className="page-interaction-card">
+            <div className="page-interaction-card-header">
+                <strong>On page open {index + 1}</strong>
+                <button type="button" className="interaction-clear" onClick={onRemove}>Remove</button>
+            </div>
+            <div className="prop-row">
+                <label>Action</label>
+                <select value={action} onChange={event => update('action', event.target.value)}>
+                    <option value="">Choose an action...</option>
+                    {INTERACTION_GROUPS.map(group => <optgroup key={group.label} label={group.label}>{group.options.filter(([value]) => value !== 'toggle').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</optgroup>)}
+                </select>
+            </div>
+            {['goto', 'unlock', 'password'].includes(action) && <div className="prop-row">
+                <label>Target page</label>
+                <select value={interaction.actionVal || ''} onChange={event => update('actionVal', event.target.value)}>
+                    <option value="">Select a page...</option>
+                    {Array.from({ length: numPages }, (_, pageIndex) => <option key={pageIndex + 1} value={String(pageIndex + 1)}>Page {pageIndex + 1}</option>)}
+                </select>
+            </div>}
+            {['set-flag', 'add-item', 'award'].includes(action) && <div className="prop-row">
+                <label>{action === 'set-flag' ? 'Flag name' : action === 'add-item' ? 'Inventory item' : 'Achievement name'}</label>
+                <input list={`page-interaction-keys-${index}`} value={interaction.actionVal || ''} onChange={event => update('actionVal', interactionKey(event.target.value))} placeholder="hidden-room-key" />
+                <datalist id={`page-interaction-keys-${index}`}>{knownKeys.map(key => <option key={key} value={key} />)}</datalist>
+            </div>}
+            {action === 'vfx' && <div className="prop-row"><label>Effect</label><select value={interaction.actionVal || 'flash'} onChange={event => update('actionVal', event.target.value)}>{VFX_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>}
+            {action === 'sfx' && <div className="prop-row"><label>Sound URL</label><input value={interaction.actionVal || ''} onChange={event => update('actionVal', event.target.value)} placeholder="https://.../sound.mp3" /></div>}
+            {action === 'link' && <div className="prop-row"><label>Target URL</label><input value={interaction.actionVal || ''} onChange={event => update('actionVal', event.target.value)} placeholder="https://..." /></div>}
+            {action && <div className={`interaction-status ${interactionValidation(action, interaction.actionVal, numPages, []).tone}`} role="status">{interactionValidation(action, interaction.actionVal, numPages, []).message}</div>}
+            <div className="prop-row">
+                <label>Only run if flag is set</label>
+                <input list={`page-condition-keys-${index}`} value={interaction.conditionFlag || ''} onChange={event => update('conditionFlag', interactionKey(event.target.value))} placeholder="Optional condition" />
+                <datalist id={`page-condition-keys-${index}`}>{knownKeys.map(key => <option key={key} value={key} />)}</datalist>
+            </div>
         </div>
     )
 }
@@ -88,7 +174,20 @@ function PropertyPanel({ activeTab = 'props' }) {
             return <p className="empty-msg" style={styles.emptyMsg}>Select an element to edit effects</p>
         }
         if (activeTab === 'logic') {
-            return <p className="empty-msg" style={styles.emptyMsg}>Select an element to set interactions</p>
+            const interactions = page.interactions || []
+            const knownKeys = [...new Set((currentProject.pages || []).flatMap(item => [item.requiredFlag, ...(item.interactions || []).map(interaction => interaction.actionVal), ...(item.elements || []).flatMap(element => [element.requiredFlag, element.actionVal])].filter(Boolean)))]
+            const updateInteractions = next => updatePage(pageIdx, { interactions: next })
+            return (
+                <div className="property-panel">
+                    <div className="prop-section">
+                        <div className="interaction-header">
+                            <div><h4>Page interactions</h4><p className="prop-hint">These run automatically when this page opens. They do not need a visible element.</p></div>
+                        </div>
+                        {interactions.map((interaction, index) => <PageInteractionEditor key={index} interaction={interaction} index={index} numPages={numPages} knownKeys={knownKeys} onChange={next => updateInteractions(interactions.map((item, itemIndex) => itemIndex === index ? next : item))} onRemove={() => updateInteractions(interactions.filter((_, itemIndex) => itemIndex !== index))} />)}
+                        <button type="button" className="prop-btn" onClick={() => updateInteractions([...interactions, { trigger: 'page-enter', action: '', actionVal: '', conditionFlag: '' }])}>+ Add page interaction</button>
+                    </div>
+                </div>
+            )
         }
         const setPageProperty = (key, val) => {
             if (key === 'background') rememberColor(val)
@@ -253,36 +352,47 @@ function PropertyPanel({ activeTab = 'props' }) {
 
     if (activeTab === 'logic') {
         const labeledElements = (page.elements || []).filter(e => e !== element && (e.label || '').trim())
+        const knownKeys = [...new Set((page.elements || []).flatMap(item => [item.requiredFlag, ['set-flag', 'add-item', 'award'].includes(item.action) ? item.actionVal : null].filter(Boolean)))]
+        const audioAssets = vpState.library?.audio || []
+        const validation = interactionValidation(element.action, element.actionVal, numPages, labeledElements)
         return (
             <div className="property-panel">
                 <div className="prop-section">
-                    <h4>Logic / Interactions</h4>
+                    <div className="interaction-header">
+                        <div>
+                            <h4>Interaction</h4>
+                            <p className="prop-hint">Define what happens when a reader activates this element.</p>
+                        </div>
+                        {element.action && <button type="button" className="interaction-clear" onClick={() => { handleChange('action', ''); handleChange('actionVal', '') }}>Clear</button>}
+                    </div>
                     <div className="prop-row">
-                        <label>Action Type</label>
-                        <select value={element.action || ''} onChange={(e) => handleChange('action', e.target.value)}>
-                            <option value="">None</option>
-                            <option value="goto">Go to Page</option>
-                            <option value="unlock">Unlock Page</option>
-                            <option value="password">Password Prompt</option>
-                            <option value="toggle">Toggle Element</option>
-                            <option value="set-flag">Set Flag</option>
-                            <option value="add-item">Add Inventory Item</option>
-                            <option value="award">Award Achievement</option>
-                            <option value="vfx">Screen Effect</option>
-                            <option value="sfx">Play SFX</option>
-                            <option value="link">Open URL</option>
+                        <label>Trigger</label>
+                        <select value={element.trigger || 'click'} onChange={(e) => handleChange('trigger', e.target.value)}>
+                            <option value="click">When clicked</option>
+                            <option value="hover">When hovered</option>
+                            <option value="page-enter">When page opens</option>
+                        </select>
+                    </div>
+                    <div className="prop-row">
+                        <label>Only run if flag is set</label>
+                        <input list="condition-flags" type="text" value={element.conditionFlag || ''} onChange={(e) => handleChange('conditionFlag', interactionKey(e.target.value))} placeholder="Optional: found-hidden-room" />
+                        <datalist id="condition-flags">{knownKeys.map(key => <option key={key} value={key} />)}</datalist>
+                        <p className="prop-hint">Leave empty to always run. The reader skips this action until the flag exists.</p>
+                    </div>
+                    <div className="prop-row">
+                        <label>Action</label>
+                        <select value={element.action || ''} onChange={(e) => { handleChange('action', e.target.value); handleChange('actionVal', '') }}>
+                            <option value="">Do nothing</option>
+                            {INTERACTION_GROUPS.map(group => <optgroup key={group.label} label={group.label}>{group.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</optgroup>)}
                         </select>
                     </div>
                     {(element.action === 'goto' || element.action === 'unlock' || element.action === 'password') && (
                         <div className="prop-row">
-                            <label>Target Page #</label>
-                            <input
-                                type="number"
-                                min={1}
-                                max={numPages}
-                                value={element.actionVal ? parseInt(element.actionVal, 10) || 1 : 1}
-                                onChange={(e) => handleChange('actionVal', String(Math.max(1, Math.min(numPages, parseInt(e.target.value, 10) || 1))))}
-                            />
+                            <label>{element.action === 'password' ? 'Protected page' : 'Target page'}</label>
+                            <select value={element.actionVal || ''} onChange={(e) => handleChange('actionVal', e.target.value)}>
+                                <option value="">Select a page...</option>
+                                {Array.from({ length: numPages }, (_, index) => <option key={index + 1} value={String(index + 1)}>Page {index + 1}{index === pageIdx ? ' (current)' : ''}</option>)}
+                            </select>
                         </div>
                     )}
                     {element.action === 'toggle' && (
@@ -296,13 +406,16 @@ function PropertyPanel({ activeTab = 'props' }) {
                                     ))}
                                 </select>
                             </div>
-                            <p className="prop-hint">Only elements with a Label appear here.</p>
+                            <p className="prop-hint">Only elements with a label appear here. Add one in Design → Element label.</p>
                         </>
                     )}
                     {['set-flag', 'add-item', 'award'].includes(element.action) && (
                         <div className="prop-row">
                             <label>{element.action === 'set-flag' ? 'Flag name' : element.action === 'add-item' ? 'Inventory item' : 'Achievement name'}</label>
-                            <input type="text" value={element.actionVal || ''} onChange={(e) => handleChange('actionVal', e.target.value)} placeholder={element.action === 'set-flag' ? 'found-summon' : 'hidden-room-key'} />
+                            <input list="interaction-keys" type="text" value={element.actionVal || ''} onChange={(e) => handleChange('actionVal', interactionKey(e.target.value))} placeholder={element.action === 'set-flag' ? 'found-summon' : 'hidden-room-key'} />
+                            <datalist id="interaction-keys">{knownKeys.map(key => <option key={key} value={key} />)}</datalist>
+                            {knownKeys.length > 0 && <div className="interaction-key-suggestions"><span>Known keys</span>{knownKeys.map(key => <button key={key} type="button" onClick={() => handleChange('actionVal', key)}>{key}</button>)}</div>}
+                            <p className="prop-hint">Use lowercase words separated by hyphens so this key can be reused safely.</p>
                         </div>
                     )}
                     {element.action === 'vfx' && (
@@ -318,7 +431,11 @@ function PropertyPanel({ activeTab = 'props' }) {
                     {element.action === 'sfx' && (
                         <>
                             <div className="prop-row">
-                                <label>SFX URL</label>
+                                <label>Sound URL</label>
+                                <select value={audioAssets.some(asset => asset.src === element.actionVal) ? element.actionVal : ''} onChange={(e) => handleChange('actionVal', e.target.value)}>
+                                    <option value="">Choose imported audio...</option>
+                                    {audioAssets.map(asset => <option key={asset.id} value={asset.src}>{asset.name}</option>)}
+                                </select>
                                 <input type="text" value={element.actionVal || ''} onChange={(e) => handleChange('actionVal', e.target.value)} placeholder="https://.../sound.mp3" />
                             </div>
                             <button type="button" className="prop-btn" onClick={() => playSFX(element.actionVal)}>Test Sound</button>
@@ -330,6 +447,10 @@ function PropertyPanel({ activeTab = 'props' }) {
                             <input type="text" value={element.actionVal || ''} onChange={(e) => handleChange('actionVal', e.target.value)} placeholder="https://..." />
                         </div>
                     )}
+                    <div className={`interaction-status ${validation.tone}`} role="status">
+                        <span aria-hidden="true">{validation.tone === 'success' ? '✓' : validation.tone === 'error' ? '!' : 'i'}</span>
+                        {validation.message}
+                    </div>
                 </div>
             </div>
         )
