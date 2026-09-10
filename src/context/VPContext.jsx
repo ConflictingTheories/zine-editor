@@ -31,10 +31,24 @@ const VPContext = createContext()
  */
 export const useVP = () => useContext(VPContext)
 
+const readAssetLibrary = () => {
+    try {
+        const stored = JSON.parse(localStorage.getItem('vp_asset_library') || '{}')
+        return {
+            colors: Array.isArray(stored.colors) ? stored.colors : [],
+            fonts: Array.isArray(stored.fonts) ? stored.fonts : [],
+            imported: Array.isArray(stored.imported) ? stored.imported : []
+        }
+    } catch {
+        return { colors: [], fonts: [], imported: [] }
+    }
+}
+
 const VPProvider = ({ children }) => {
     const [vpState, setVpState] = useState({
         projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
         templates: getStoredTemplates(),
+        library: readAssetLibrary(),
         published: [],
         currentProject: null,
         isPremium: false,
@@ -71,6 +85,36 @@ const VPProvider = ({ children }) => {
      */
     const updateVpState = (updates) => {
         setVpState(prev => ({ ...prev, ...updates }))
+    }
+
+    const updateAssetLibrary = (update) => {
+        setVpState(prev => {
+            const library = { ...prev.library, ...update }
+            try {
+                localStorage.setItem('vp_asset_library', JSON.stringify(library))
+            } catch {
+                // Keep the current session usable when a large asset exceeds browser storage.
+            }
+            return { ...prev, library }
+        })
+    }
+
+    const rememberColor = (color) => {
+        if (!/^#[0-9a-f]{6}$/i.test(color || '')) return
+        const colors = [color.toLowerCase(), ...(vpState.library?.colors || []).filter(value => value !== color.toLowerCase())].slice(0, 18)
+        updateAssetLibrary({ colors })
+    }
+
+    const rememberFont = (font) => {
+        if (!font) return
+        const fonts = [font, ...(vpState.library?.fonts || []).filter(value => value !== font)].slice(0, 12)
+        updateAssetLibrary({ fonts })
+    }
+
+    const addImportedAsset = (asset) => {
+        if (!asset?.src) return
+        const imported = [asset, ...(vpState.library?.imported || []).filter(value => value.id !== asset.id)].slice(0, 60)
+        updateAssetLibrary({ imported })
     }
 
     /**
@@ -797,6 +841,9 @@ const VPProvider = ({ children }) => {
     }
 
     const getAssets = (type) => {
+        if (type === 'imported') {
+            return (vpState.library?.imported || []).map(asset => ({ ...asset, kind: 'image', preview: `<img src="${asset.src}" alt="" />` }))
+        }
         const panels = [
             { id: 'rect', preview: '<div style="width:80%;height:80%;border:3px solid #ccc"></div>', name: 'Rect' },
             { id: 'rect-rounded', preview: '<div style="width:80%;height:80%;border:3px solid #ccc;border-radius:10px"></div>', name: 'Rounded' },
@@ -1102,6 +1149,10 @@ const VPProvider = ({ children }) => {
             }
         } else if (type === 'shaders') {
             el = { ...base, type: 'shader', shaderPreset: assetId || 'plasma', width: 220, height: 220, opacity: 1 }
+        } else if (type === 'imported') {
+            const asset = (getAssets('imported') || []).find(item => item.id === assetId)
+            if (!asset) return
+            el = { ...base, type: 'image', src: asset.src, width: 240, height: 180, objectFit: 'contain' }
         } else if (type === 'objects') {
             const colors = {
                 crystal: '#4488ff',
@@ -1390,6 +1441,9 @@ const VPProvider = ({ children }) => {
         triggerVfx,
         getAssets,
         addAsset,
+        rememberColor,
+        rememberFont,
+        addImportedAsset,
         publishZine,
         publishToNode,
         themes,

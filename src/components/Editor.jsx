@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
+import ElementContent from './ElementContent.jsx'
+import { BUILT_IN_TEMPLATES } from '../data/pageTemplates.js'
 import { PAGE_W, PAGE_H } from '../constants.js'
 
 /**
@@ -39,8 +41,56 @@ const styles = {
     }
 }
 
+function PageThumbnail({ page, index, active, onSelect }) {
+    const landscape = page.orientation === 'landscape'
+    const pageWidth = landscape ? PAGE_H : PAGE_W
+    const pageHeight = landscape ? PAGE_W : PAGE_H
+
+    return (
+        <button
+            type="button"
+            className={`page-thumb ${active ? 'active' : ''}`}
+            style={{ background: page.background || '#fff' }}
+            onClick={onSelect}
+            aria-label={`Go to page ${index + 1}`}
+        >
+            <span
+                className="page-thumb-preview"
+                style={{
+                    width: pageWidth,
+                    height: pageHeight,
+                    transform: 'translate(-50%, -50%) scale(0.11)'
+                }}
+            >
+                {(page.elements || [])
+                    .filter(element => !element.hidden)
+                    .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+                    .map(element => (
+                        <span
+                            key={element.id}
+                            className={`el ${element.locked ? 'locked' : ''}`}
+                            style={{
+                                left: element.x || 0,
+                                top: element.y || 0,
+                                width: element.width || 100,
+                                height: element.height || 100,
+                                transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
+                                zIndex: element.zIndex || 1,
+                                opacity: element.opacity ?? 1,
+                                pointerEvents: 'none'
+                            }}
+                        >
+                            <ElementContent el={element} pageIdx={index} updateElement={() => { }} />
+                        </span>
+                    ))}
+            </span>
+            <span className="page-thumb-num">{index + 1}</span>
+        </button>
+    )
+}
+
 function Editor() {
-    const { vpState, updateVpState, addElement, addPage, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
+    const { vpState, updateVpState, addElement, addPage, addPageFromTemplate, addImportedAsset, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => {
         const pages = vpState.currentProject?.pages || []
@@ -52,6 +102,7 @@ function Editor() {
     const [gridOn, setGridOn] = useState(false)
     const [snapOn, setSnapOn] = useState(true)
     const [propTab, setPropTab] = useState('props')
+    const [leftTab, setLeftTab] = useState('pages')
     const [audioLoop, setAudioLoop] = useState(true)
 
     const project = vpState.currentProject
@@ -59,6 +110,7 @@ function Editor() {
     const safePageIdx = pages.length ? Math.min(Math.max(pageIdx, 0), pages.length - 1) : 0
     const currentPage = pages[safePageIdx] || { id: 'empty-page', elements: [], background: '#fff', orientation: 'portrait' }
     const themeStatus = themes[project?.theme || 'classic']?.status || 'STABLE'
+    const templateOptions = [...BUILT_IN_TEMPLATES, ...(vpState.templates || [])]
 
     useEffect(() => {
         const onKey = (e) => {
@@ -133,9 +185,11 @@ function Editor() {
             if (file) {
                 const reader = new FileReader()
                 reader.onload = (event) => {
+                    const asset = { id: `imported-${Date.now()}`, name: file.name, src: event.target.result, addedAt: new Date().toISOString() }
+                    addImportedAsset(asset)
                     addElement(pageIdx, {
                         type: 'image',
-                        src: event.target.result,
+                        src: asset.src,
                         x: 80,
                         y: 80,
                         width: 200,
@@ -191,7 +245,8 @@ function Editor() {
                 </div>
                 <div className="ed-tool-group">
                     <button className="ed-tool" onClick={handleAddText}>T Text</button>
-                    <button className="ed-tool" onClick={handleAddImage}>🖼 Image</button>
+                    <button className="ed-tool" onClick={handleAddImage}>🖼 Import Image</button>
+                    <button className="ed-tool" onClick={() => showModal('assetModal', 'imported')}>▤ Asset Library</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>▣ Panel</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>◆ Shape</button>
                     <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>💬 Balloon</button>
@@ -242,36 +297,56 @@ function Editor() {
 
             {/* Left panel */}
             <div className="ed-left">
-                <div className="ed-panel-section">
-                    <h4>Pages</h4>
-                    <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
-                    <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Template Page</button>
-                    <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
-                    <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
-                    <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio Override</button>
-                    {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Stop / Remove Audio</button>}
+                <div className="ed-left-tabs" role="tablist" aria-label="Editor sidebar">
+                    {['pages', 'templates', 'layers'].map(tab => (
+                        <button
+                            key={tab}
+                            type="button"
+                            role="tab"
+                            aria-selected={leftTab === tab}
+                            className={`ed-left-tab ${leftTab === tab ? 'active' : ''}`}
+                            onClick={() => setLeftTab(tab)}
+                        >
+                            {tab[0].toUpperCase() + tab.slice(1)}
+                        </button>
+                    ))}
+                </div>
+                {leftTab === 'pages' && <div className="ed-panel-section ed-left-pane">
+                    <h4>Pages <span>{pages.length}</span></h4>
+                    <div className="ed-panel-actions">
+                        <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
+                        <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
+                        <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
+                        <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
+                        <button className="ed-panel-btn" onClick={() => uploadAudio('page')}>♫ Page Audio</button>
+                        {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
+                    </div>
                     <div className="page-thumbs" id="pageThumbs">
-                        {pages.map((p, i) => (
-                            <div
-                                key={p.id}
-                                className={`page-thumb ${i === pageIdx ? 'active' : ''}`}
-                                style={{ background: p.background || '#fff' }}
-                                onClick={() => setCurrentPageIdx(i)}
+                        {pages.map((p, i) => <PageThumbnail key={p.id} page={p} index={i} active={i === pageIdx} onSelect={() => setCurrentPageIdx(i)} />)}
+                    </div>
+                </div>}
+                {leftTab === 'templates' && <div className="ed-panel-section ed-left-pane">
+                    <h4>Template Library <span>{templateOptions.length}</span></h4>
+                    <p className="ed-pane-hint">Add a prepared page to your project.</p>
+                    <div className="template-side-list">
+                        {templateOptions.map(template => (
+                            <button
+                                key={template.id}
+                                type="button"
+                                className="template-side-item"
+                                onClick={() => addPageFromTemplate(template)}
                             >
-                                <span className="page-thumb-num">{i + 1}</span>
-                            </div>
+                                <span className="template-side-item-heading">
+                                    <strong>{template.name}</strong>
+                                    <span>{template.category || 'My Templates'}</span>
+                                </span>
+                                <span>{template.description || 'Custom page template'}</span>
+                            </button>
                         ))}
                     </div>
-                </div>
-                <div className="ed-panel-section">
-                    <h4>Quick Templates</h4>
-                    <button className="ed-panel-btn" onClick={() => showModal('templateModal', 'browse')}>Browse all templates</button>
-                    <button className="ed-panel-btn" onClick={() => insertTemplate('cover')}>📕 Classic Cover</button>
-                    <button className="ed-panel-btn" onClick={() => insertTemplate('content')}>📄 Content Page</button>
-                    <button className="ed-panel-btn" onClick={() => insertTemplate('back')}>📗 Back Cover</button>
-                </div>
-                <div className="ed-panel-section" style={{ flex: 1 }}>
-                    <h4>Layers</h4>
+                </div>}
+                {leftTab === 'layers' && <div className="ed-panel-section ed-left-pane layers-pane">
+                    <h4>Layers <span>{currentPage.elements?.length || 0}</span></h4>
                     <div id="layerList" className="layer-list">
                         {[...(currentPage.elements || [])].reverse().map(el => (
                             <div
@@ -287,7 +362,7 @@ function Editor() {
                             </div>
                         ))}
                     </div>
-                </div>
+                </div>}
             </div>
 
             {/* Canvas Area */}

@@ -52,8 +52,27 @@ const normalizeColor = (color) => {
 
 const panelFillType = (element) => element.panelFillType || (element.fill && element.fill !== 'transparent' ? 'solid' : 'transparent')
 
+function ColorHistory({ colors, onSelect }) {
+    if (!colors.length) return null
+    return (
+        <div className="color-history" aria-label="Recent colours">
+            {colors.map(color => (
+                <button
+                    key={color}
+                    type="button"
+                    className="color-history-swatch"
+                    style={{ backgroundColor: color }}
+                    onClick={() => onSelect(color)}
+                    title={`Use ${color}`}
+                    aria-label={`Use colour ${color}`}
+                />
+            ))}
+        </div>
+    )
+}
+
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updatePage, playSFX, moveLayer } = useVP()
+    const { vpState, updateElement, updatePage, playSFX, moveLayer, rememberColor, rememberFont } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -71,7 +90,10 @@ function PropertyPanel({ activeTab = 'props' }) {
         if (activeTab === 'logic') {
             return <p className="empty-msg" style={styles.emptyMsg}>Select an element to set interactions</p>
         }
-        const setPageProperty = (key, val) => updatePage(pageIdx, { [key]: val })
+        const setPageProperty = (key, val) => {
+            if (key === 'background') rememberColor(val)
+            updatePage(pageIdx, { [key]: val })
+        }
         return (
             <div className="property-panel">
                 <h4 style={styles.header}>PAGE PROPERTIES</h4>
@@ -79,6 +101,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <div className="form-row">
                         <label>Background</label>
                         <input type="color" value={normalizeColor(page.background || '#ffffff')} onChange={(e) => setPageProperty('background', e.target.value)} />
+                        <ColorHistory colors={vpState.library?.colors || []} onSelect={color => setPageProperty('background', color)} />
                     </div>
                     <div className="form-row">
                         <label>Texture</label>
@@ -123,7 +146,14 @@ function PropertyPanel({ activeTab = 'props' }) {
         updateElement(selection.pageIdx, element.id, { [prop]: val })
     }
 
+    const handleColorChange = (prop, val) => {
+        rememberColor(val)
+        handleChange(prop, val)
+    }
+
     const fonts = ['Crimson Text', 'Cinzel', 'Cinzel Decorative', 'Bebas Neue', 'Special Elite', 'Bangers', 'Playfair Display', 'EB Garamond', 'Orbitron', 'Roboto Mono', 'Montserrat', 'Assistant', 'Comic Neue', 'Courier Prime', 'MedievalSharp', 'Inter']
+    const recentFonts = vpState.library?.fonts || []
+    const availableFonts = [...recentFonts, ...fonts.filter(font => !recentFonts.includes(font))]
 
     if (activeTab === 'effects') {
         return (
@@ -147,7 +177,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                         </div>
                         <div className="prop-row">
                             <label>Border Color</label>
-                            <input type="color" value={normalizeColor(element.borderColor || '#000000')} onChange={(e) => handleChange('borderColor', e.target.value)} />
+                            <input type="color" value={normalizeColor(element.borderColor || '#000000')} onChange={(e) => handleColorChange('borderColor', e.target.value)} />
                         </div>
                         <div className="prop-row">
                             <label>Border Radius</label>
@@ -206,7 +236,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                             </div>
                             <div className="prop-row">
                                 <label>Stroke Color</label>
-                                <input type="color" value={normalizeColor(element.strokeColor || '#ffffff')} onChange={(e) => handleChange('strokeColor', e.target.value)} />
+                                <input type="color" value={normalizeColor(element.strokeColor || '#ffffff')} onChange={(e) => handleColorChange('strokeColor', e.target.value)} />
                             </div>
                         </>
                     )}
@@ -364,17 +394,18 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <h4>Typography</h4>
                     <div className="form-row">
                         <label>Font Family</label>
-                        <select value={element.fontFamily || ''} onChange={(e) => handleChange('fontFamily', e.target.value)}>
+                        <select value={element.fontFamily || ''} onChange={(e) => { rememberFont(e.target.value); handleChange('fontFamily', e.target.value) }}>
                             <option value=''>Theme default</option>
-                            {fonts.map(f => <option key={f} value={f}>{f}</option>)}
+                            {availableFonts.map(f => <option key={f} value={f}>{recentFonts.includes(f) ? `Recent · ${f}` : f}</option>)}
                         </select>
                     </div>
                     <div className="form-row">
                         <label>Size & Color</label>
                         <div className="input-group">
                             <input type="number" value={element.fontSize || 16} onChange={(e) => handleChange('fontSize', parseInt(e.target.value))} />
-                            <input type="color" value={normalizeColor(element.color || '#000000')} onChange={(e) => handleChange('color', e.target.value)} />
+                            <input type="color" value={normalizeColor(element.color || '#000000')} onChange={(e) => handleColorChange('color', e.target.value)} />
                         </div>
+                        <ColorHistory colors={vpState.library?.colors || []} onSelect={color => handleColorChange('color', color)} />
                     </div>
                     <div className="form-row">
                         <label>Alignment</label>
@@ -409,16 +440,16 @@ function PropertyPanel({ activeTab = 'props' }) {
                 return <div className="prop-section">
                     <h4>Panel Surface</h4>
                     <div className="form-row"><label>Fill</label><select value={fillType} onChange={(e) => setFillType(e.target.value)}><option value="transparent">Transparent</option><option value="solid">Solid colour</option><option value="gradient">Linear gradient</option></select></div>
-                    {fillType !== 'transparent' && <div className="form-row"><label>{fillType === 'gradient' ? 'Start colour' : 'Fill colour'}</label><input type="color" value={normalizeColor(element.panelFillColor || element.fill || '#ffffff')} onChange={(e) => updateElement(selection.pageIdx, element.id, { panelFillColor: e.target.value, ...(fillType === 'solid' ? { fill: e.target.value } : {}) })} /></div>}
-                    {fillType === 'gradient' && <><div className="form-row"><label>End colour</label><input type="color" value={normalizeColor(element.panelFillColorEnd || '#000000')} onChange={(e) => handleChange('panelFillColorEnd', e.target.value)} /></div><div className="form-row"><label>Angle (°)</label><input type="number" min="0" max="360" value={element.panelGradientAngle ?? 135} onChange={(e) => handleChange('panelGradientAngle', Math.max(0, Math.min(360, parseInt(e.target.value, 10) || 0)))} /></div></>}
-                    <div className="form-row"><label>Border</label><div className="input-group"><input type="number" min="0" value={element.panelBorderWidth ?? 0} onChange={(e) => handleChange('panelBorderWidth', Math.max(0, parseInt(e.target.value, 10) || 0))} title="Border width" /><input type="color" value={normalizeColor(element.panelBorderColor || '#000000')} onChange={(e) => handleChange('panelBorderColor', e.target.value)} title="Border colour" /></div></div>
+                    {fillType !== 'transparent' && <div className="form-row"><label>{fillType === 'gradient' ? 'Start colour' : 'Fill colour'}</label><input type="color" value={normalizeColor(element.panelFillColor || element.fill || '#ffffff')} onChange={(e) => { rememberColor(e.target.value); updateElement(selection.pageIdx, element.id, { panelFillColor: e.target.value, ...(fillType === 'solid' ? { fill: e.target.value } : {}) }) }} /><ColorHistory colors={vpState.library?.colors || []} onSelect={color => { rememberColor(color); updateElement(selection.pageIdx, element.id, { panelFillColor: color, ...(fillType === 'solid' ? { fill: color } : {}) }) }} /></div>}
+                    {fillType === 'gradient' && <><div className="form-row"><label>End colour</label><input type="color" value={normalizeColor(element.panelFillColorEnd || '#000000')} onChange={(e) => handleColorChange('panelFillColorEnd', e.target.value)} /><ColorHistory colors={vpState.library?.colors || []} onSelect={color => handleColorChange('panelFillColorEnd', color)} /></div><div className="form-row"><label>Angle (°)</label><input type="number" min="0" max="360" value={element.panelGradientAngle ?? 135} onChange={(e) => handleChange('panelGradientAngle', Math.max(0, Math.min(360, parseInt(e.target.value, 10) || 0)))} /></div></>}
+                    <div className="form-row"><label>Border</label><div className="input-group"><input type="number" min="0" value={element.panelBorderWidth ?? 0} onChange={(e) => handleChange('panelBorderWidth', Math.max(0, parseInt(e.target.value, 10) || 0))} title="Border width" /><input type="color" value={normalizeColor(element.panelBorderColor || '#000000')} onChange={(e) => handleColorChange('panelBorderColor', e.target.value)} title="Border colour" /></div><ColorHistory colors={vpState.library?.colors || []} onSelect={color => handleColorChange('panelBorderColor', color)} /></div>
                     <div className="form-row"><label>Border style</label><select value={element.panelBorderStyle || 'solid'} onChange={(e) => handleChange('panelBorderStyle', e.target.value)}><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="double">Double</option><option value="none">None</option></select></div>
                     <div className="form-row"><label>Corner radius</label><input type="number" min="0" value={element.panelRadius ?? 0} onChange={(e) => handleChange('panelRadius', Math.max(0, parseInt(e.target.value, 10) || 0))} /></div>
                     <div className="form-row"><label>Panel shadow</label><input type="text" value={element.panelShadow || ''} onChange={(e) => handleChange('panelShadow', e.target.value)} placeholder="0 4px 16px rgba(0,0,0,.25)" /></div>
                 </div>
             })()}
 
-            {element.type === 'shape' && <div className="prop-section"><h4>Shape</h4><div className="form-row"><label>Fill colour</label><input type="color" value={normalizeColor(element.fill || '#000000')} onChange={(e) => handleChange('fill', e.target.value)} /></div></div>}
+            {element.type === 'shape' && <div className="prop-section"><h4>Shape</h4><div className="form-row"><label>Fill colour</label><input type="color" value={normalizeColor(element.fill || '#000000')} onChange={(e) => handleColorChange('fill', e.target.value)} /><ColorHistory colors={vpState.library?.colors || []} onSelect={color => handleColorChange('fill', color)} /></div></div>}
 
             {element.type === 'balloon' && <div className="prop-section"><h4>Balloon</h4><div className="form-row"><label>Style</label><select value={element.balloonType || 'dialog'} onChange={(e) => handleChange('balloonType', e.target.value)}><option value="dialog">Dialog</option><option value="thought">Thought</option><option value="shout">Shout</option><option value="caption">Caption</option><option value="whisper">Whisper</option><option value="narration">Narration</option></select></div></div>}
 
@@ -477,7 +508,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                     </div>
                     <div className="form-row">
                         <label>Glow Color</label>
-                        <input type="color" value={normalizeColor(element.objColor || '#4488ff')} onChange={(e) => handleChange('objColor', e.target.value)} />
+                        <input type="color" value={normalizeColor(element.objColor || '#4488ff')} onChange={(e) => handleColorChange('objColor', e.target.value)} />
                     </div>
                     <div className="form-row-checkbox">
                         <label><input type="checkbox" checked={element.objSpin !== false} onChange={(e) => handleChange('objSpin', e.target.checked)} /> Auto-Rotate</label>
