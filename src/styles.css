@@ -746,10 +746,23 @@ textarea {
     flex: 1;
     overflow: auto;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 40px;
     position: relative;
+}
+
+.ed-canvas-zoom {
+    flex: 0 0 auto;
+    transform: scale(1);
+    transform-origin: top left;
+    display: flex;
+    justify-content: center;
+}
+
+.ed-canvas-zoom>.ed-canvas {
+    transform: scale(var(--canvas-scale, 1));
+    transform-origin: top center;
 }
 
 .ed-canvas {

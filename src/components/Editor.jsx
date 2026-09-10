@@ -451,7 +451,14 @@ function Editor() {
                     </div>
                 </div>
                 <div className="ed-canvas-wrap" id="canvasWrap">
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}>
+                    <div
+                        className="ed-canvas-zoom"
+                        style={{
+                            width: `${(currentPage.orientation === 'landscape' ? PAGE_H : PAGE_W) * zoom / 100}px`,
+                            height: `${(currentPage.orientation === 'landscape' ? PAGE_W : PAGE_H) * zoom / 100}px`,
+                            '--canvas-scale': zoom / 100
+                        }}
+                    >
                         <Canvas page={currentPage} pageIdx={safePageIdx} snapOn={snapOn} gridOn={gridOn} zoom={zoom} importFiles={importFiles} />
                     </div>
                 </div>
