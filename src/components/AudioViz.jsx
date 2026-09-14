@@ -6,14 +6,14 @@
 import React, { useRef, useEffect } from 'react'
 
 /**
- * AudioViz - A "Native Engineering" inspired audio visualization component.
+ * 'AudioViz' - A "Native Engineering" inspired audio visualization component.
  * Uses WebAudio API to render frequency data on a canvas.
  */
 function AudioViz({ src, color = 'var(--vp-accent)', height = 100, width = '100%' }) {
-    const canvasRef = useRef(null)
-    const audioRef = useRef(null)
-    const analyzerRef = useRef(null)
-    const animationRef = useRef(null)
+    const canvasRef = useRef()
+    const audioRef = useRef()
+    const analyzerRef = useRef()
+    const animationRef = useRef()
 
     useEffect(() => {
         if (!canvasRef.current || !src) return
@@ -23,8 +23,11 @@ function AudioViz({ src, color = 'var(--vp-accent)', height = 100, width = '100%
         analyzer.fftSize = 256
         analyzerRef.current = analyzer
 
-        const source = audioCtx.createMediaElementSource(audioRef.current)
-        source.connect(analyzer)
+        if (!audioRef.current.isConnected) {
+            const source = audioCtx.createMediaElementSource(audioRef.current.source)
+            source.connect(analyzer)
+        }
+
         analyzer.connect(audioCtx.destination)
 
         const bufferLength = analyzer.frequencyBinCount

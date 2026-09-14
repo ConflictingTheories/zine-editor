@@ -32,6 +32,7 @@ export function normalizeProject(input) {
     id: String(source.id || source.serverId || crypto.randomUUID()),
     title: source.title || 'Untitled Zine',
     theme: source.theme || 'classic',
+    editorMode: source.editorMode || 'zine',
     author: source.author || source.author_name || '',
     description: source.description || '',
     series: source.series || source.seriesTitle || '', volume: source.volume || source.volumeNumber || '', issue: source.issue || source.issueNumber || '',

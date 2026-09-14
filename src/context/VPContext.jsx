@@ -6,7 +6,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID, DEFAULT_ZINE_IDS } from '../data/tutorialData.js'
 import { getAdditionalDefaultZines } from '../data/defaultZines.js'
-import { createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
+import { BUILT_IN_TEMPLATES, createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
+import { EDITOR_MODE_PHOTO_PORTFOLIO, EDITOR_MODE_ZINE, defaultThemeForMode } from '../data/editorModes.js'
 import { packSvrn } from '../../packages/svrn-format/src/index.js'
 
 /**
@@ -38,10 +39,11 @@ const readAssetLibrary = () => {
             colors: Array.isArray(stored.colors) ? stored.colors : [],
             fonts: Array.isArray(stored.fonts) ? stored.fonts : [],
             imported: Array.isArray(stored.imported) ? stored.imported : [],
-            audio: Array.isArray(stored.audio) ? stored.audio : []
+            audio: Array.isArray(stored.audio) ? stored.audio : [],
+            video: Array.isArray(stored.video) ? stored.video : []
         }
     } catch {
-        return { colors: [], fonts: [], imported: [], audio: [] }
+        return { colors: [], fonts: [], imported: [], audio: [], video: [] }
     }
 }
 
