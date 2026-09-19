@@ -75,7 +75,11 @@ const styles = {
         borderRadius: el.imgRadius ? `${el.imgRadius}px` : '0',
         width: '100%',
         height: '100%',
-        display: 'block'
+        display: 'block',
+        // A Light Table recipe can remain live in an interactive publication.
+        // CSS is the resilient playback fallback; the authored recipe remains
+        // attached to the element for the GPU renderer/exporter to consume.
+        filter: el.lightTableRecipe ? `brightness(${Math.pow(2, el.lightTableRecipe.params?.exposure || 0)}) contrast(${el.lightTableRecipe.params?.contrast || 1}) saturate(${el.lightTableRecipe.params?.saturation || 1})` : undefined
     }),
     panel: (el) => ({
         border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
@@ -228,7 +232,7 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
             return <div className="el-text el-symbol" style={styles.text(el)}>{el.content}</div>
         case 'image':
             return (
-                <div className="el-img" style={typeof styles.imageContainer === 'function' ? styles.imageContainer(el) : styles.imageContainer}>
+                <div className={`el-img ${el.lightTableRecipe?.effects?.some(effect => effect.id === 'water') || el.lightTableRecipe?.effect === 'water' ? 'el-img-ethereal-water' : ''}`} style={typeof styles.imageContainer === 'function' ? styles.imageContainer(el) : styles.imageContainer}>
                     <img
                         src={el.src}
                         alt=""

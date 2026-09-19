@@ -111,8 +111,10 @@ function Editor() {
     const safePageIdx = pages.length ? Math.min(Math.max(pageIdx, 0), pages.length - 1) : 0
     const currentPage = pages[safePageIdx] || { id: 'empty-page', elements: [], background: '#fff', orientation: 'portrait' }
     const themeStatus = themes[project?.theme || 'classic']?.status || 'STABLE'
-    const templateOptions = [...BUILT_IN_TEMPLATES, ...(vpState.templates || [])]
     const isPortfolio = project?.editorMode === 'photo-portfolio'
+    const templateOptions = isPortfolio
+        ? [...BUILT_IN_TEMPLATES.filter(template => template.category === 'Photo & Portfolio'), ...(vpState.templates || [])]
+        : [...BUILT_IN_TEMPLATES, ...(vpState.templates || [])]
 
     useEffect(() => {
         const onKey = (e) => {
@@ -316,12 +318,13 @@ function Editor() {
                         <label>Title</label>
                         <input type="text" value={project.title || ''} onChange={event => updateProjectSettings({ title: event.target.value })} />
                     </div>
-                    <div className="form-row">
+                    {!isPortfolio && <div className="form-row">
                         <label>Design theme</label>
                         <select value={project.theme || 'classic'} onChange={event => applyTheme(event.target.value)}>
                             {Object.keys(themes).map(theme => <option key={theme} value={theme}>{theme.replace(/(^|[-_])\w/g, value => value.toUpperCase())}</option>)}
                         </select>
-                    </div>
+                    </div>}
+                    {isPortfolio && <p className="prop-hint">The portfolio workspace stays neutral by design. Control typography, spacing, image treatment, and paper/background on each spread.</p>}
                     <div className="settings-divider">Publishing defaults</div>
                     <div className="form-row">
                         <label>Author</label>
@@ -370,18 +373,18 @@ function Editor() {
                                 className={`ed-left-tab ${leftTab === tab ? 'active' : ''}`}
                                 onClick={() => setLeftTab(tab)}
                             >
-                                {tab[0].toUpperCase() + tab.slice(1)}
+                                {isPortfolio && tab === 'pages' ? 'Spreads' : isPortfolio && tab === 'templates' ? 'Layouts' : tab[0].toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
                     </div>
                     {leftTab === 'pages' && <div className="ed-panel-section ed-left-pane">
-                        <h4>Pages <span>{pages.length}</span></h4>
+                        <h4>{isPortfolio ? 'Spreads' : 'Pages'} <span>{pages.length}</span></h4>
                         <div className="ed-panel-actions">
-                            <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
+                            <button className="ed-panel-btn" onClick={addPage}>+ {isPortfolio ? 'Blank Spread' : 'Blank Page'}</button>
                             <button className="ed-panel-btn" onClick={() => insertTemplate(isPortfolio ? 'cover-photo' : 'cover')}>📕 {isPortfolio ? 'Portfolio Cover' : 'Cover Page'}</button>
                             <button className="ed-panel-btn" onClick={() => insertTemplate(isPortfolio ? 'photo-grid' : 'content')}>📄 {isPortfolio ? 'Photo Grid' : 'Theme Page'}</button>
-                            <button className="ed-panel-btn" onClick={() => insertTemplate('back')}>📗 Back Cover</button>
-                            <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
+                            {!isPortfolio && <button className="ed-panel-btn" onClick={() => insertTemplate('back')}>📗 Back Cover</button>}
+                            <button className="ed-panel-btn template-launch" onClick={() => isPortfolio ? setLeftTab('templates') : showModal('templateModal', 'browse')}>✦ {isPortfolio ? 'Browse layouts' : 'Browse Templates'}</button>
                             <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
                             <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
                         </div>
@@ -390,8 +393,8 @@ function Editor() {
                         </div>
                     </div>}
                     {leftTab === 'templates' && <div className="ed-panel-section ed-left-pane">
-                        <h4>Template Library <span>{templateOptions.length}</span></h4>
-                        <p className="ed-pane-hint">Add a prepared page to your project.</p>
+                        <h4>{isPortfolio ? 'Portfolio layouts' : 'Template Library'} <span>{templateOptions.length}</span></h4>
+                        <p className="ed-pane-hint">{isPortfolio ? 'Start a spread with a photography-first layout.' : 'Add a prepared page to your project.'}</p>
                         <div className="template-side-list">
                             {templateOptions.map(template => (
                                 <button
@@ -478,7 +481,7 @@ function Editor() {
 
             {/* Footer */}
             <div className="ed-footer">
-                <span>Page <b id="pageNum">{safePageIdx + 1}</b> of <b id="pageTotal">{pages.length}</b></span>
+                <span>{isPortfolio ? 'Spread' : 'Page'} <b id="pageNum">{safePageIdx + 1}</b> of <b id="pageTotal">{pages.length}</b></span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.max(0, safePageIdx - 1))}>◀ Prev</button>
                     <button className="ed-tool" onClick={() => setCurrentPageIdx(Math.min(pages.length - 1, safePageIdx + 1))}>Next ▶</button>

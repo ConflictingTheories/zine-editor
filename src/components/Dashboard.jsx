@@ -23,7 +23,9 @@ function Dashboard() {
     }
 
     const handleCreatePortfolio = () => {
-        showModal('themePicker', 'photo-portfolio')
+        // A portfolio begins with a calm editorial workspace, not a zine-theme
+        // chooser. Visual treatment belongs to the book/spread, not its UI.
+        createProject('editorial', 'photo-portfolio')
     }
 
     const handleOpenProject = (index) => {

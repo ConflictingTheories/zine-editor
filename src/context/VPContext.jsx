@@ -472,12 +472,18 @@ const VPProvider = ({ children }) => {
 
     const createProject = (themeKey, editorMode = 'zine') => {
         const theme = themeKey || vpState.selectedTheme
+        const portfolioPages = ['cover-photo', 'photo-grid']
+            .map(id => BUILT_IN_TEMPLATES.find(template => template.id === id))
+            .filter(Boolean)
+            .map(template => createTemplatePage(template, theme))
         const project = {
             id: Date.now(),
             title: 'Untitled ' + (editorMode === 'photo-portfolio' ? 'Portfolio' : 'Zine'),
             theme,
             editorMode,
-            pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
+            pages: editorMode === EDITOR_MODE_PHOTO_PORTFOLIO
+                ? portfolioPages
+                : [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
             created: new Date().toISOString(),
             _dirty: true
         }
@@ -494,7 +500,7 @@ const VPProvider = ({ children }) => {
         saveLocal()
         closeModal('themePickerModal')
         closeModal('themePicker')
-        toast('New zine created!', 'success')
+        toast(editorMode === EDITOR_MODE_PHOTO_PORTFOLIO ? 'Portfolio book created!' : 'New zine created!', 'success')
     }
 
     const openProject = (idx) => {
