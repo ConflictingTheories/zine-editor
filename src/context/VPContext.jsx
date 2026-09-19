@@ -882,6 +882,7 @@ const VPProvider = ({ children }) => {
             return (vpState.library?.audio || []).map(asset => ({ ...asset, preview: '<span style="font-size:28px">♫</span>' }))
         }
         const panels = [
+            { id: 'photo-frame', preview: '<div style="width:80%;height:65%;border:12px solid #f7f5f0;box-shadow:0 3px 9px #333;background:#888"></div>', name: 'Photo Frame' },
             { id: 'rect', preview: '<div style="width:80%;height:80%;border:3px solid #ccc"></div>', name: 'Rect' },
             { id: 'rect-rounded', preview: '<div style="width:80%;height:80%;border:3px solid #ccc;border-radius:10px"></div>', name: 'Rounded' },
             { id: 'torn', preview: '<div style="width:80%;height:80%;border:3px dashed #ccc"></div>', name: 'Torn' },
@@ -1133,7 +1134,9 @@ const VPProvider = ({ children }) => {
         const base = { id: genId(), x: 120, y: 120, rotation: 0, opacity: 1, zIndex: 0, borderWidth: 0, borderColor: '#000', borderRadius: 0 }
         let el = { ...base }
         if (type === 'panels') {
-            el = { ...base, type: 'panel', width: 220, height: 160, panelBorderWidth: 4, panelBorderColor: assetId === 'neon' ? '#00f3ff' : '#0a0a0a', panelBorderStyle: assetId === 'torn' ? 'dashed' : 'solid', panelRadius: assetId === 'rect-rounded' ? 12 : 0, fill: 'transparent', panelShadow: assetId === 'neon' ? '0 0 15px #bc00ff' : 'none' }
+            el = assetId === 'photo-frame'
+                ? { ...base, type: 'photo-frame', width: 300, height: 230, frameWidth: 18, frameColor: '#f7f5f0', frameShadow: '0 10px 22px rgba(0,0,0,.28)', imageFit: 'cover' }
+                : { ...base, type: 'panel', width: 220, height: 160, panelBorderWidth: 4, panelBorderColor: assetId === 'neon' ? '#00f3ff' : '#0a0a0a', panelBorderStyle: assetId === 'torn' ? 'dashed' : 'solid', panelRadius: assetId === 'rect-rounded' ? 12 : 0, fill: 'transparent', panelShadow: assetId === 'neon' ? '0 0 15px #bc00ff' : 'none' }
         } else if (type === 'shapes') {
             const shapes = { circle: { type: 'shape', shape: 'circle', width: 100, height: 100, fill: '#0a0a0a' }, square: { type: 'shape', shape: 'rect', width: 100, height: 100, fill: '#0a0a0a' }, triangle: { type: 'shape', shape: 'triangle', width: 100, height: 100, fill: '#0a0a0a' }, diamond: { type: 'shape', shape: 'diamond', width: 80, height: 100, fill: '#0a0a0a' }, line_h: { type: 'shape', shape: 'line_h', width: 200, height: 4, fill: '#0a0a0a' }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } }
             el = { ...base, ...(shapes[assetId] || shapes.circle) }

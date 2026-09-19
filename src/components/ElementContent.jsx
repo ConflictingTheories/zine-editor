@@ -41,6 +41,19 @@ export const getPanelBackground = (el) => {
     return el.fill || 'transparent'
 }
 
+const lightTableFilter = (recipe) => {
+    if (!recipe) return undefined
+    const params = recipe.params || {}
+    const filters = [`brightness(${Math.pow(2, Number(params.exposure || 0))})`, `contrast(${Number(params.contrast ?? 1)})`, `saturate(${Number(params.saturation ?? 1)})`]
+        ; (recipe.effects || []).forEach(layer => {
+            if (layer.id === 'vignette') filters.push(`brightness(${1 - Number(layer.strength || 0) * .35})`)
+            if (layer.id === 'grain') filters.push(`contrast(${1 + Number(layer.strength || 0) * .12})`)
+            if (layer.id === 'posterize') filters.push(`contrast(${1 + Number(layer.strength || 0) * .8})`)
+            if (layer.id === 'chroma') filters.push(`hue-rotate(${Number(layer.strength || 0) * 8}deg)`)
+        })
+    return filters.join(' ')
+}
+
 const styles = {
     text: (el) => ({
         fontSize: el.fontSize || 16,
@@ -79,7 +92,7 @@ const styles = {
         // A Light Table recipe can remain live in an interactive publication.
         // CSS is the resilient playback fallback; the authored recipe remains
         // attached to the element for the GPU renderer/exporter to consume.
-        filter: el.lightTableRecipe ? `brightness(${Math.pow(2, el.lightTableRecipe.params?.exposure || 0)}) contrast(${el.lightTableRecipe.params?.contrast || 1}) saturate(${el.lightTableRecipe.params?.saturation || 1})` : undefined
+        filter: lightTableFilter(el.lightTableRecipe)
     }),
     panel: (el) => ({
         border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
@@ -240,6 +253,12 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
                     />
                 </div>
             )
+        case 'photo-frame':
+            return <div className="el-photo-frame" style={{ width: '100%', height: '100%', padding: el.frameWidth || 18, boxSizing: 'border-box', background: el.frameColor || '#f7f5f0', boxShadow: el.frameShadow || '0 10px 22px rgba(0,0,0,.28)' }}>
+                <div className="el-photo-frame-window" style={{ overflow: 'hidden', width: '100%', height: '100%', background: '#777' }}>
+                    {el.src ? <img src={el.src} alt={el.alt || ''} style={{ width: '100%', height: '100%', display: 'block', objectFit: el.imageFit || 'cover', filter: lightTableFilter(el.lightTableRecipe) }} /> : <div className="el-photo-frame-empty">Choose an image from the library</div>}
+                </div>
+            </div>
         case 'panel':
             return <div className="el-panel" style={styles.panel(el)} />
         case 'shape':

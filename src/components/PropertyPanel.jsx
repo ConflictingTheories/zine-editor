@@ -158,7 +158,7 @@ function PageInteractionEditor({ interaction, index, numPages, knownKeys, onChan
 }
 
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updatePage, playSFX, moveLayer, rememberColor, rememberFont } = useVP()
+    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -611,8 +611,30 @@ function PropertyPanel({ activeTab = 'props' }) {
                             <option value="gallery">Gallery Frame</option>
                         </select>
                     </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
+                        <button type="button" className="prop-btn" style={{ fontSize: '11px' }} onClick={() => {
+                            const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'
+                            input.onchange = e => { const file = e.target.files?.[0]; if (!file) return; const r = new FileReader(); r.onload = ev => handleChange('src', ev.target.result); r.readAsDataURL(file) }
+                            input.click()
+                        }}>↑ Replace image</button>
+                        <button type="button" className="prop-btn" style={{ fontSize: '11px', borderColor: 'var(--vp-accent)', color: 'var(--vp-accent)' }} onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor', lightTableAsset: element.src ? { id: element.id, src: element.src, name: element.id } : null })}>
+                            💡 Light Table
+                        </button>
+                    </div>
+                    {element.lightTableRecipe && (
+                        <p className="prop-hint" style={{ marginTop: 6 }}>✓ Light Table recipe applied. Grade again to update.</p>
+                    )}
                 </div>
             )}
+
+            {element.type === 'photo-frame' && <div className="prop-section">
+                <h4>Photo frame</h4>
+                <div className="form-row"><label>Image source</label><select value={element.src || ''} onChange={e => handleChange('src', e.target.value)}><option value="">Choose from library...</option>{getAssets('imported').map(asset => <option key={asset.id} value={asset.src}>{asset.name || asset.id}</option>)}</select></div>
+                <div className="form-row"><label>Or paste URL</label><input type="text" value={element.src || ''} onChange={e => handleChange('src', e.target.value)} placeholder="https://… or data URL" /></div>
+                <div className="form-row"><label>Image fit</label><select value={element.imageFit || 'cover'} onChange={e => handleChange('imageFit', e.target.value)}><option value="cover">Fill frame</option><option value="contain">Fit inside</option></select></div>
+                <div className="form-row"><label>Mat width</label><input type="number" min="0" value={element.frameWidth || 18} onChange={e => handleChange('frameWidth', Number(e.target.value))} /></div>
+                <div className="form-row"><label>Mat colour</label><input type="color" value={normalizeColor(element.frameColor || '#f7f5f0')} onChange={e => handleColorChange('frameColor', e.target.value)} /></div>
+            </div>}
 
             {(element.type === 'video' || element.type === 'audio-log') && (
                 <div className="prop-section">

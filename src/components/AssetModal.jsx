@@ -16,7 +16,7 @@ import { useVP } from '../context/VPContext.jsx'
  * - onClose: function() called when the modal is dismissed
  */
 function AssetModal({ type: initialType, onClose }) {
-    const { vpState, getAssets, addAsset, addImportedAssets, setBackgroundAudio, setPageAudio } = useVP()
+    const { vpState, getAssets, addAsset, addImportedAssets, setBackgroundAudio, setPageAudio, updateElement } = useVP()
     const audioIntent = initialType?.startsWith('audio-page') ? 'page' : initialType?.startsWith('audio-background') ? 'background' : null
     const audioLoop = !initialType?.endsWith('-once')
     const [currentType, setCurrentType] = useState(audioIntent ? 'audio' : (initialType || 'panels'))
@@ -48,6 +48,10 @@ function AssetModal({ type: initialType, onClose }) {
         if (currentType === 'audio' && audioIntent) {
             if (audioIntent === 'page') setPageAudio(vpState.selection?.pageIdx ?? 0, asset.src, asset.name, audioLoop)
             else setBackgroundAudio(asset.src, asset.name, audioLoop)
+        } else if (currentType === 'imported' && vpState.selection?.type === 'element') {
+            const selected = vpState.currentProject?.pages?.[vpState.selection.pageIdx]?.elements?.find(element => element.id === vpState.selection.id)
+            if (selected?.type === 'photo-frame') updateElement(vpState.selection.pageIdx, selected.id, { src: asset.src })
+            else addAsset(currentType, asset.id)
         } else {
             addAsset(currentType, asset.id)
         }

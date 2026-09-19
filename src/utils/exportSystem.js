@@ -631,17 +631,20 @@ const elementToHTML = (el, isExport = true) => {
     if (el.type === 'image') {
         const fit = el.objectFit || 'contain'
         const radius = el.imgRadius ? `border-radius:${el.imgRadius}px;` : ''
-        content = `<img src="${el.src}" style="width:100%;height:100%;object-fit:${fit};display:block;${radius}" alt="">`
+        const recipe = el.lightTableRecipe?.params ? `filter:brightness(${Math.pow(2, el.lightTableRecipe.params.exposure || 0)}) contrast(${el.lightTableRecipe.params.contrast || 1}) saturate(${el.lightTableRecipe.params.saturation || 1});` : ''
+        content = `<img src="${el.src}" style="width:100%;height:100%;object-fit:${fit};display:block;${radius}${recipe}" alt="">`
     }
-    if (el.type === 'video') content = `<video src="${el.src}" controls style="width:100%;height:100%;object-fit:${el.objectFit || 'contain'}"></video>`
+    if (el.type === 'photo-frame') {
+        s += `padding:${el.frameWidth || 18}px;background:${el.frameColor || '#f7f5f0'};box-shadow:${el.frameShadow || '0 10px 22px rgba(0,0,0,.28)'};`
+        content = el.src ? `<img src="${el.src}" style="width:100%;height:100%;display:block;object-fit:${el.imageFit || 'cover'}" alt="">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#777">Choose an image from the library</div>'
+    }
+    if (el.type === 'video') content = '<video src="' + (el.src || '') + '" controls style="width:100%;height:100%;object-fit:' + (el.objectFit || 'contain') + '"></video>'
     if (el.type === 'audio-log') {
-        content = `<div class="audio-log-wrap" style="display:flex;flex-direction:column;width:100%;height:100%;background:rgba(0,0,0,0.5);border:1px solid #d4af37;padding:10px;box-sizing:border-box;color:#fff">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                <button class="btn-audio" data-src="${el.src}" onclick="playAudioLog(this)">▶</button>
-                <div style="font-weight:bold">${el.label || 'AUDIO LOG'}</div>
-            </div>
-            <canvas width="${el.width}" height="${el.height - 50}" style="flex:1;width:100%;background:#000;border-radius:4px" data-theme="${el.vizTheme || 'bars'}"></canvas>
-        </div>`
+        content = '<div class="audio-log-wrap" style="display:flex;flex-direction:column;width:100%;height:100%;background:rgba(0,0,0,0.5);border:1px solid #d4af37;padding:10px;box-sizing:border-box;color:#fff">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+            '<button class="btn-audio" data-src="' + (el.src || '') + '" onclick="playAudioLog(this)">▶</button>' +
+            '<div style="font-weight:bold">' + (el.label || 'AUDIO LOG') + '</div></div>' +
+            '<canvas width="' + (el.width || 300) + '" height="' + ((el.height || 200) - 50) + '" style="flex:1;width:100%;background:#000;border-radius:4px" data-theme="' + (el.vizTheme || 'bars') + '"></canvas></div>'
     }
     if (el.type === 'panel') {
         if (el.panelBorderWidth !== undefined) {
@@ -673,7 +676,7 @@ const elementToHTML = (el, isExport = true) => {
         if (el.shaderImage) {
             content = `<img src="${el.shaderImage}" style="width:100%;height:100%;object-fit:cover" alt="">`
         } else {
-            content = `<canvas class="vp-shader-canvas" data-code="${btoa(unescape(encodeURIComponent(el.shaderCode || '')))}" style="width:100%;height:100%"></canvas>`
+            content = '<canvas class="vp-shader-canvas" data-code="' + btoa(unescape(encodeURIComponent(el.shaderCode || ''))) + '" style="width:100%;height:100%"></canvas>'
         }
     }
     if (el.animation && el.animation !== 'none') s += `animation:${el.animation} ${el.animDuration || 1}s ease ${el.animLoop ? 'infinite' : 'both'};`

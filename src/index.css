@@ -6,8 +6,8 @@
     --vp-surface: hsl(var(--vp-surface-raw));
     --vp-surface-elevated: hsl(0, 0%, 15%);
 
-    --vp-accent-raw: 45, 65%, 53%;
-    /* Gold #d4af37 */
+    --vp-accent-raw: 215, 10%, 65%;
+    /* Neutral steel — publishing controls must not compete with the work. */
     --vp-accent: hsl(var(--vp-accent-raw));
     --vp-accent-glow: hsla(var(--vp-accent-raw), 0.3);
 
@@ -32,7 +32,7 @@
     --vp-surface: hsl(var(--vp-surface-raw));
     --vp-surface-elevated: hsl(240, 12%, 94%);
 
-    --vp-accent-raw: 45, 88%, 38%;
+    --vp-accent-raw: 215, 12%, 42%;
     --vp-accent: hsl(var(--vp-accent-raw));
     --vp-accent-glow: hsla(var(--vp-accent-raw), 0.2);
 
