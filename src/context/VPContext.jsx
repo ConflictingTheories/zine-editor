@@ -470,12 +470,13 @@ const VPProvider = ({ children }) => {
         toast('Logged out', 'info')
     }
 
-    const createProject = (themeKey) => {
+    const createProject = (themeKey, editorMode = 'zine') => {
         const theme = themeKey || vpState.selectedTheme
         const project = {
             id: Date.now(),
-            title: 'Untitled Zine',
+            title: 'Untitled ' + (editorMode === 'photo-portfolio' ? 'Portfolio' : 'Zine'),
             theme,
+            editorMode,
             pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
             created: new Date().toISOString(),
             _dirty: true

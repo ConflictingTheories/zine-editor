@@ -357,6 +357,14 @@ export function shader(fragSource, options = {}) {
     }
 
     const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    // Flow always compiles as GLSL ES 3.00 (WebGL2).  A number of existing
+    // Prolut recipes were authored for GLSL ES 1.00, where texture2D() was
+    // valid.  GLSL 3 removed that overload in favour of texture(), which was
+    // the source of the otherwise opaque "no matching overloaded function"
+    // errors. Keep old recipes usable while compiling them in our WebGL2
+    // wrapper. Word boundaries ensure identifiers such as texture2DSize are
+    // left intact.
+    const compatibleFragSource = fragSource.replace(/\btexture2D\s*\(/g, 'texture(');
     const fullFrag = `#version 300 es
       precision highp float;
       out vec4 fragColor;
@@ -367,7 +375,7 @@ export function shader(fragSource, options = {}) {
       uniform vec2 mouse;
       uniform vec2 mouseVelocity;
       uniform float mouseDown;
-      ${fragSource}
+      ${compatibleFragSource}
       void main() { mainImage(fragColor, gl_FragCoord.xy); }`;
     gl.shaderSource(fs, fullFrag);
     gl.compileShader(fs);

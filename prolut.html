@@ -1,0 +1,3656 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0d0f12">
+  <title>LUT Studio Pro · mushu-flow</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden
+    }
+
+    body {
+      background: #0d0f12;
+      color: #e6e9ee;
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      overscroll-behavior: none;
+    }
+
+    header {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #12151a;
+      border-bottom: 1px solid #1e242c;
+      padding-top: calc(10px + env(safe-area-inset-top));
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: .5px;
+      font-size: 15px;
+      flex: none
+    }
+
+    .brand span {
+      color: #5b8cff;
+      font-weight: 400
+    }
+
+    .brand .save-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #3a4250;
+      margin-left: 6px;
+      vertical-align: middle;
+      transition: background .3s
+    }
+
+    .brand .save-dot.saving {
+      background: #ffcc40
+    }
+
+    .brand .save-dot.saved {
+      background: #40ff90
+    }
+
+    .hdr-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid #2a323d;
+      background: #1a1f27;
+      color: #dfe4ea;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      line-height: 1;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+      min-height: 36px;
+    }
+
+    .btn:active {
+      background: #242b35
+    }
+
+    .btn.primary {
+      background: #2f66ff;
+      border-color: #2f66ff;
+      color: #fff
+    }
+
+    .btn.primary:active {
+      background: #1e50d8
+    }
+
+    .btn.big {
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+      margin-bottom: 8px;
+      border-radius: 10px
+    }
+
+    .btn.icon-btn {
+      padding: 7px 10px;
+      font-size: 17px;
+      line-height: 1;
+      min-width: 38px;
+      min-height: 38px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Symbol", sans-serif
+    }
+
+    .btn[disabled] {
+      opacity: .30;
+      pointer-events: none
+    }
+
+    .btn.file-btn {
+      position: relative;
+      overflow: hidden
+    }
+
+    .btn.file-btn.loaded {
+      border-color: #2f66ff;
+      color: #8fb4ff
+    }
+
+    .btn input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      font-size: 100px;
+      cursor: pointer
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      min-height: 0
+    }
+
+    .stage {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px;
+      background: #090b0e;
+      min-height: 0;
+      position: relative
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative
+    }
+
+    #preview,
+    #glPreview {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 6px 30px rgba(0, 0, 0, .6);
+      background: #111;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #glPreview {
+      display: none;
+      z-index: 2
+    }
+
+    .timeline-bar {
+      flex: none;
+      width: 100%;
+      max-width: 820px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      background: #12151a;
+      border: 1px solid #1c222a;
+      border-radius: 8px;
+    }
+
+    .timeline-bar button {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: none;
+      background: #2f66ff;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      flex: none
+    }
+
+    .timeline-bar input[type=range] {
+      flex: 1;
+      height: 28px
+    }
+
+    .timeline-bar .t {
+      font-variant-numeric: tabular-nums;
+      color: #98a2b0;
+      font-size: 12px;
+      min-width: 56px;
+      text-align: right
+    }
+
+    .timeline-bar label {
+      font-size: 11px;
+      color: #98a2b0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer
+    }
+
+    .hist {
+      flex: none;
+      width: 100%;
+      max-width: 820px;
+      height: 60px;
+      display: block;
+      border-radius: 8px;
+      border: 1px solid #1c222a;
+      background: #07090b
+    }
+
+    .panel {
+      flex: none;
+      width: 400px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: #0f1216;
+      border-left: 1px solid #1c222a
+    }
+
+    .tabs {
+      flex: none;
+      display: flex;
+      gap: 2px;
+      padding: 8px;
+      overflow-x: auto;
+      background: #12151a;
+      border-bottom: 1px solid #1c222a;
+      scrollbar-width: none
+    }
+
+    .tabs::-webkit-scrollbar {
+      display: none
+    }
+
+    .tab {
+      flex: 1;
+      min-width: 56px;
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: #8a94a3;
+      padding: 9px 6px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap
+    }
+
+    .tab.active {
+      background: #1e252f;
+      color: #fff
+    }
+
+    .panels {
+      flex: 1;
+      min-height: 0;
+      position: relative
+    }
+
+    .panel-body {
+      display: none;
+      height: 100%;
+      overflow-y: auto;
+      padding: 12px 14px 60px;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain
+    }
+
+    .panel-body.active {
+      display: block
+    }
+
+    .ctrl {
+      margin-bottom: 12px
+    }
+
+    .ctrl-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 3px
+    }
+
+    .ctrl-top span:first-child {
+      font-size: 12px;
+      color: #9aa4b2;
+      font-weight: 500;
+      user-select: none;
+      cursor: pointer
+    }
+
+    .ctrl-top .val {
+      font-size: 12px;
+      color: #dfe4ea;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 32px;
+      background: transparent;
+      margin: 0;
+      display: block;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 3px;
+      background: #252c36
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #e8ecf1;
+      border: 1px solid #0b0d10;
+      margin-top: -9px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+    }
+
+    input[type=range]::-moz-range-track {
+      height: 4px;
+      border-radius: 3px;
+      background: #252c36
+    }
+
+    input[type=range]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #e8ecf1;
+      border: 1px solid #0b0d10
+    }
+
+    input[type=range].hue::-webkit-slider-runnable-track {
+      background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)
+    }
+
+    input[type=range].hue::-moz-range-track {
+      background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)
+    }
+
+    .sec-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #5f6b7a;
+      margin: 18px 0 10px;
+      font-weight: 700;
+      border-top: 1px solid #1a2028;
+      padding-top: 14px;
+    }
+
+    .sec-title:first-child {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0
+    }
+
+    .field {
+      margin-bottom: 14px
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: #9aa4b2;
+      margin-bottom: 6px;
+      font-weight: 500
+    }
+
+    .field input[type=text],
+    .field select {
+      width: 100%;
+      background: #151a21;
+      border: 1px solid #262e39;
+      color: #e6e9ee;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .hint {
+      font-size: 11.5px;
+      color: #5f6b7a;
+      line-height: 1.55;
+      margin: 14px 0 0
+    }
+
+    .hint strong {
+      color: #8fb4ff;
+      font-weight: 600
+    }
+
+    #curveWrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1/1;
+      margin-bottom: 12px
+    }
+
+    #curveCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid #232a34;
+      background: #0a0d11;
+      touch-action: none;
+      cursor: crosshair
+    }
+
+    .depth-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #5f6b7a;
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      background: #12151a;
+      border-radius: 8px;
+      border: 1px solid #1c222a
+    }
+
+    .depth-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3a4250;
+      flex: none
+    }
+
+    .depth-dot.on {
+      background: #2f66ff;
+      box-shadow: 0 0 8px #2f66ff
+    }
+
+    .eth-presets {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-bottom: 14px
+    }
+
+    .eth-preset {
+      appearance: none;
+      border: 1px solid #262e39;
+      background: #151a21;
+      color: #c8d0db;
+      padding: 9px 10px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      line-height: 1.25;
+      font-family: inherit
+    }
+
+    .eth-preset:hover {
+      border-color: #3a4250;
+      background: #1a2129
+    }
+
+    .eth-preset:active {
+      background: #222b35
+    }
+
+    .eth-preset .p-name {
+      display: block;
+      color: #e6e9ee;
+      font-size: 12.5px;
+      margin-bottom: 2px
+    }
+
+    .eth-preset .p-desc {
+      display: block;
+      color: #5f6b7a;
+      font-size: 10.5px;
+      font-weight: 500
+    }
+
+    .eth-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px
+    }
+
+    .eth-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+      background: #151a21;
+      border: 1px solid #262e39;
+      color: #98a2b0;
+      cursor: pointer;
+      user-select: none
+    }
+
+    .eth-chip.active {
+      background: #1e252f;
+      color: #fff;
+      border-color: #3a4250
+    }
+
+    .eth-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex: none
+    }
+
+    .eth-chip .x {
+      margin-left: 2px;
+      color: #5f6b7a;
+      font-weight: 700;
+      padding: 0 4px
+    }
+
+    .eth-chip .x:hover {
+      color: #ff6060
+    }
+
+    .eth-chip.add {
+      color: #5b8cff;
+      border-style: dashed;
+      border-color: #2f3d5a
+    }
+
+    #ethCanvas {
+      width: 100%;
+      height: 240px;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid #232a34;
+      background: #0a0d11;
+      touch-action: none;
+      cursor: crosshair;
+      margin-bottom: 10px
+    }
+
+    .eth-inline {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px
+    }
+
+    .eth-inline .field {
+      flex: 1;
+      margin-bottom: 0
+    }
+
+    .eth-toggles {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px
+    }
+
+    .eth-toggle {
+      flex: 1;
+      padding: 9px;
+      border-radius: 8px;
+      border: 1px solid #262e39;
+      background: #151a21;
+      color: #98a2b0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      user-select: none
+    }
+
+    .eth-toggle.on {
+      background: #2f66ff;
+      border-color: #2f66ff;
+      color: #fff
+    }
+
+    .eth-recipe {
+      margin-top: 14px;
+      padding: 12px;
+      background: #0e1319;
+      border: 1px solid #1c222a;
+      border-radius: 10px;
+      font-size: 11.5px;
+      line-height: 1.6;
+      color: #8a94a3
+    }
+
+    .eth-recipe h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #5b8cff;
+      font-weight: 700
+    }
+
+    .eth-recipe code {
+      background: #151a21;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #c8d0db
+    }
+
+    .eth-recipe ul {
+      margin: 6px 0 0 16px;
+      padding: 0
+    }
+
+    .eth-recipe li {
+      margin-bottom: 4px
+    }
+
+    .lut-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #12151a;
+      border: 1px solid #1c222a;
+      border-radius: 8px;
+      margin-bottom: 6px
+    }
+
+    .lut-row .name {
+      flex: 1;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .lut-row input[type=range] {
+      flex: none;
+      width: 90px;
+      height: 24px
+    }
+
+    .lut-row .x {
+      color: #5f6b7a;
+      cursor: pointer;
+      padding: 2px 6px;
+      font-weight: 700
+    }
+
+    .lut-row .x:hover {
+      color: #ff6060
+    }
+
+    .crop-overlay {
+      position: absolute;
+      pointer-events: none;
+      z-index: 5;
+      border: 1px solid rgba(255, 255, 255, .7);
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, .5)
+    }
+
+    .crop-overlay[hidden] {
+      display: none
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #1a2028;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 8px 0
+    }
+
+    .progress-bar>div {
+      height: 100%;
+      background: #2f66ff;
+      width: 0;
+      transition: width .2s
+    }
+
+    @media (max-width:860px) {
+      main {
+        flex-direction: column
+      }
+
+      .stage {
+        flex: none;
+        height: 38vh;
+        padding: 8px;
+        gap: 6px
+      }
+
+      .hist {
+        height: 48px
+      }
+
+      .timeline-bar {
+        padding: 4px 8px
+      }
+
+      .panel {
+        width: auto;
+        flex: 1;
+        border-left: none;
+        border-top: 1px solid #1c222a;
+        min-height: 0
+      }
+
+      .panel-body {
+        padding: 10px 12px 60px
+      }
+
+      #ethCanvas {
+        height: 200px
+      }
+    }
+
+    @media (max-width:400px) {
+      .brand {
+        font-size: 14px
+      }
+
+      .btn {
+        padding: 6px 10px;
+        font-size: 12px
+      }
+
+      .btn.icon-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 6px 8px;
+        font-size: 16px
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="brand">LUT<span>Studio Pro</span> <span style="font-size:11px;color:#5f6b7a">× mushu-flow</span><span
+        class="save-dot" id="saveDot"></span></div>
+    <div class="hdr-actions">
+      <button class="btn icon-btn" id="undoBtn" title="Undo">↶</button>
+      <button class="btn icon-btn" id="redoBtn" title="Redo">↷</button>
+      <label class="btn file-btn" id="imgBtnLabel">Image / RAW<input type="file" id="fileInput"
+          accept="image/*,.cr2,.cr3,.nef,.arw,.dng,.raf,.orf,.rw2,.pef,.srw,.nrw"></label>
+      <label class="btn file-btn" id="depthBtnLabel">Depth<input type="file" id="depthInput" accept="image/*"></label>
+      <button class="btn" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="stage">
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="preview"></canvas>
+        <canvas id="glPreview"></canvas>
+        <div class="crop-overlay" id="cropOverlay" hidden></div>
+      </div>
+      <div class="timeline-bar">
+        <button id="tlPlay" title="Play/Pause">▶</button>
+        <input type="range" id="tlScrub" min="0" max="4" step="0.01" value="0">
+        <span class="t" id="tlTime">0.00s</span>
+        <label><input type="checkbox" id="tlLoop" checked> Loop</label>
+      </div>
+      <canvas id="histogram" class="hist" width="760" height="120"></canvas>
+    </div>
+
+    <div class="panel">
+      <nav class="tabs">
+        <button class="tab active" data-tab="basic">Basic</button>
+        <button class="tab" data-tab="curves">Curves</button>
+        <button class="tab" data-tab="tint">Tint</button>
+        <button class="tab" data-tab="mixer">Mixer</button>
+        <button class="tab" data-tab="luts">LUTs</button>
+        <button class="tab" data-tab="effects">Effects</button>
+        <button class="tab" data-tab="crop">Crop</button>
+        <button class="tab" data-tab="presets">Presets</button>
+        <button class="tab" data-tab="export">Export</button>
+      </nav>
+      <div class="panels">
+        <section class="panel-body active" data-panel="basic"></section>
+        <section class="panel-body" data-panel="curves"></section>
+        <section class="panel-body" data-panel="tint"></section>
+        <section class="panel-body" data-panel="mixer"></section>
+        <section class="panel-body" data-panel="luts"></section>
+        <section class="panel-body" data-panel="effects"></section>
+        <section class="panel-body" data-panel="crop"></section>
+        <section class="panel-body" data-panel="presets"></section>
+        <section class="panel-body" data-panel="export"></section>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    /* =========================================================
+       IMPORTS — mushu-flow is the ONLY shader engine
+       ========================================================= */
+    import { flow, shader, texture } from 'https://unpkg.com/mushu-flow/src/core/index.js';
+    import { noise2D, fbm2D, warp } from 'https://unpkg.com/mushu-flow/src/glsl/index.js';
+
+    /* =========================================================
+       MATH HELPERS
+       ========================================================= */
+    const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    const SRGB2LIN = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const c = i / 255;
+      SRGB2LIN[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    const L2S_N = 1024;
+    const L2S = new Float32Array(L2S_N + 1);
+    for (let i = 0; i <= L2S_N; i++) {
+      const l = (i / L2S_N) * (i / L2S_N);
+      L2S[i] = l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
+    }
+    function lin2srgb(x) {
+      if (x <= 0) return 0;
+      if (x >= 1) return 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+      const f = Math.sqrt(x) * L2S_N, i = f | 0, t = f - i;
+      return L2S[i] + (L2S[i + 1] - L2S[i]) * t;
+    }
+    function hsl2rgb(h, s, l) {
+      h = ((h % 1) + 1) % 1;
+      if (s <= 0) return [l, l, l];
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      const f = t => {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+      return [f(h + 1 / 3), f(h), f(h - 1 / 3)];
+    }
+    function rgb2hsl(r, g, b) {
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+      let h = 0, s = 0;
+      if (d > 1e-9) {
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+        else if (mx === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h /= 6;
+      }
+      return [h, s, l];
+    }
+
+    /* ---------- Curve LUT ---------- */
+    const CURVE_N = 1024;
+    function makeCurveLUT(points) {
+      const pts = points.slice().sort((a, b) => a[0] - b[0]);
+      const n = pts.length;
+      const lut = new Float32Array(CURVE_N);
+      if (n < 2) { lut.fill(pts.length ? pts[0][1] : 0); return lut; }
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      const m = new Float64Array(n - 1);
+      for (let i = 0; i < n - 1; i++) {
+        const dx = xs[i + 1] - xs[i];
+        m[i] = dx > 1e-9 ? (ys[i + 1] - ys[i]) / dx : 0;
+      }
+      const c = new Float64Array(n);
+      c[0] = m[0]; c[n - 1] = m[n - 2];
+      for (let i = 1; i < n - 1; i++) {
+        if (m[i - 1] * m[i] <= 0) c[i] = 0;
+        else {
+          const h0 = xs[i] - xs[i - 1], h1 = xs[i + 1] - xs[i];
+          const w1 = 2 * h1 + h0, w2 = h1 + 2 * h0;
+          c[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i]);
+        }
+      }
+      for (let k = 0; k < CURVE_N; k++) {
+        const x = k / (CURVE_N - 1);
+        let v;
+        if (x <= xs[0]) v = ys[0];
+        else if (x >= xs[n - 1]) v = ys[n - 1];
+        else {
+          let lo = 0, hi = n - 1;
+          while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xs[mid] <= x) lo = mid; else hi = mid; }
+          const h = xs[lo + 1] - xs[lo], t = (x - xs[lo]) / h;
+          const t2 = t * t, t3 = t2 * t;
+          const h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+          v = h00 * ys[lo] + h10 * h * c[lo] + h01 * ys[lo + 1] + h11 * h * c[lo + 1];
+        }
+        lut[k] = clamp(v, 0, 1);
+      }
+      return lut;
+    }
+    function evalLUT(lut, x) {
+      x = clamp(x, 0, 1);
+      const f = x * (CURVE_N - 1), i = f | 0, t = f - i;
+      return i >= CURVE_N - 1 ? lut[CURVE_N - 1] : lut[i] + (lut[i + 1] - lut[i]) * t;
+    }
+
+    /* =========================================================
+       CONSTANTS
+       ========================================================= */
+    const BANDS = [
+      ['red', 0], ['orange', 30], ['yellow', 60], ['green', 120],
+      ['aqua', 180], ['blue', 240], ['purple', 280], ['magenta', 320]
+    ];
+    const ETH_CHANNELS = [
+      { id: 'luma', label: 'Luma', color: '#ffffff' },
+      { id: 'r', label: 'Red', color: '#ff6060' },
+      { id: 'g', label: 'Green', color: '#60ff60' },
+      { id: 'b', label: 'Blue', color: '#6080ff' },
+      { id: 'hue', label: 'Hue', color: '#ff60ff' },
+      { id: 'sat', label: 'Sat', color: '#ffcc60' },
+      { id: 'red', label: 'Red Band', color: '#ff4040' },
+      { id: 'orange', label: 'Orange Band', color: '#ff9040' },
+      { id: 'yellow', label: 'Yellow Band', color: '#ffd940' },
+      { id: 'green', label: 'Green Band', color: '#40ff40' },
+      { id: 'aqua', label: 'Aqua Band', color: '#40ffff' },
+      { id: 'blue', label: 'Blue Band', color: '#4060ff' },
+      { id: 'purple', label: 'Purple Band', color: '#a040ff' },
+      { id: 'magenta', label: 'Magenta Band', color: '#ff40a0' },
+    ];
+    const ETH_CHANNEL_INDEX = ETH_CHANNELS.reduce((m, c, i) => (m[c.id] = i, m), {});
+
+    /* =========================================================
+       STATE
+       ========================================================= */
+    function defaultState() {
+      return {
+        exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        temperature: 0, tint: 0, vibrance: 0, saturation: 0,
+        splitShadowHue: 215, splitShadowSat: 0,
+        splitMidHue: 35, splitMidSat: 0,
+        splitHighHue: 45, splitHighSat: 0,
+        splitBalance: 0,
+        curves: {
+          rgb: [[0, 0], [1, 1]],
+          r: [[0, 0], [1, 1]],
+          g: [[0, 0], [1, 1]],
+          b: [[0, 0], [1, 1]]
+        },
+        hsl: {
+          red: [0, 0, 0], orange: [0, 0, 0], yellow: [0, 0, 0], green: [0, 0, 0],
+          aqua: [0, 0, 0], blue: [0, 0, 0], purple: [0, 0, 0], magenta: [0, 0, 0]
+        },
+        geometry: { x: 0, y: 0, w: 1, h: 1, aspect: null, rotate: 0, flipH: false, flipV: false },
+        luts: [],           // [{ hash, name, size, strength, lut:Float32Array }]
+        effects: [],        // [{ id, typeId, enabled, params, speed, phase, mask }]
+        effectsEnabled: false,
+        selectedEffectId: null,
+        timeline: { duration: 4, fps: 24 },
+        presets: [],        // user preset library — in-memory mirror of IDB
+      };
+    }
+
+    let P = defaultState();
+    let selectedEffectId = null;
+
+    /* ---- effect id counter ---- */
+    let effectIdCounter = 0;
+    function nextEffectId() { return 'e' + (++effectIdCounter) + '_' + Math.random().toString(36).slice(2, 6); }
+
+    /* =========================================================
+       EFFECT REGISTRY
+       ========================================================= */
+    const EFFECTS = {
+      displace: {
+        label: 'Displacement', color: '#5b8cff',
+        defaults: { p0: 0.02, p1: 1.5 },
+        params: [
+          { key: 'p0', label: 'Amount', min: -0.15, max: 0.15, step: 0.001 },
+          { key: 'p1', label: 'Scale', min: 0.1, max: 8, step: 0.05 },
+        ],
+        glsl: `
+vec3 eff_displace(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec2 o = vec2(
+    warpedNoise(uv * p.y + vec2(1.7, 9.2), t),
+    warpedNoise(uv * p.y + vec2(8.3, 2.8), t)
+  ) * 2.0 - 1.0;
+  return texture(uSource, clamp(uv + o * p.x * m, 0.001, 0.999)).rgb;
+}`
+      },
+      glow: {
+        label: 'Glow', color: '#ffcc60',
+        defaults: { p0: 1.2, p1: 0.8 },
+        params: [
+          { key: 'p0', label: 'Radius', min: 0.1, max: 4, step: 0.05 },
+          { key: 'p1', label: 'Strength', min: 0, max: 2, step: 0.01 },
+        ],
+        glsl: `
+vec3 eff_glow(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec3 acc = vec3(0.0); float w = 0.0;
+  for (int ii = 0; ii < 5; ii++){
+    for (int jj = 0; jj < 5; jj++){
+      float fi = float(ii) - 2.0;
+      float fj = float(jj) - 2.0;
+      vec2 o = vec2(fi, fj) * p.x * 0.012;
+      float ww = exp(-(fi*fi + fj*fj) * 0.4);
+      acc += texture(uSource, clamp(uv + o, 0.001, 0.999)).rgb * ww;
+      w += ww;
+    }
+  }
+  acc /= w;
+  return col + max(acc - col, 0.0) * p.y * m;
+}`
+      },
+      halation: {
+        label: 'Halation', color: '#ff8080',
+        defaults: { p0: 0.7, p1: 0.6 },
+        params: [
+          { key: 'p0', label: 'Threshold', min: 0, max: 1, step: 0.01 },
+          { key: 'p1', label: 'Strength', min: 0, max: 2, step: 0.01 },
+        ],
+        glsl: `
+vec3 eff_halation(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec3 acc = vec3(0.0);
+  for (int ii = 0; ii < 7; ii++){
+    for (int jj = 0; jj < 7; jj++){
+      float fi = float(ii) - 3.0;
+      float fj = float(jj) - 3.0;
+      vec2 o = vec2(fi, fj) * 0.008;
+      vec3 s = texture(uSource, clamp(uv + o, 0.001, 0.999)).rgb;
+      float lum = dot(s, vec3(0.2126, 0.7152, 0.0722));
+      float hi = smoothstep(p.x, 1.0, lum);
+      acc += s * hi * (1.0 - (fi*fi+fj*fj)/18.0);
+    }
+  }
+  return col + acc * vec3(1.0, 0.55, 0.4) * p.y * m * 0.03;
+}`
+      },
+      chroma: {
+        label: 'Chromatic', color: '#a040ff',
+        defaults: { p0: 1.0, p1: 0.0 },
+        params: [
+          { key: 'p0', label: 'Amount', min: -8, max: 8, step: 0.05 },
+          { key: 'p1', label: '(unused)', min: 0, max: 1, step: 0.05 },
+        ],
+        glsl: `
+vec3 eff_chroma(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec2 d = (uv - 0.5) * p.x * 0.01 * m;
+  float r = texture(uSource, clamp(uv + d, 0.001, 0.999)).r;
+  float b = texture(uSource, clamp(uv - d, 0.001, 0.999)).b;
+  return vec3(r, col.g, b);
+}`
+      },
+      sharpen: {
+        label: 'Sharpen', color: '#60ff90',
+        defaults: { p0: 1.2, p1: 1.0 },
+        params: [
+          { key: 'p0', label: 'Amount', min: 0, max: 4, step: 0.05 },
+          { key: 'p1', label: 'Radius', min: 0.2, max: 3, step: 0.05 },
+        ],
+        glsl: `
+vec3 eff_sharpen(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec3 b = vec3(0.0);
+  for (int ii = 0; ii < 3; ii++){
+    for (int jj = 0; jj < 3; jj++){
+      vec2 o = vec2(float(ii) - 1.0, float(jj) - 1.0) * p.y * 0.005;
+      b += texture(uSource, clamp(uv + o, 0.001, 0.999)).rgb;
+    }
+  }
+  b /= 9.0;
+  return col + (col - b) * p.x * m;
+}`
+      },
+      tint: {
+        label: 'Hue Tint', color: '#ff60ff',
+        defaults: { p0: 0.05, p1: 0.6 },
+        params: [
+          { key: 'p0', label: 'Hue Shift', min: -0.5, max: 0.5, step: 0.005 },
+          { key: 'p1', label: 'Strength', min: 0, max: 1, step: 0.01 },
+        ],
+        glsl: `
+vec3 eff_tint(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec3 hsv = rgb2hsv_c(col);
+  hsv.x = fract(hsv.x + p.x * m);
+  return mix(col, hsv2rgb_c(hsv), p.y);
+}`
+      },
+      grain: {
+        label: 'Grain', color: '#c8d0db',
+        defaults: { p0: 0.08, p1: 400 },
+        params: [
+          { key: 'p0', label: 'Amount', min: 0, max: 0.4, step: 0.005 },
+          { key: 'p1', label: 'Scale', min: 50, max: 1200, step: 10 },
+        ],
+        glsl: `
+vec3 eff_grain(vec3 col, vec2 uv, float t, float m, vec2 p){
+  float n = noise2D(uv * p.y + vec2(t * 13.7, t * 7.3));
+  return col + (n - 0.5) * p.x * m;
+}`
+      },
+      vignette: {
+        label: 'Vignette', color: '#5f6b7a',
+        defaults: { p0: 0.6, p1: 0.4 },
+        params: [
+          { key: 'p0', label: 'Amount', min: -2, max: 2, step: 0.01 },
+          { key: 'p1', label: 'Feather', min: 0.05, max: 1, step: 0.01 },
+        ],
+        glsl: `
+vec3 eff_vignette(vec3 col, vec2 uv, float t, float m, vec2 p){
+  float d = length(uv - 0.5) * 1.414;
+  float v = 1.0 - smoothstep(1.0 - p.y, 1.0, d) * p.x * m;
+  return col * v;
+}`
+      },
+      posterize: {
+        label: 'Posterize', color: '#40ffff',
+        defaults: { p0: 8, p1: 0 },
+        params: [
+          { key: 'p0', label: 'Levels', min: 2, max: 32, step: 1 },
+          { key: 'p1', label: '(unused)', min: 0, max: 1, step: 0.05 },
+        ],
+        glsl: `
+vec3 eff_posterize(vec3 col, vec2 uv, float t, float m, vec2 p){
+  vec3 q = floor(col * p.x) / p.x;
+  return mix(col, q, clamp(abs(m), 0.0, 1.0));
+}`
+      },
+    };
+    const EFFECT_KEYS = Object.keys(EFFECTS);
+    const EFFECT_TYPE_INDEX = EFFECT_KEYS.reduce((m, k, i) => (m[k] = i, m), {});
+
+    const MAX_EFFECTS = 8;
+    const MAX_MASKS = 8;
+
+    /* =========================================================
+       PRESET LIBRARY (seeded recipes)
+       ========================================================= */
+    const SEED_PRESETS = {
+      fogOnWater: {
+        label: 'Fog on Water',
+        desc: 'Mist drifts across aqua & blue only',
+        apply(state) {
+          state.effects = [
+            mkEffect('glow', { p0: 2.2, p1: 1.35 }, {
+              channel: 'aqua', rangeMin: 0.30, rangeMax: 0.80, spread: 0.08, weight: 0.85, invert: false,
+              points: [[0, 0], [0.25, 0.55], [0.55, 1.0], [0.8, 0.85], [1, 0.5]]
+            }, 0.5, 0),
+            mkEffect('displace', { p0: 0.045, p1: 0.55 }, {
+              channel: 'blue', rangeMin: 0.25, rangeMax: 0.9, spread: 0.10, weight: 0.60, invert: false,
+              points: [[0, 0], [0.3, 0.5], [0.65, 0.95], [1, 0.7]]
+            }, 0.4, 0),
+            mkEffect('glow', { p0: 1.4, p1: 0.55 }, {
+              channel: 'sat', rangeMin: 0.0, rangeMax: 0.30, spread: 0.05, weight: 0.35, invert: true,
+              points: [[0, 0.4], [0.5, 0.85], [1, 1.0]]
+            }, 0.3, 0),
+          ];
+          state.effectsEnabled = true;
+        }
+      },
+      edgeMist: {
+        label: 'Edge Mist',
+        desc: 'Fog clings to high-contrast edges',
+        apply(state) {
+          state.effects = [
+            mkEffect('displace', { p0: 0.06, p1: 1.7 }, {
+              channel: 'luma', rangeMin: 0.10, rangeMax: 0.9, spread: 0.06, weight: 0.9, invert: false,
+              points: [[0, 0], [0.3, 0.55], [0.6, 1.0], [1, 0.65]]
+            }, 0.6, 0),
+            mkEffect('glow', { p0: 1.8, p1: 0.9 }, {
+              channel: 'luma', rangeMin: 0.20, rangeMax: 0.85, spread: 0.05, weight: 0.7, invert: false,
+              points: [[0, 0.15], [0.5, 0.9], [1, 0.6]]
+            }, 0.5, 0),
+          ];
+          state.effectsEnabled = true;
+        }
+      },
+      heatHaze: {
+        label: 'Heat Haze',
+        desc: 'Rippling distortion over bright areas',
+        apply(state) {
+          state.effects = [
+            mkEffect('displace', { p0: 0.09, p1: 3.0 }, {
+              channel: 'luma', rangeMin: 0.4, rangeMax: 1.0, spread: 0.08, weight: 1.0, invert: false,
+              points: [[0, 0], [0.5, 0.5], [1, 1.0]]
+            }, 1.6, 0),
+            mkEffect('chroma', { p0: 1.5, p1: 0 }, null, 0.4, 0),
+          ];
+          state.effectsEnabled = true;
+        }
+      },
+      colourBloom: {
+        label: 'Colour Bloom',
+        desc: 'Saturated colours bleed & bloom outward',
+        apply(state) {
+          state.effects = [
+            mkEffect('glow', { p0: 2.6, p1: 1.55 }, {
+              channel: 'sat', rangeMin: 0.35, rangeMax: 1.0, spread: 0.08, weight: 0.9, invert: false,
+              points: [[0, 0], [0.5, 0.6], [1, 1.0]]
+            }, 0.5, 0),
+            mkEffect('tint', { p0: 0.15, p1: 0.5 }, {
+              channel: 'hue', rangeMin: 0.0, rangeMax: 1.0, spread: 0.15, weight: 0.5, invert: false,
+              points: [[0, 0.4], [0.33, 0.65], [0.66, 0.35], [1, 0.5]]
+            }, 0.3, 0),
+          ];
+          state.effectsEnabled = true;
+        }
+      },
+      aurora: {
+        label: 'Aurora',
+        desc: 'Hue-shifting ribbons across the frame',
+        apply(state) {
+          state.effects = [
+            mkEffect('tint', { p0: 0.35, p1: 0.85 }, {
+              channel: 'hue', rangeMin: 0.0, rangeMax: 1.0, spread: 0.2, weight: 0.85, invert: false,
+              points: [[0, 0.2], [0.25, 0.9], [0.5, 0.3], [0.75, 0.95], [1, 0.4]]
+            }, 0.4, 0),
+            mkEffect('displace', { p0: 0.045, p1: 0.85 }, {
+              channel: 'luma', rangeMin: 0.25, rangeMax: 0.85, spread: 0.08, weight: 0.7, invert: false,
+              points: [[0, 0.1], [0.4, 0.6], [0.7, 1.0], [1, 0.6]]
+            }, 0.5, 0),
+            mkEffect('glow', { p0: 1.6, p1: 0.9 }, null, 0.3, 0),
+          ];
+          state.effectsEnabled = true;
+        }
+      },
+      underwater: {
+        label: 'Underwater',
+        desc: 'Caustic shimmer on cool tones',
+        apply(state) {
+          state.effects = [
+            mkEffect('displace', { p0: 0.06, p1: 1.05 }, {
+              channel: 'aqua', rangeMin: 0.2, rangeMax: 0.9, spread: 0.12, weight: 0.75, invert: false,
+              points: [[0, 0], [0.3, 0.55], [0.55, 1.0], [0.8, 0.7], [1, 0.4]]
+            }, 0.7, 0),
+            mkEffect('tint', { p0: 0.05, p1: 0.55 }, {
+              channel: 'blue', rangeMin: 0.2, rangeMax: 1.0, spread: 0.1, weight: 0.65, invert: false,
+              points: [[0, 0.3], [0.5, 0.7], [1, 1.0]]
+            }, 0.3, 0),
+            mkEffect('glow', { p0: 1.5, p1: 0.55 }, {
+              channel: 'luma', rangeMin: 0.3, rangeMax: 0.9, spread: 0.06, weight: 0.5, invert: false,
+              points: [[0, 0.1], [0.5, 0.85], [1, 0.55]]
+            }, 0.2, 0),
+          ];
+          state.effectsEnabled = true;
+        }
+      },
+    };
+
+    function mkEffect(typeId, params, mask, speed, phase) {
+      const def = EFFECTS[typeId];
+      return {
+        id: nextEffectId(),
+        typeId,
+        enabled: true,
+        params: { ...def.defaults, ...params },
+        speed: speed ?? 1,
+        phase: phase ?? 0,
+        mask: mask ? {
+          channel: mask.channel,
+          rangeMin: mask.rangeMin ?? 0,
+          rangeMax: mask.rangeMax ?? 1,
+          spread: mask.spread ?? 0.05,
+          weight: mask.weight ?? 0.5,
+          invert: mask.invert ?? false,
+          points: mask.points ? mask.points.map(p => [p[0], p[1]]) : [[0, 0], [0.5, 0.5], [1, 1]],
+        } : null
+      };
+    }
+
+    /* =========================================================
+       HISTORY
+       ========================================================= */
+    const HISTORY_LIMIT = 50;
+    let historyStack = [];
+    let historyIndex = -1;
+    let historySuspended = false;
+
+    function snapshot() { return JSON.stringify(P); }
+    function commit() {
+      if (historySuspended) return;
+      const snap = snapshot();
+      if (historyIndex >= 0 && historyStack[historyIndex].snap === snap) return;
+      historyStack = historyStack.slice(0, historyIndex + 1);
+      historyStack.push({ snap, t: Date.now() });
+      if (historyStack.length > HISTORY_LIMIT) historyStack.shift();
+      historyIndex = historyStack.length - 1;
+      updateHistoryButtons();
+      scheduleSave();
+    }
+    function undo() {
+      if (historyIndex <= 0) return;
+      historyIndex--;
+      applySnapshot(historyStack[historyIndex].snap);
+      haptic();
+    }
+    function redo() {
+      if (historyIndex >= historyStack.length - 1) return;
+      historyIndex++;
+      applySnapshot(historyStack[historyIndex].snap);
+      haptic();
+    }
+    function applySnapshot(snap) {
+      historySuspended = true;
+      try { P = JSON.parse(snap); } catch (_) { historySuspended = false; return; }
+      if (!P.effects) P.effects = [];
+      if (!P.geometry) P.geometry = { x: 0, y: 0, w: 1, h: 1, aspect: null, rotate: 0, flipH: false, flipV: false };
+      if (selectedEffectId && !P.effects.find(e => e.id === selectedEffectId)) {
+        selectedEffectId = P.effects[0]?.id ?? null;
+      }
+      packEffects();
+      buildUI();
+      restoreActiveTab();
+      if (sourceImage) render();
+      historySuspended = false;
+      updateHistoryButtons();
+      scheduleSave();
+    }
+    function updateHistoryButtons() {
+      const u = document.getElementById('undoBtn');
+      const r = document.getElementById('redoBtn');
+      if (u) u.disabled = historyIndex <= 0;
+      if (r) r.disabled = historyIndex >= historyStack.length - 1;
+    }
+    function haptic() {
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (_) { } }
+    }
+
+    /* =========================================================
+       PERSISTENCE (localStorage — state only)
+       ========================================================= */
+    const STORE_KEY = 'lutstudio.pro.v1';
+    let saveTimer = null;
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      const dot = document.getElementById('saveDot');
+      if (dot) dot.className = 'save-dot saving';
+      saveTimer = setTimeout(saveNow, 600);
+    }
+    function saveNow() {
+      saveTimer = null;
+      // strip LUT Float32Array data — LUTs live in IDB, referenced by hash
+      const serial = JSON.parse(JSON.stringify(P, (k, v) => {
+        if (k === 'lut' && v instanceof Float32Array) return undefined;
+        if (k === 'points' && Array.isArray(v)) return v;
+        return v;
+      }));
+      // strip lut data objects
+      if (serial.luts) serial.luts = serial.luts.map(l => ({ hash: l.hash, name: l.name, size: l.size, strength: l.strength }));
+      const payload = {
+        version: 1,
+        state: serial,
+        activeTab: document.querySelector('.tab.active')?.dataset.tab || 'basic',
+      };
+      let saved = false;
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(payload)); saved = true; }
+      catch (e) {
+        try { localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, state: serial, activeTab: payload.activeTab })); saved = true; }
+        catch (e2) { console.warn('Save failed', e2); }
+      }
+      const dot = document.getElementById('saveDot');
+      if (dot && saved) {
+        dot.className = 'save-dot saved';
+        setTimeout(() => { if (dot.className === 'save-dot saved') dot.className = 'save-dot'; }, 900);
+      }
+    }
+    function loadSaved() {
+      try {
+        const raw = localStorage.getItem(STORE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || data.version !== 1) return null;
+        return data;
+      } catch (e) { return null; }
+    }
+
+    /* =========================================================
+       INDEXEDDB — LUT + preset storage
+       ========================================================= */
+    const IDB_NAME = 'lutstudio.pro', IDB_VER = 1;
+    let idbPromise = null;
+    function idb() {
+      if (idbPromise) return idbPromise;
+      idbPromise = new Promise((res, rej) => {
+        const r = indexedDB.open(IDB_NAME, IDB_VER);
+        r.onupgradeneeded = () => {
+          const db = r.result;
+          if (!db.objectStoreNames.contains('luts')) db.createObjectStore('luts', { keyPath: 'hash' });
+          if (!db.objectStoreNames.contains('presets')) db.createObjectStore('presets', { keyPath: 'name' });
+        };
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      return idbPromise;
+    }
+    async function idbPut(store, rec) {
+      const db = await idb();
+      return new Promise((res, rej) => {
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).put(rec);
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      });
+    }
+    async function idbAll(store) {
+      const db = await idb();
+      return new Promise((res, rej) => {
+        const tx = db.transaction(store, 'readonly');
+        const rq = tx.objectStore(store).getAll();
+        rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+      });
+    }
+    async function idbDelete(store, key) {
+      const db = await idb();
+      return new Promise((res, rej) => {
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).delete(key);
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      });
+    }
+
+    /* =========================================================
+       LUT ENGINE
+       ========================================================= */
+    function hashText(str) {
+      let h = 5381;
+      for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+      return (h >>> 0).toString(36);
+    }
+    function parseCube(text, fallbackName = 'untitled') {
+      let size = 0, dim = 3;
+      let domainMin = [0, 0, 0], domainMax = [1, 1, 1];
+      let title = fallbackName;
+      const rows = [];
+      for (const raw of text.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line || line[0] === '#') continue;
+        const parts = line.split(/\s+/);
+        const head = parts[0].toUpperCase();
+        if (head === 'TITLE') { title = line.slice(5).trim().replace(/^"|"$/g, '') || title; }
+        else if (head === 'LUT_3D_SIZE') { size = parseInt(parts[1], 10); dim = 3; }
+        else if (head === 'LUT_1D_SIZE') { size = parseInt(parts[1], 10); dim = 1; }
+        else if (head === 'DOMAIN_MIN') { domainMin = parts.slice(1).map(Number); }
+        else if (head === 'DOMAIN_MAX') { domainMax = parts.slice(1).map(Number); }
+        else {
+          const p = parts.map(Number);
+          if (p.length >= 3 && p.slice(0, 3).every(Number.isFinite)) rows.push(p[0], p[1], p[2]);
+        }
+      }
+      if (!size || !rows.length) throw new Error('Not a valid .cube file');
+      let data = new Float32Array(rows);
+      const expected = (dim === 3 ? size ** 3 : size) * 3;
+      if (data.length < expected) throw new Error('Truncated LUT');
+      if (dim === 1) {
+        const N = size, out = new Float32Array(N ** 3 * 3);
+        const s1 = (x, ch) => {
+          x = clamp(x, 0, 1);
+          const f = x * (N - 1), i = Math.min(N - 2, f | 0), t = f - i;
+          return data[i * 3 + ch] + (data[(i + 1) * 3 + ch] - data[i * 3 + ch]) * t;
+        };
+        let o = 0;
+        for (let bi = 0; bi < N; bi++)
+          for (let gi = 0; gi < N; gi++)
+            for (let ri = 0; ri < N; ri++) {
+              out[o++] = s1(ri / (N - 1), 0);
+              out[o++] = s1(gi / (N - 1), 1);
+              out[o++] = s1(bi / (N - 1), 2);
+            }
+        data = out; dim = 3;
+      }
+      return { name: title, size, dim, data, domainMin, domainMax };
+    }
+
+    function sampleLUT3D(lut, r, g, b, out) {
+      const N = lut.size, n = N - 1;
+      const dm = lut.domainMin, dM = lut.domainMax;
+      r = clamp((r - dm[0]) / (dM[0] - dm[0]), 0, 1);
+      g = clamp((g - dm[1]) / (dM[1] - dm[1]), 0, 1);
+      b = clamp((b - dm[2]) / (dM[2] - dm[2]), 0, 1);
+      const ri = r * n, gi = g * n, bi = b * n;
+      const r0 = ri | 0, g0 = gi | 0, b0 = bi | 0;
+      const r1 = r0 < n ? r0 + 1 : n, g1 = g0 < n ? g0 + 1 : n, b1 = b0 < n ? b0 + 1 : n;
+      const rf = ri - r0, gf = gi - g0, bf = bi - b0;
+      const D = lut.data;
+      const ix = (R, G, B) => ((B * N + G) * N + R) * 3;
+      const i000 = ix(r0, g0, b0), i100 = ix(r1, g0, b0);
+      const i010 = ix(r0, g1, b0), i110 = ix(r1, g1, b0);
+      const i001 = ix(r0, g0, b1), i101 = ix(r1, g0, b1);
+      const i011 = ix(r0, g1, b1), i111 = ix(r1, g1, b1);
+      const w000 = (1 - rf) * (1 - gf) * (1 - bf), w100 = rf * (1 - gf) * (1 - bf);
+      const w010 = (1 - rf) * gf * (1 - bf), w110 = rf * gf * (1 - bf);
+      const w001 = (1 - rf) * (1 - gf) * bf, w101 = rf * (1 - gf) * bf;
+      const w011 = (1 - rf) * gf * bf, w111 = rf * gf * bf;
+      for (let c = 0; c < 3; c++) {
+        out[c] =
+          D[i000 + c] * w000 + D[i100 + c] * w100 + D[i010 + c] * w010 + D[i110 + c] * w110 +
+          D[i001 + c] * w001 + D[i101 + c] * w101 + D[i011 + c] * w011 + D[i111 + c] * w111;
+      }
+      return out;
+    }
+
+    function applyLUTsToImageData(imageData, lutStack) {
+      const d = imageData.data;
+      const tmp = [0, 0, 0];
+      for (let i = 0; i < d.length; i += 4) {
+        let R = d[i] / 255, G = d[i + 1] / 255, B = d[i + 2] / 255;
+        for (const entry of lutStack) {
+          if (!entry.lut || entry.strength <= 0) continue;
+          sampleLUT3D(entry.lut, R, G, B, tmp);
+          R += (tmp[0] - R) * entry.strength;
+          G += (tmp[1] - G) * entry.strength;
+          B += (tmp[2] - B) * entry.strength;
+        }
+        d[i] = clamp(R, 0, 1) * 255 + 0.5;
+        d[i + 1] = clamp(G, 0, 1) * 255 + 0.5;
+        d[i + 2] = clamp(B, 0, 1) * 255 + 0.5;
+      }
+    }
+
+    function exportCubeTextFromFunction(name, size, colorFn) {
+      const N = size;
+      const lines = [`TITLE "${name}"`, `LUT_3D_SIZE ${N}`, 'DOMAIN_MIN 0 0 0', 'DOMAIN_MAX 1 1 1', ''];
+      const out = [0, 0, 0];
+      for (let b = 0; b < N; b++) for (let g = 0; g < N; g++) for (let r = 0; r < N; r++) {
+        colorFn(r / (N - 1), g / (N - 1), b / (N - 1), out);
+        lines.push(`${out[0].toFixed(6)} ${out[1].toFixed(6)} ${out[2].toFixed(6)}`);
+      }
+      return lines.join('\n');
+    }
+
+    /* =========================================================
+       COLOR PIPELINE (CPU)
+       ========================================================= */
+    const _out = [0, 0, 0];
+    function buildPipeline(P) {
+      const t = P.temperature / 100;
+      const ti = P.tint / 100;
+      let gR = 1 + 0.34 * t + 0.10 * ti;
+      let gG = 1 - 0.05 * t - 0.20 * ti;
+      let gB = 1 - 0.34 * t + 0.10 * ti;
+      const lumG = 0.2126 * gR + 0.7152 * gG + 0.0722 * gB;
+      gR /= lumG; gG /= lumG; gB /= lumG;
+      const ex = Math.pow(2, P.exposure);
+      const gainR = gR * ex, gainG = gG * ex, gainB = gB * ex;
+      const N = CURVE_N;
+      const base = new Float32Array(N);
+      const bp = -P.blacks / 100 * 0.20;
+      const wp = 1 - P.whites / 100 * 0.20;
+      const denom = Math.max(0.05, wp - bp);
+      const cAmt = P.contrast / 100;
+      const shAmt = P.shadows / 100 * 0.45;
+      const hiAmt = P.highlights / 100 * 0.45;
+      for (let i = 0; i < N; i++) {
+        let x = i / (N - 1);
+        x = clamp((x - bp) / denom, 0, 1);
+        if (cAmt > 0) { const s = x * x * (3 - 2 * x); x = lerp(x, s, cAmt); }
+        else if (cAmt < 0) { const inv = 0.5 - Math.sin(Math.asin(clamp(1 - 2 * x, -1, 1)) / 3); x = lerp(x, inv, -cAmt); }
+        if (shAmt !== 0) { const m = 1 - x; x += shAmt * m * m * m; }
+        if (hiAmt !== 0) { x += hiAmt * x * x * x; }
+        base[i] = clamp(x, 0, 1);
+      }
+      const crvRGB = makeCurveLUT(P.curves.rgb);
+      const crvR = makeCurveLUT(P.curves.r);
+      const crvG = makeCurveLUT(P.curves.g);
+      const crvB = makeCurveLUT(P.curves.b);
+      const lutR = new Float32Array(N);
+      const lutG = new Float32Array(N);
+      const lutB = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        const v = evalLUT(crvRGB, base[i]);
+        lutR[i] = evalLUT(crvR, v);
+        lutG[i] = evalLUT(crvG, v);
+        lutB[i] = evalLUT(crvB, v);
+      }
+      function tintVec(hue, sat) {
+        if (sat <= 0) return [0, 0, 0];
+        const c = hsl2rgb(hue / 360, 1, 0.5);
+        const l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        const k = sat * 0.40;
+        return [(c[0] - l) * k, (c[1] - l) * k, (c[2] - l) * k];
+      }
+      const tvS = tintVec(P.splitShadowHue, P.splitShadowSat / 100);
+      const tvM = tintVec(P.splitMidHue, P.splitMidSat / 100);
+      const tvH = tintVec(P.splitHighHue, P.splitHighSat / 100);
+      const splitActive = P.splitShadowSat !== 0 || P.splitMidSat !== 0 || P.splitHighSat !== 0;
+      const balance = P.splitBalance / 100 * 0.30;
+      const hslActive = BANDS.some(([k]) => {
+        const v = P.hsl[k]; return v[0] !== 0 || v[1] !== 0 || v[2] !== 0;
+      });
+      const vibAmt = P.vibrance / 100;
+      const satAmt = P.saturation / 100;
+      const satActive = vibAmt !== 0 || satAmt !== 0;
+
+      function applyColor(r, g, b) {
+        if (splitActive) {
+          let l = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b + balance, 0, 1);
+          const sw = (1 - l) * (1 - l), hw = l * l, mw = 1 - Math.abs(2 * l - 1);
+          r += tvS[0] * sw + tvM[0] * mw * 0.7 + tvH[0] * hw;
+          g += tvS[1] * sw + tvM[1] * mw * 0.7 + tvH[1] * hw;
+          b += tvS[2] * sw + tvM[2] * mw * 0.7 + tvH[2] * hw;
+        }
+        if (hslActive) {
+          const cc = rgb2hsl(clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1));
+          let h = cc[0], s = cc[1], l = cc[2];
+          if (s > 0.002) {
+            let dh = 0, ds = 0, dl = 0, ws = 0;
+            for (let i = 0; i < 8; i++) {
+              const bd = BANDS[i], v = P.hsl[bd[0]];
+              if (v[0] === 0 && v[1] === 0 && v[2] === 0) continue;
+              let d = Math.abs(h * 360 - bd[1]); if (d > 180) d = 360 - d;
+              const w = 1 - d / 60;
+              if (w <= 0) continue;
+              ws += w; dh += w * v[0]; ds += w * v[1]; dl += w * v[2];
+            }
+            if (ws > 0) {
+              dh /= ws; ds /= ws; dl /= ws;
+              h = h + dh / 100 * (30 / 360);
+              s = clamp(s * (1 + ds / 100), 0, 1);
+              l = clamp(l + dl / 100 * 0.15, 0, 1);
+              const c = hsl2rgb(h, s, l);
+              r = c[0]; g = c[1]; b = c[2];
+            }
+          }
+        }
+        if (satActive) {
+          const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          let mul = 1 + satAmt;
+          if (vibAmt !== 0) mul *= 1 + vibAmt * (1 - (mx - mn)) * 1.2;
+          r = l + (r - l) * mul;
+          g = l + (g - l) * mul;
+          b = l + (b - l) * mul;
+        }
+        _out[0] = clamp(r, 0, 1); _out[1] = clamp(g, 0, 1); _out[2] = clamp(b, 0, 1);
+        return _out;
+      }
+
+      function processImageData(img) {
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const R = lin2srgb(SRGB2LIN[d[i]] * gainR);
+          const G = lin2srgb(SRGB2LIN[d[i + 1]] * gainG);
+          const B = lin2srgb(SRGB2LIN[d[i + 2]] * gainB);
+          const c = applyColor(evalLUT(lutR, R), evalLUT(lutG, G), evalLUT(lutB, B));
+          d[i] = c[0] * 255 + 0.5;
+          d[i + 1] = c[1] * 255 + 0.5;
+          d[i + 2] = c[2] * 255 + 0.5;
+        }
+        return img;
+      }
+
+      return { processImageData };
+    }
+
+    /* =========================================================
+       DOM REFS
+       ========================================================= */
+    const previewCanvas = document.getElementById('preview');
+    const glPreviewCanvas = document.getElementById('glPreview');
+    const histogramCanvas = document.getElementById('histogram');
+    const canvasWrap = document.getElementById('canvasWrap');
+    const cropOverlay = document.getElementById('cropOverlay');
+    const fileInput = document.getElementById('fileInput');
+    const depthInput = document.getElementById('depthInput');
+    const depthBtnLabel = document.getElementById('depthBtnLabel');
+    const imgBtnLabel = document.getElementById('imgBtnLabel');
+    const resetBtn = document.getElementById('resetBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    const ctx2d = previewCanvas.getContext('2d', { willReadFrequently: true });
+    const histCtx = histogramCanvas.getContext('2d');
+
+    let sourceImage = null;
+    const gradedCanvas = document.createElement('canvas');
+    const gradedCtx = gradedCanvas.getContext('2d', { willReadFrequently: true });
+    let depthImage = null;
+    const depthCanvas = document.createElement('canvas');
+    const depthCtx = depthCanvas.getContext('2d', { willReadFrequently: true });
+
+    const ETH_W = 256, ETH_H = 8;
+    const etherealCanvas = document.createElement('canvas');
+    etherealCanvas.width = ETH_W; etherealCanvas.height = ETH_H;
+    const etherealCtx = etherealCanvas.getContext('2d', { willReadFrequently: true });
+
+    let mushuFlow = null;
+
+    /* =========================================================
+       EFFECT UNIFORMS
+       ========================================================= */
+    const effectUniforms = {
+      count: 0,
+      type: new Float32Array(MAX_EFFECTS).fill(-1),
+      p0: new Float32Array(MAX_EFFECTS),
+      p1: new Float32Array(MAX_EFFECTS),
+      speed: new Float32Array(MAX_EFFECTS),
+      phase: new Float32Array(MAX_EFFECTS),
+      maskRow: new Float32Array(MAX_EFFECTS).fill(-1),
+    };
+    const maskUniforms = {
+      channel: new Float32Array(MAX_MASKS),
+      rangeMin: new Float32Array(MAX_MASKS),
+      rangeMax: new Float32Array(MAX_MASKS),
+      spread: new Float32Array(MAX_MASKS),
+      weight: new Float32Array(MAX_MASKS),
+      invert: new Float32Array(MAX_MASKS),
+    };
+
+    function packEffects() {
+      const active = P.effects.filter(e => e.enabled).slice(0, MAX_EFFECTS);
+      effectUniforms.count = active.length;
+      effectUniforms.type.fill(-1);
+      effectUniforms.maskRow.fill(-1);
+
+      const img = etherealCtx.createImageData(ETH_W, ETH_H);
+      for (let i = 0; i < img.data.length; i += 4) { img.data[i] = 128; img.data[i + 3] = 255; }
+
+      let maskRow = 0;
+      for (let i = 0; i < active.length; i++) {
+        const e = active[i];
+        effectUniforms.type[i] = EFFECT_TYPE_INDEX[e.typeId] ?? -1;
+        effectUniforms.p0[i] = e.params.p0 ?? 0;
+        effectUniforms.p1[i] = e.params.p1 ?? 0;
+        effectUniforms.speed[i] = e.speed ?? 1;
+        effectUniforms.phase[i] = e.phase ?? 0;
+
+        if (e.mask && maskRow < MAX_MASKS) {
+          effectUniforms.maskRow[i] = maskRow;
+          maskUniforms.channel[maskRow] = ETH_CHANNEL_INDEX[e.mask.channel] ?? 0;
+          maskUniforms.rangeMin[maskRow] = e.mask.rangeMin;
+          maskUniforms.rangeMax[maskRow] = e.mask.rangeMax;
+          maskUniforms.spread[maskRow] = e.mask.spread;
+          maskUniforms.weight[maskRow] = e.mask.weight;
+          maskUniforms.invert[maskRow] = e.mask.invert ? 1 : 0;
+          const lut = makeCurveLUT(e.mask.points);
+          for (let x = 0; x < ETH_W; x++) {
+            const v = Math.round(evalLUT(lut, x / (ETH_W - 1)) * 255);
+            const idx = (maskRow * ETH_W + x) * 4;
+            img.data[idx] = v;
+          }
+          maskRow++;
+        } else if (e.mask) {
+          // more masks than rows — fall back to full-strength mask
+          effectUniforms.maskRow[i] = -1;
+        }
+      }
+      etherealCtx.putImageData(img, 0, 0);
+    }
+
+    /* =========================================================
+       SHADER SOURCE — built once, static
+       ========================================================= */
+    function buildEffectShaderSource() {
+      const snippets = EFFECT_KEYS.map(k => EFFECTS[k].glsl).join('\n');
+      const dispatch = EFFECT_KEYS.map((k, i) => `if (type == ${i}) return eff_${k}(col, uv, t, m, p);`).join('\n      ');
+
+      return `
+precision highp float;
+
+uniform sampler2D uSource;
+uniform sampler2D uDepthMap;
+uniform sampler2D uEthereal;
+
+uniform float uTime;
+uniform float uGlobalIntensity;
+uniform float uDepthThreshold;
+uniform float uDepthFeather;
+
+uniform float uEffectCount;
+uniform float uEffectType[${MAX_EFFECTS}];
+uniform float uEffectP0[${MAX_EFFECTS}];
+uniform float uEffectP1[${MAX_EFFECTS}];
+uniform float uEffectSpeed[${MAX_EFFECTS}];
+uniform float uEffectPhase[${MAX_EFFECTS}];
+uniform float uEffectMaskRow[${MAX_EFFECTS}];
+
+uniform float uMaskChannel[${MAX_MASKS}];
+uniform float uMaskRangeMin[${MAX_MASKS}];
+uniform float uMaskRangeMax[${MAX_MASKS}];
+uniform float uMaskSpread[${MAX_MASKS}];
+uniform float uMaskWeight[${MAX_MASKS}];
+uniform float uMaskInvert[${MAX_MASKS}];
+
+${warp}
+
+vec3 rgb2hsv_c(vec3 c){
+  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  float e = 1.0e-10;
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+vec3 hsv2rgb_c(vec3 c){
+  vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+float bandCenterDeg(int ch){
+  if (ch == 6) return 0.0;    if (ch == 7) return 30.0;
+  if (ch == 8) return 60.0;   if (ch == 9) return 120.0;
+  if (ch == 10) return 180.0; if (ch == 11) return 240.0;
+  if (ch == 12) return 280.0; if (ch == 13) return 320.0;
+  return 0.0;
+}
+float bandWeight(float hue01, float centerDeg){
+  float d = abs(hue01 * 360.0 - centerDeg);
+  if (d > 180.0) d = 360.0 - d;
+  return max(0.0, 1.0 - d / 60.0);
+}
+float channelValue(int ch, vec3 rgb, float luma, vec3 hsv){
+  if (ch == 0) return luma;
+  if (ch == 1) return rgb.r;
+  if (ch == 2) return rgb.g;
+  if (ch == 3) return rgb.b;
+  if (ch == 4) return hsv.x;
+  if (ch == 5) return hsv.y;
+  return luma;
+}
+
+${snippets}
+
+vec3 apply_effect(int type, vec3 col, vec2 uv, float t, float m, vec2 p){
+  ${dispatch}
+  return col;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv = fragCoord / resolution;
+  vec2 texUv = vec2(uv.x, 1.0 - uv.y);
+
+  float depth = texture(uDepthMap, texUv).r;
+  float globalMask = smoothstep(uDepthThreshold + uDepthFeather, uDepthThreshold - uDepthFeather, depth);
+  if (uDepthThreshold < 0.0) globalMask = 1.0;
+
+  vec3 col = texture(uSource, texUv).rgb;
+
+  for (int i = 0; i < ${MAX_EFFECTS}; i++){
+    if (float(i) >= uEffectCount) break;
+    int type = int(uEffectType[i] + 0.5);
+    if (type < 0) continue;
+
+    float m = 1.0;
+    float row = uEffectMaskRow[i];
+    if (row >= 0.0){
+      int mi = int(row + 0.5);
+      float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      vec3  hsv  = rgb2hsv_c(col);
+      int ch = int(uMaskChannel[mi] + 0.5);
+      float chVal = channelValue(ch, col, luma, hsv);
+      float cv = texture(uEthereal, vec2(clamp(chVal, 0.0, 1.0), (row + 0.5) / 8.0)).r;
+      cv = cv * 2.0 - 1.0;
+      if (uMaskInvert[mi] > 0.5) cv = -cv;
+
+      float rmin = uMaskRangeMin[mi];
+      float rmax = uMaskRangeMax[mi];
+      float sp   = max(uMaskSpread[mi], 0.001);
+      float inRange = smoothstep(rmin - sp, rmin + sp, chVal)
+                    * (1.0 - smoothstep(rmax - sp, rmax + sp, chVal));
+      float bandW = (ch >= 6) ? bandWeight(hsv.x, bandCenterDeg(ch)) : 1.0;
+      m = clamp(cv * inRange * bandW * uMaskWeight[mi], -1.0, 1.0);
+    }
+    m *= globalMask * uGlobalIntensity;
+
+    vec2 p = vec2(uEffectP0[i], uEffectP1[i]);
+    float t = uTime * uEffectSpeed[i] + uEffectPhase[i];
+    col = apply_effect(type, col, texUv, t, m, p);
+  }
+
+  fragColor = vec4(col, 1.0);
+}
+`;
+    }
+
+    let effectShaderSrc = null;
+
+    /* =========================================================
+       MUSHU-FLOW PIPELINE
+       ========================================================= */
+    let pipelineTime = 0;
+
+    function initMushuFlow() {
+      if (mushuFlow) {
+        try { mushuFlow.destroy(); } catch (_) { }
+        mushuFlow = null;
+      }
+      if (!effectShaderSrc) effectShaderSrc = buildEffectShaderSource();
+
+      mushuFlow = flow(glPreviewCanvas)
+        .use(texture(gradedCanvas, { name: 'uSource', unit: 0, flipY: true }))
+        .use(texture(depthCanvas, { name: 'uDepthMap', unit: 1, flipY: true }))
+        .use(texture(etherealCanvas, { name: 'uEthereal', unit: 2, flipY: false }))
+        .use(shader(effectShaderSrc, {
+          uniforms: {
+            uTime: () => pipelineTime,
+            uGlobalIntensity: () => 1.0,
+            uDepthThreshold: () => depthImage ? 0.5 : -1.0,
+            uDepthFeather: () => 0.1,
+            uEffectCount: () => effectUniforms.count,
+            uEffectType: () => effectUniforms.type,
+            uEffectP0: () => effectUniforms.p0,
+            uEffectP1: () => effectUniforms.p1,
+            uEffectSpeed: () => effectUniforms.speed,
+            uEffectPhase: () => effectUniforms.phase,
+            uEffectMaskRow: () => effectUniforms.maskRow,
+            uMaskChannel: () => maskUniforms.channel,
+            uMaskRangeMin: () => maskUniforms.rangeMin,
+            uMaskRangeMax: () => maskUniforms.rangeMax,
+            uMaskSpread: () => maskUniforms.spread,
+            uMaskWeight: () => maskUniforms.weight,
+            uMaskInvert: () => maskUniforms.invert,
+          }
+        }))
+        .go();
+    }
+
+    function updateMushuTextures() {
+      if (!mushuFlow) return;
+      mushuFlow.hot('texture:uSource', texture(gradedCanvas, { name: 'uSource', unit: 0, flipY: true }));
+      mushuFlow.hot('texture:uDepthMap', texture(depthCanvas, { name: 'uDepthMap', unit: 1, flipY: true }));
+      mushuFlow.hot('texture:uEthereal', texture(etherealCanvas, { name: 'uEthereal', unit: 2, flipY: false }));
+    }
+
+    function setEffectsMode(on) {
+      P.effectsEnabled = on;
+      if (on) {
+        previewCanvas.style.display = 'none';
+        glPreviewCanvas.style.display = 'block';
+        packEffects();
+        initMushuFlow();
+      } else {
+        glPreviewCanvas.style.display = 'none';
+        previewCanvas.style.display = 'block';
+        if (mushuFlow) {
+          try { mushuFlow.destroy(); } catch (_) { }
+          mushuFlow = null;
+        }
+      }
+    }
+
+    /* =========================================================
+       RENDER
+       ========================================================= */
+    function render() {
+      if (!sourceImage) return;
+      const srcW = sourceImage.naturalWidth || sourceImage.width;
+      const srcH = sourceImage.naturalHeight || sourceImage.height;
+      const g = P.geometry;
+
+      // Crop source rect
+      const sx = g.x * srcW;
+      const sy = g.y * srcH;
+      const sw = Math.max(1, g.w * srcW);
+      const sh = Math.max(1, g.h * srcH);
+
+      // Rotate swap
+      const rot = ((g.rotate % 360) + 360) % 360;
+      const swap = rot === 90 || rot === 270;
+      const outAspectW = swap ? sh : sw;
+      const outAspectH = swap ? sw : sh;
+
+      // Fit output
+      const maxDim = 1400;
+      let rw = outAspectW, rh = outAspectH;
+      if (Math.max(rw, rh) > maxDim) {
+        const s = maxDim / Math.max(rw, rh);
+        rw = Math.round(rw * s); rh = Math.round(rh * s);
+      }
+      rw = Math.max(1, rw | 0); rh = Math.max(1, rh | 0);
+
+      if (previewCanvas.width !== rw || previewCanvas.height !== rh) {
+        previewCanvas.width = rw; previewCanvas.height = rh;
+        gradedCanvas.width = rw; gradedCanvas.height = rh;
+        glPreviewCanvas.width = rw; glPreviewCanvas.height = rh;
+        depthCanvas.width = rw; depthCanvas.height = rh;
+      }
+
+      // Draw source into preview ctx with crop + rotate + flip
+      ctx2d.save();
+      ctx2d.setTransform(1, 0, 0, 1, 0, 0);
+      ctx2d.clearRect(0, 0, rw, rh);
+      ctx2d.translate(rw / 2, rh / 2);
+      if (rot) ctx2d.rotate(rot * Math.PI / 180);
+      if (g.flipH) ctx2d.scale(-1, 1);
+      if (g.flipV) ctx2d.scale(1, -1);
+      const dw = swap ? rh : rw;
+      const dh = swap ? rw : rh;
+      ctx2d.drawImage(sourceImage, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+      ctx2d.restore();
+
+      // Grade
+      const img = ctx2d.getImageData(0, 0, rw, rh);
+      const pipeline = buildPipeline(P);
+      pipeline.processImageData(img);
+
+      // LUT stack
+      if (P.luts.length) applyLUTsToImageData(img, P.luts);
+
+      gradedCtx.putImageData(img, 0, 0);
+      ctx2d.putImageData(img, 0, 0);
+
+      // Depth
+      depthCtx.save();
+      depthCtx.setTransform(1, 0, 0, 1, 0, 0);
+      depthCtx.clearRect(0, 0, rw, rh);
+      if (depthImage) {
+        depthCtx.translate(rw / 2, rh / 2);
+        if (rot) depthCtx.rotate(rot * Math.PI / 180);
+        if (g.flipH) depthCtx.scale(-1, 1);
+        if (g.flipV) depthCtx.scale(1, -1);
+        depthCtx.drawImage(depthImage, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+      } else {
+        depthCtx.fillStyle = '#fff';
+        depthCtx.fillRect(0, 0, rw, rh);
+      }
+      depthCtx.restore();
+
+      // Effects
+      if (P.effectsEnabled && P.effects.some(e => e.enabled)) {
+        if (!mushuFlow) initMushuFlow();
+        updateMushuTextures();
+      } else if (mushuFlow && !P.effects.some(e => e.enabled)) {
+        // effects are off — back to 2D
+        setEffectsMode(false);
+      }
+
+      drawHistogram(img);
+      updateCropOverlay();
+    }
+
+    function drawHistogram(img) {
+      const w = histogramCanvas.width, h = histogramCanvas.height;
+      histCtx.clearRect(0, 0, w, h);
+      const d = img.data;
+      const bins = 256;
+      const r = new Uint32Array(bins), g = new Uint32Array(bins), b = new Uint32Array(bins);
+      for (let i = 0; i < d.length; i += 4) { r[d[i]]++; g[d[i + 1]]++; b[d[i + 2]]++; }
+      let maxV = 1;
+      for (let i = 0; i < bins; i++) {
+        if (r[i] > maxV) maxV = r[i];
+        if (g[i] > maxV) maxV = g[i];
+        if (b[i] > maxV) maxV = b[i];
+      }
+      const drawChannel = (arr, color) => {
+        histCtx.beginPath();
+        histCtx.strokeStyle = color;
+        histCtx.lineWidth = 1.5;
+        for (let i = 0; i < bins; i++) {
+          const x = (i / (bins - 1)) * w;
+          const y = h - (arr[i] / maxV) * h * 0.95;
+          if (i === 0) histCtx.moveTo(x, y); else histCtx.lineTo(x, y);
+        }
+        histCtx.stroke();
+      };
+      histCtx.globalCompositeOperation = 'lighter';
+      drawChannel(r, 'rgba(255,60,60,0.7)');
+      drawChannel(g, 'rgba(60,255,60,0.7)');
+      drawChannel(b, 'rgba(80,120,255,0.7)');
+      histCtx.globalCompositeOperation = 'source-over';
+    }
+
+    /* =========================================================
+       TIMELINE
+       ========================================================= */
+    let previewPlaying = false;
+    let previewStart = 0;
+    let previewOffset = 0;
+
+    function startPreview() {
+      previewPlaying = true;
+      previewStart = performance.now() - previewOffset * 1000;
+      document.getElementById('tlPlay').textContent = '❚❚';
+      tickPreview();
+    }
+    function stopPreview() {
+      previewPlaying = false;
+      document.getElementById('tlPlay').textContent = '▶';
+    }
+    function tickPreview() {
+      if (!previewPlaying) return;
+      const dur = P.timeline.duration || 4;
+      const elapsed = (performance.now() - previewStart) / 1000;
+      if (elapsed >= dur) {
+        if (document.getElementById('tlLoop').checked) {
+          previewStart = performance.now();
+          pipelineTime = 0;
+        } else {
+          pipelineTime = dur;
+          stopPreview();
+          updateTimelineUI();
+          return;
+        }
+      } else {
+        pipelineTime = elapsed;
+      }
+      updateTimelineUI();
+      requestAnimationFrame(tickPreview);
+    }
+    function updateTimelineUI() {
+      const scrub = document.getElementById('tlScrub');
+      const dur = P.timeline.duration || 4;
+      scrub.max = dur;
+      scrub.value = pipelineTime;
+      document.getElementById('tlTime').textContent = pipelineTime.toFixed(2) + 's';
+    }
+    function bindTimeline() {
+      const scrub = document.getElementById('tlScrub');
+      const play = document.getElementById('tlPlay');
+      const loop = document.getElementById('tlLoop');
+      play.addEventListener('click', () => {
+        if (previewPlaying) { stopPreview(); previewOffset = pipelineTime; }
+        else startPreview();
+      });
+      scrub.addEventListener('input', () => {
+        stopPreview();
+        pipelineTime = parseFloat(scrub.value);
+        previewOffset = pipelineTime;
+        updateTimelineUI();
+        // nudge the flow — the uniform is read every frame
+        if (mushuFlow && typeof mushuFlow.render === 'function') {
+          try { mushuFlow.render(); } catch (_) { }
+        }
+      });
+      loop.addEventListener('change', () => { });
+      updateTimelineUI();
+    }
+
+    /* =========================================================
+       CROP OVERLAY (visual only; numeric controls in tab)
+       ========================================================= */
+    function updateCropOverlay() {
+      const show = document.querySelector('[data-panel="crop"].active') && cropOverlay;
+      if (!show) { cropOverlay.hidden = true; return; }
+      const g = P.geometry;
+      if (g.x === 0 && g.y === 0 && g.w === 1 && g.h === 1) { cropOverlay.hidden = true; return; }
+      cropOverlay.hidden = false;
+      const r = previewCanvas.getBoundingClientRect();
+      const p = canvasWrap.getBoundingClientRect();
+      cropOverlay.style.left = (r.left - p.left) + 'px';
+      cropOverlay.style.top = (r.top - p.top) + 'px';
+      cropOverlay.style.width = r.width + 'px';
+      cropOverlay.style.height = r.height + 'px';
+    }
+
+    /* =========================================================
+       UI: sliders + curve canvas
+       ========================================================= */
+    function makeSlider(parent, label, min, max, step, value, onChange, isHue = false) {
+      const wrap = document.createElement('div');
+      wrap.className = 'ctrl';
+      const top = document.createElement('div');
+      top.className = 'ctrl-top';
+      const name = document.createElement('span');
+      name.textContent = label;
+      const val = document.createElement('span');
+      val.className = 'val';
+      val.textContent = (typeof value === 'number') ? value.toFixed(step < 0.1 ? 2 : 1) : value;
+      top.appendChild(name); top.appendChild(val);
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = min; input.max = max; input.step = step; input.value = value;
+      if (isHue) input.classList.add('hue');
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        val.textContent = v.toFixed(step < 0.1 ? 2 : 1);
+        onChange(v);
+      });
+      input.addEventListener('change', () => { commit(); });
+      wrap.appendChild(top); wrap.appendChild(input);
+      parent.appendChild(wrap);
+      return input;
+    }
+
+    function drawCurveCanvas(canvas, points, color) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth || 320, h = canvas.clientHeight || 320;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      const c = canvas.getContext('2d');
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.fillStyle = '#0a0d11'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#1a2028'; c.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const t = i / 4;
+        c.beginPath(); c.moveTo(t * w, 0); c.lineTo(t * w, h); c.stroke();
+        c.beginPath(); c.moveTo(0, t * h); c.lineTo(w, t * h); c.stroke();
+      }
+      c.strokeStyle = color; c.lineWidth = 2;
+      c.beginPath();
+      const lut = makeCurveLUT(points);
+      for (let i = 0; i < 256; i++) {
+        const x = (i / 255) * w;
+        const y = h - evalLUT(lut, i / 255) * h;
+        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      }
+      c.stroke();
+      for (const [px, py] of points) {
+        c.beginPath();
+        c.arc(px * w, (1 - py) * h, 6, 0, Math.PI * 2);
+        c.fillStyle = color; c.fill();
+        c.lineWidth = 2; c.strokeStyle = '#0a0d11'; c.stroke();
+      }
+    }
+
+    /* =========================================================
+       UI BUILDER
+       ========================================================= */
+    function buildUI() {
+      buildBasic();
+      buildCurves();
+      buildTint();
+      buildMixer();
+      buildLUTs();
+      buildEffects();
+      buildCrop();
+      buildPresets();
+      buildExport();
+      updateHistoryButtons();
+      updateCropOverlay();
+    }
+
+    /* ---------- Basic ---------- */
+    function buildBasic() {
+      const el = document.querySelector('[data-panel="basic"]');
+      el.innerHTML = '';
+      [
+        ['Exposure', -3, 3, 0.05, 'exposure'],
+        ['Contrast', -100, 100, 1, 'contrast'],
+        ['Highlights', -100, 100, 1, 'highlights'],
+        ['Shadows', -100, 100, 1, 'shadows'],
+        ['Whites', -100, 100, 1, 'whites'],
+        ['Blacks', -100, 100, 1, 'blacks'],
+        ['Temperature', -100, 100, 1, 'temperature'],
+        ['Tint', -100, 100, 1, 'tint'],
+        ['Vibrance', -100, 100, 1, 'vibrance'],
+        ['Saturation', -100, 100, 1, 'saturation'],
+      ].forEach(([label, min, max, step, key]) => {
+        makeSlider(el, label, min, max, step, P[key], v => { P[key] = v; render(); });
+      });
+    }
+
+    /* ---------- Curves ---------- */
+    function buildCurves() {
+      const el = document.querySelector('[data-panel="curves"]');
+      el.innerHTML = '';
+      const keys = ['rgb', 'r', 'g', 'b'];
+      const labels = ['RGB', 'Red', 'Green', 'Blue'];
+      const colors = ['#fff', '#ff6060', '#60ff60', '#6080ff'];
+      keys.forEach((key, i) => {
+        const sec = document.createElement('div');
+        sec.className = 'sec-title';
+        sec.textContent = labels[i]; sec.style.color = colors[i];
+        el.appendChild(sec);
+        const wrap = document.createElement('div');
+        wrap.id = 'curveWrap';
+        const cvs = document.createElement('canvas');
+        cvs.id = 'curveCanvas';
+        wrap.appendChild(cvs);
+        el.appendChild(wrap);
+        requestAnimationFrame(() => {
+          drawCurveCanvas(cvs, P.curves[key], colors[i]);
+          setupCurveEditor(cvs, P.curves[key], () => render());
+        });
+      });
+    }
+
+    function setupCurveEditor(canvas, pointsRef, onChange) {
+      let dragIdx = -1;
+      const toLocal = (e) => {
+        const r = canvas.getBoundingClientRect();
+        return [clamp((e.clientX - r.left) / r.width, 0, 1), clamp(1 - (e.clientY - r.top) / r.height, 0, 1)];
+      };
+      const nearest = (x, y) => {
+        let idx = -1, best = 0.06;
+        for (let i = 0; i < pointsRef.length; i++) {
+          const p = pointsRef[i];
+          if (Math.hypot(p[0] - x, p[1] - y) < best) { best = Math.hypot(p[0] - x, p[1] - y); idx = i; }
+        }
+        return idx;
+      };
+      let startSnap = null;
+      canvas.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        startSnap = snapshot();
+        const [x, y] = toLocal(e);
+        let idx = nearest(x, y);
+        if (idx < 0) {
+          pointsRef.push([x, y]);
+          pointsRef.sort((a, b) => a[0] - b[0]);
+          idx = pointsRef.findIndex(p => p[0] === x && p[1] === y);
+        }
+        dragIdx = idx;
+        canvas.setPointerCapture(e.pointerId);
+        const redraw = () => { drawCurveCanvas(canvas, pointsRef, '#fff'); };
+        const move = (ev) => {
+          if (dragIdx < 0) return;
+          const [x, y] = toLocal(ev);
+          const pts = pointsRef;
+          const minX = dragIdx === 0 ? 0 : pts[dragIdx - 1][0] + 0.008;
+          const maxX = dragIdx === pts.length - 1 ? 1 : pts[dragIdx + 1][0] - 0.008;
+          pts[dragIdx][0] = clamp(x, minX, maxX);
+          pts[dragIdx][1] = y;
+          redraw();
+          onChange();
+        };
+        const up = (ev) => {
+          canvas.releasePointerCapture(ev.pointerId);
+          canvas.removeEventListener('pointermove', move);
+          canvas.removeEventListener('pointerup', up);
+          dragIdx = -1;
+          if (startSnap && snapshot() !== startSnap) commit();
+          startSnap = null;
+        };
+        canvas.addEventListener('pointermove', move);
+        canvas.addEventListener('pointerup', up);
+      });
+    }
+
+    /* ---------- Tint ---------- */
+    function buildTint() {
+      const el = document.querySelector('[data-panel="tint"]');
+      el.innerHTML = '';
+      [
+        ['Shadows', 'splitShadowHue', 'splitShadowSat'],
+        ['Midtones', 'splitMidHue', 'splitMidSat'],
+        ['Highlights', 'splitHighHue', 'splitHighSat'],
+      ].forEach(([label, hKey, sKey]) => {
+        const sec = document.createElement('div');
+        sec.className = 'sec-title'; sec.textContent = label;
+        el.appendChild(sec);
+        makeSlider(el, 'Hue', 0, 360, 1, P[hKey], v => { P[hKey] = v; render(); }, true);
+        makeSlider(el, 'Saturation', 0, 100, 1, P[sKey], v => { P[sKey] = v; render(); });
+      });
+      makeSlider(el, 'Balance', -100, 100, 1, P.splitBalance, v => { P.splitBalance = v; render(); });
+    }
+
+    /* ---------- Mixer ---------- */
+    function buildMixer() {
+      const el = document.querySelector('[data-panel="mixer"]');
+      el.innerHTML = '';
+      BANDS.forEach(([band]) => {
+        const sec = document.createElement('div');
+        sec.className = 'sec-title';
+        sec.textContent = band.charAt(0).toUpperCase() + band.slice(1);
+        el.appendChild(sec);
+        makeSlider(el, 'Hue Shift', -100, 100, 1, P.hsl[band][0], v => { P.hsl[band][0] = v; render(); }, true);
+        makeSlider(el, 'Saturation', -100, 100, 1, P.hsl[band][1], v => { P.hsl[band][1] = v; render(); });
+        makeSlider(el, 'Luminance', -100, 100, 1, P.hsl[band][2], v => { P.hsl[band][2] = v; render(); });
+      });
+    }
+
+    /* ---------- LUTs ---------- */
+    function buildLUTs() {
+      const el = document.querySelector('[data-panel="luts"]');
+      el.innerHTML = '';
+
+      const title = document.createElement('div');
+      title.className = 'sec-title';
+      title.textContent = 'LUT Stack';
+      el.appendChild(title);
+
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.style.marginTop = '0';
+      hint.textContent = 'LUTs are applied on top of the base grade. Reorder by deleting and re-adding.';
+      el.appendChild(hint);
+
+      const list = document.createElement('div');
+      list.style.marginTop = '12px';
+      if (!P.luts.length) {
+        const empty = document.createElement('p');
+        empty.className = 'hint';
+        empty.textContent = 'No LUTs loaded.';
+        list.appendChild(empty);
+      }
+      P.luts.forEach((entry, idx) => {
+        const row = document.createElement('div');
+        row.className = 'lut-row';
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = entry.name;
+        name.title = `${entry.name} (${entry.size}³)`;
+        const strength = document.createElement('input');
+        strength.type = 'range';
+        strength.min = 0; strength.max = 1; strength.step = 0.01;
+        strength.value = entry.strength ?? 1;
+        strength.addEventListener('input', () => { entry.strength = parseFloat(strength.value); render(); });
+        strength.addEventListener('change', () => commit());
+        const x = document.createElement('span');
+        x.className = 'x'; x.textContent = '×';
+        x.addEventListener('click', () => {
+          P.luts.splice(idx, 1);
+          commit();
+          render();
+          buildLUTs();
+        });
+        row.appendChild(name);
+        row.appendChild(strength);
+        row.appendChild(x);
+        list.appendChild(row);
+      });
+      el.appendChild(list);
+
+      const fileBtn = document.createElement('label');
+      fileBtn.className = 'btn primary big file-btn';
+      fileBtn.textContent = '+ Import .cube / .3dl';
+      fileBtn.style.marginTop = '12px';
+      const finp = document.createElement('input');
+      finp.type = 'file';
+      finp.accept = '.cube,.3dl,.CUBE,.3DL';
+      finp.addEventListener('change', async e => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const text = await f.text();
+          const parsed = parseCube(text, f.name.replace(/\.[^.]+$/, ''));
+          const hash = hashText(text) + '_' + parsed.size;
+          // persist to IDB
+          const buf = parsed.data.slice().buffer;
+          await idbPut('luts', {
+            hash, name: parsed.name, size: parsed.size, dim: parsed.dim,
+            domainMin: parsed.domainMin, domainMax: parsed.domainMax, buffer: buf,
+          }).catch(() => { });
+          P.luts.push({
+            hash, name: parsed.name, size: parsed.size, strength: 1,
+            lut: parsed,
+          });
+          commit();
+          render();
+          buildLUTs();
+        } catch (err) {
+          alert('Could not parse LUT: ' + err.message);
+        }
+        finp.value = '';
+      });
+      fileBtn.appendChild(finp);
+      el.appendChild(fileBtn);
+
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'btn big';
+      exportBtn.textContent = 'Bake current recipe to .cube';
+      exportBtn.addEventListener('click', () => {
+        const size = parseInt(prompt('LUT size (16/32/64):', '33')) || 33;
+        bakeRecipeToCube(size);
+      });
+      el.appendChild(exportBtn);
+    }
+
+    async function bakeRecipeToCube(size) {
+      size = clamp(Math.round(size), 2, 128);
+      const pipeline = buildPipeline(P);
+      const dummy = document.createElement('canvas');
+      dummy.width = dummy.height = 1;
+      const dctx = dummy.getContext('2d');
+      const img = dctx.createImageData(1, 1);
+      const text = exportCubeTextFromFunction('lutstudio_bake', size, (r, g, b, out) => {
+        img.data[0] = r * 255; img.data[1] = g * 255; img.data[2] = b * 255; img.data[3] = 255;
+        pipeline.processImageData(img);
+        if (P.luts.length) applyLUTsToImageData(img, P.luts);
+        out[0] = img.data[0] / 255; out[1] = img.data[1] / 255; out[2] = img.data[2] / 255;
+      });
+      const blob = new Blob([text], { type: 'text/plain' });
+      download(blob, 'lutstudio_bake.cube');
+    }
+
+    /* ---------- Effects ---------- */
+    function buildEffects() {
+      const el = document.querySelector('[data-panel="effects"]');
+      el.innerHTML = '';
+
+      /* enable toggle */
+      const toggleWrap = document.createElement('div');
+      toggleWrap.className = 'eth-toggle' + (P.effectsEnabled ? ' on' : '');
+      toggleWrap.textContent = P.effectsEnabled ? '✓ Shader effects ON' : 'Shader effects OFF';
+      toggleWrap.addEventListener('click', () => {
+        setEffectsMode(!P.effectsEnabled);
+        commit();
+        render();
+        buildEffects();
+      });
+      el.appendChild(toggleWrap);
+
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.style.marginTop = '8px';
+      hint.innerHTML = 'Effects run in <strong>mushu-flow</strong>, chained in one shader pass. Each effect can be masked by tone, channel or colour band.';
+      el.appendChild(hint);
+
+      /* stack list */
+      const title = document.createElement('div');
+      title.className = 'sec-title';
+      title.textContent = 'Effect Stack';
+      el.appendChild(title);
+
+      const list = document.createElement('div');
+      list.className = 'eth-list';
+      P.effects.forEach((e, idx) => {
+        const def = EFFECTS[e.typeId];
+        const chip = document.createElement('div');
+        chip.className = 'eth-chip' + (e.id === selectedEffectId ? ' active' : '');
+        const dot = document.createElement('span');
+        dot.className = 'dot'; dot.style.background = def?.color || '#5b8cff';
+        const nm = document.createElement('span');
+        nm.textContent = def?.label || e.typeId;
+        if (!e.enabled) nm.style.textDecoration = 'line-through';
+        chip.appendChild(dot); chip.appendChild(nm);
+        chip.addEventListener('click', () => { selectedEffectId = e.id; buildEffects(); });
+        chip.addEventListener('contextmenu', (ev) => {
+          ev.preventDefault();
+          e.enabled = !e.enabled;
+          packEffects(); render(); commit(); buildEffects();
+        });
+        const x = document.createElement('span');
+        x.className = 'x'; x.textContent = '×';
+        x.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          P.effects.splice(idx, 1);
+          if (selectedEffectId === e.id) selectedEffectId = P.effects[0]?.id ?? null;
+          packEffects(); render(); commit(); buildEffects();
+        });
+        chip.appendChild(x);
+        list.appendChild(chip);
+      });
+      el.appendChild(list);
+
+      /* add effect */
+      const addWrap = document.createElement('div');
+      addWrap.style.display = 'flex'; addWrap.style.gap = '8px'; addWrap.style.marginBottom = '14px';
+      const sel = document.createElement('select');
+      sel.style.flex = '1';
+      sel.style.background = '#151a21'; sel.style.color = '#e6e9ee';
+      sel.style.border = '1px solid #262e39'; sel.style.padding = '8px 10px'; sel.style.borderRadius = '8px';
+      EFFECT_KEYS.forEach(k => {
+        const o = document.createElement('option');
+        o.value = k; o.textContent = EFFECTS[k].label;
+        sel.appendChild(o);
+      });
+      addWrap.appendChild(sel);
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn primary';
+      addBtn.textContent = 'Add';
+      addBtn.addEventListener('click', () => {
+        const e = mkEffect(sel.value, {}, null, 1, 0);
+        P.effects.push(e);
+        selectedEffectId = e.id;
+        if (!P.effectsEnabled) setEffectsMode(true);
+        packEffects(); render(); commit(); buildEffects();
+      });
+      addWrap.appendChild(addBtn);
+      el.appendChild(addWrap);
+
+      /* editor */
+      const sel2 = P.effects.find(e => e.id === selectedEffectId);
+      if (!sel2) return;
+      const def = EFFECTS[sel2.typeId];
+      const editorTitle = document.createElement('div');
+      editorTitle.className = 'sec-title';
+      editorTitle.textContent = def.label;
+      el.appendChild(editorTitle);
+
+      def.params.forEach((p, i) => {
+        const key = `p${i}`;
+        makeSlider(el, p.label, p.min, p.max, p.step, sel2.params[key] ?? def.defaults[key],
+          v => { sel2.params[key] = v; });
+      });
+
+      makeSlider(el, 'Speed', 0, 4, 0.01, sel2.speed, v => { sel2.speed = v; });
+      makeSlider(el, 'Phase', 0, Math.PI * 2, 0.01, sel2.phase, v => { sel2.phase = v; });
+
+      /* mask toggle */
+      const maskTitle = document.createElement('div');
+      maskTitle.className = 'sec-title';
+      maskTitle.textContent = 'Mask';
+      el.appendChild(maskTitle);
+
+      const mt = document.createElement('div');
+      mt.className = 'eth-toggle' + (sel2.mask ? ' on' : '');
+      mt.textContent = sel2.mask ? 'Mask attached' : 'No mask';
+      mt.addEventListener('click', () => {
+        sel2.mask = sel2.mask ? null : {
+          channel: 'luma', rangeMin: 0, rangeMax: 1, spread: 0.05, weight: 0.6, invert: false,
+          points: [[0, 0], [0.5, 0.5], [1, 1]],
+        };
+        packEffects(); render(); commit(); buildEffects();
+      });
+      el.appendChild(mt);
+
+      if (sel2.mask) {
+        mountMaskEditor(el, sel2.mask, () => { packEffects(); render(); });
+      }
+    }
+
+    function mountMaskEditor(root, mask, onChange) {
+      /* channel */
+      const chField = document.createElement('div');
+      chField.className = 'field';
+      const chLabel = document.createElement('label');
+      chLabel.textContent = 'Channel';
+      const chSel = document.createElement('select');
+      ETH_CHANNELS.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.label;
+        if (c.id === mask.channel) o.selected = true;
+        chSel.appendChild(o);
+      });
+      chSel.addEventListener('change', () => { mask.channel = chSel.value; onChange(); commit(); });
+      chField.appendChild(chLabel); chField.appendChild(chSel);
+      root.appendChild(chField);
+
+      makeSlider(root, 'Range Min', 0, 1, 0.01, mask.rangeMin, v => {
+        mask.rangeMin = Math.min(v, mask.rangeMax); onChange();
+      });
+      makeSlider(root, 'Range Max', 0, 1, 0.01, mask.rangeMax, v => {
+        mask.rangeMax = Math.max(v, mask.rangeMin); onChange();
+      });
+      makeSlider(root, 'Spread', 0, 0.3, 0.005, mask.spread, v => { mask.spread = v; onChange(); });
+      makeSlider(root, 'Weight', 0, 1, 0.01, mask.weight, v => { mask.weight = v; onChange(); });
+
+      const inv = document.createElement('div');
+      inv.className = 'eth-toggle' + (mask.invert ? ' on' : '');
+      inv.textContent = mask.invert ? 'Inverted' : 'Normal';
+      inv.addEventListener('click', () => {
+        mask.invert = !mask.invert;
+        onChange(); commit(); buildEffects();
+      });
+      root.appendChild(inv);
+
+      /* curve editor */
+      const cvs = document.createElement('canvas');
+      cvs.id = 'ethCanvas';
+      root.appendChild(cvs);
+      requestAnimationFrame(() => {
+        drawCurveCanvas(cvs, mask.points, (ETH_CHANNELS.find(c => c.id === mask.channel)?.color) || '#fff');
+        setupCurveEditor(cvs, mask.points, onChange);
+      });
+    }
+
+    /* ---------- Crop ---------- */
+    function buildCrop() {
+      const el = document.querySelector('[data-panel="crop"]');
+      el.innerHTML = '';
+      const g = P.geometry;
+
+      const setG = (k, v) => { P.geometry[k] = v; render(); };
+
+      const aspectField = document.createElement('div');
+      aspectField.className = 'field';
+      const al = document.createElement('label');
+      al.textContent = 'Aspect Ratio';
+      const asel = document.createElement('select');
+      [['Free', null], ['1:1', 1], ['4:5', 4 / 5], ['3:2', 3 / 2], ['16:9', 16 / 9], ['9:16', 9 / 16]].forEach(([lbl, v]) => {
+        const o = document.createElement('option');
+        o.value = v === null ? '' : v;
+        o.textContent = lbl;
+        if ((v === null && g.aspect === null) || (v !== null && g.aspect === v)) o.selected = true;
+        asel.appendChild(o);
+      });
+      asel.addEventListener('change', () => {
+        P.geometry.aspect = asel.value === '' ? null : parseFloat(asel.value);
+        if (P.geometry.aspect) {
+          // recentre & fit
+          const a = P.geometry.aspect;
+          let w = 0.8, h = 0.8;
+          if (a > 1) h = w / a; else w = h * a;
+          P.geometry.w = w;
+          P.geometry.h = h;
+          P.geometry.x = (1 - w) / 2;
+          P.geometry.y = (1 - h) / 2;
+        }
+        render(); commit(); buildCrop();
+      });
+      aspectField.appendChild(al); aspectField.appendChild(asel);
+      el.appendChild(aspectField);
+
+      makeSlider(el, 'Position X', 0, 1, 0.001, g.x, v => setG('x', clamp(v, 0, 1 - g.w)));
+      makeSlider(el, 'Position Y', 0, 1, 0.001, g.y, v => setG('y', clamp(v, 0, 1 - g.h)));
+      makeSlider(el, 'Width', 0.02, 1, 0.001, g.w, v => setG('w', clamp(v, 0.02, 1 - g.x)));
+      makeSlider(el, 'Height', 0.02, 1, 0.001, g.h, v => setG('h', clamp(v, 0.02, 1 - g.y)));
+
+      const rotTitle = document.createElement('div');
+      rotTitle.className = 'sec-title';
+      rotTitle.textContent = 'Orientation';
+      el.appendChild(rotTitle);
+
+      const btnRow = document.createElement('div');
+      btnRow.style.display = 'flex'; btnRow.style.gap = '8px'; btnRow.style.marginBottom = '12px';
+
+      const rotBtn = document.createElement('button');
+      rotBtn.className = 'btn'; rotBtn.style.flex = '1'; rotBtn.textContent = `Rotate 90° (${g.rotate}°)`;
+      rotBtn.addEventListener('click', () => {
+        P.geometry.rotate = ((g.rotate + 90) % 360 + 360) % 360;
+        render(); commit(); buildCrop();
+      });
+      btnRow.appendChild(rotBtn);
+
+      const fhBtn = document.createElement('button');
+      fhBtn.className = 'btn' + (g.flipH ? ' primary' : '');
+      fhBtn.textContent = 'Flip H';
+      fhBtn.addEventListener('click', () => { P.geometry.flipH = !g.flipH; render(); commit(); buildCrop(); });
+      btnRow.appendChild(fhBtn);
+
+      const fvBtn = document.createElement('button');
+      fvBtn.className = 'btn' + (g.flipV ? ' primary' : '');
+      fvBtn.textContent = 'Flip V';
+      fvBtn.addEventListener('click', () => { P.geometry.flipV = !g.flipV; render(); commit(); buildCrop(); });
+      btnRow.appendChild(fvBtn);
+
+      el.appendChild(btnRow);
+
+      const resetCrop = document.createElement('button');
+      resetCrop.className = 'btn big';
+      resetCrop.textContent = 'Reset crop & orientation';
+      resetCrop.addEventListener('click', () => {
+        P.geometry = { x: 0, y: 0, w: 1, h: 1, aspect: null, rotate: 0, flipH: false, flipV: false };
+        render(); commit(); buildCrop();
+      });
+      el.appendChild(resetCrop);
+
+      setTimeout(updateCropOverlay, 0);
+    }
+
+    /* ---------- Presets ---------- */
+    function buildPresets() {
+      const el = document.querySelector('[data-panel="presets"]');
+      el.innerHTML = '';
+
+      const t1 = document.createElement('div');
+      t1.className = 'sec-title';
+      t1.textContent = 'Built-in Recipes';
+      el.appendChild(t1);
+
+      const grid = document.createElement('div');
+      grid.className = 'eth-presets';
+      Object.keys(SEED_PRESETS).forEach(key => {
+        const pr = SEED_PRESETS[key];
+        const b = document.createElement('button');
+        b.className = 'eth-preset';
+        b.type = 'button';
+        b.innerHTML = `<span class="p-name">${pr.label}</span><span class="p-desc">${pr.desc}</span>`;
+        b.addEventListener('click', () => {
+          const snap = defaultState();
+          // keep current grade + geometry; only swap effects
+          const keep = { ...P };
+          pr.apply(P);
+          selectedEffectId = P.effects[0]?.id ?? null;
+          packEffects();
+          render(); commit(); buildUI(); restoreActiveTab();
+        });
+        grid.appendChild(b);
+      });
+      el.appendChild(grid);
+
+      const t2 = document.createElement('div');
+      t2.className = 'sec-title';
+      t2.textContent = 'My Presets';
+      el.appendChild(t2);
+
+      const userList = document.createElement('div');
+      userList.style.marginBottom = '12px';
+      if (!P.presets.length) {
+        const empty = document.createElement('p');
+        empty.className = 'hint';
+        empty.style.marginTop = '0';
+        empty.textContent = 'No saved presets yet.';
+        userList.appendChild(empty);
+      }
+      P.presets.forEach((pr, idx) => {
+        const row = document.createElement('div');
+        row.className = 'lut-row';
+        const nm = document.createElement('span');
+        nm.className = 'name'; nm.textContent = pr.name;
+        const apply = document.createElement('button');
+        apply.className = 'btn'; apply.textContent = 'Apply';
+        apply.addEventListener('click', () => {
+          applyPreset(pr);
+          commit(); render(); buildUI(); restoreActiveTab();
+        });
+        const ex = document.createElement('button');
+        ex.className = 'btn'; ex.textContent = 'Export';
+        ex.addEventListener('click', () => {
+          const blob = new Blob([JSON.stringify(pr, null, 2)], { type: 'application/json' });
+          download(blob, `${pr.name}.lutstudio.json`);
+        });
+        const x = document.createElement('span');
+        x.className = 'x'; x.textContent = '×';
+        x.addEventListener('click', async () => {
+          P.presets.splice(idx, 1);
+          await idbDelete('presets', pr.name).catch(() => { });
+          commit(); buildPresets();
+        });
+        row.appendChild(nm); row.appendChild(apply); row.appendChild(ex); row.appendChild(x);
+        userList.appendChild(row);
+      });
+      el.appendChild(userList);
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn primary big';
+      saveBtn.textContent = 'Save current as preset';
+      saveBtn.addEventListener('click', async () => {
+        const name = prompt('Preset name:', 'My Look');
+        if (!name) return;
+        const pr = exportPreset(P, name);
+        P.presets = P.presets.filter(p => p.name !== name);
+        P.presets.push(pr);
+        await idbPut('presets', pr).catch(() => { });
+        commit(); buildPresets();
+      });
+      el.appendChild(saveBtn);
+
+      const importBtn = document.createElement('label');
+      importBtn.className = 'btn big file-btn';
+      importBtn.textContent = 'Import preset (.json)';
+      const finp = document.createElement('input');
+      finp.type = 'file'; finp.accept = '.json,application/json';
+      finp.addEventListener('change', async e => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const pr = JSON.parse(await f.text());
+          if (pr.schema !== 'lutstudio.preset/v1') throw new Error('Unknown preset schema');
+          P.presets = P.presets.filter(p => p.name !== pr.name);
+          P.presets.push(pr);
+          await idbPut('presets', pr).catch(() => { });
+          commit(); buildPresets();
+        } catch (err) { alert('Import failed: ' + err.message); }
+        finp.value = '';
+      });
+      importBtn.appendChild(finp);
+      el.appendChild(importBtn);
+    }
+
+    function exportPreset(state, name) {
+      return {
+        schema: 'lutstudio.preset/v1',
+        name,
+        created: new Date().toISOString(),
+        grade: {
+          basic: pick(state, ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks',
+            'temperature', 'tint', 'vibrance', 'saturation']),
+          curves: JSON.parse(JSON.stringify(state.curves)),
+          splitTone: {
+            shadows: { hue: state.splitShadowHue, sat: state.splitShadowSat },
+            midtones: { hue: state.splitMidHue, sat: state.splitMidSat },
+            highlights: { hue: state.splitHighHue, sat: state.splitHighSat },
+            balance: state.splitBalance,
+          },
+          hsl: JSON.parse(JSON.stringify(state.hsl)),
+        },
+        effects: state.effects.map(e => ({
+          typeId: e.typeId, enabled: e.enabled, params: { ...e.params },
+          speed: e.speed, phase: e.phase,
+          mask: e.mask ? { ...e.mask, points: e.mask.points.map(p => [p[0], p[1]]) } : null,
+        })),
+        lutRefs: state.luts.map(l => ({ name: l.name, hash: l.hash, size: l.size, strength: l.strength })),
+        effectsEnabled: state.effectsEnabled,
+      };
+    }
+    function applyPreset(pr) {
+      const g = pr.grade;
+      Object.assign(P, g.basic);
+      P.curves = JSON.parse(JSON.stringify(g.curves));
+      P.splitShadowHue = g.splitTone.shadows.hue; P.splitShadowSat = g.splitTone.shadows.sat;
+      P.splitMidHue = g.splitTone.midtones.hue; P.splitMidSat = g.splitTone.midtones.sat;
+      P.splitHighHue = g.splitTone.highlights.hue; P.splitHighSat = g.splitTone.highlights.sat;
+      P.splitBalance = g.splitTone.balance;
+      P.hsl = JSON.parse(JSON.stringify(g.hsl));
+      P.effects = pr.effects.map(e => {
+        const inst = mkEffect(e.typeId, e.params, e.mask, e.speed, e.phase);
+        inst.enabled = e.enabled;
+        return inst;
+      });
+      P.effectsEnabled = !!pr.effectsEnabled && P.effects.length > 0;
+      selectedEffectId = P.effects[0]?.id ?? null;
+      setEffectsMode(P.effectsEnabled);
+      packEffects();
+    }
+    function pick(obj, keys) {
+      const out = {};
+      for (const k of keys) out[k] = obj[k];
+      return out;
+    }
+
+    /* ---------- Export ---------- */
+    function buildExport() {
+      const el = document.querySelector('[data-panel="export"]');
+      el.innerHTML = '';
+
+      const nameField = document.createElement('div');
+      nameField.className = 'field';
+      const nameLabel = document.createElement('label');
+      nameLabel.textContent = 'Export Name';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text'; nameInput.value = 'lutstudio_export';
+      nameField.appendChild(nameLabel); nameField.appendChild(nameInput);
+      el.appendChild(nameField);
+
+      const fmtField = document.createElement('div');
+      fmtField.className = 'field';
+      const fmtLabel = document.createElement('label');
+      fmtLabel.textContent = 'Still Format';
+      const fmtSel = document.createElement('select');
+      [['png', 'PNG (lossless)'], ['jpeg', 'JPEG'], ['webp', 'WebP']].forEach(([v, l]) => {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = l;
+        if (v === 'jpeg') o.selected = true;
+        fmtSel.appendChild(o);
+      });
+      fmtField.appendChild(fmtLabel); fmtField.appendChild(fmtSel);
+      el.appendChild(fmtField);
+
+      const qualityField = document.createElement('div');
+      qualityField.className = 'field';
+      const qualityLabel = document.createElement('label');
+      qualityLabel.textContent = 'Quality';
+      const qualityInput = document.createElement('input');
+      qualityInput.type = 'range'; qualityInput.min = 0.5; qualityInput.max = 1; qualityInput.step = 0.01; qualityInput.value = 0.92;
+      qualityField.appendChild(qualityLabel); qualityField.appendChild(qualityInput);
+      el.appendChild(qualityField);
+
+      const maxDimField = document.createElement('div');
+      maxDimField.className = 'field';
+      const maxDimLabel = document.createElement('label');
+      maxDimLabel.textContent = 'Max Dimension (px)';
+      const maxDimInput = document.createElement('input');
+      maxDimInput.type = 'number'; maxDimInput.value = 2400; maxDimInput.min = 200; maxDimInput.max = 8000;
+      maxDimField.appendChild(maxDimLabel); maxDimField.appendChild(maxDimInput);
+      el.appendChild(maxDimField);
+
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'btn primary big';
+      exportBtn.textContent = 'Export still + manifest';
+      exportBtn.addEventListener('click', () => exportStill(nameInput.value, fmtSel.value, parseFloat(qualityInput.value), parseInt(maxDimInput.value)));
+      el.appendChild(exportBtn);
+
+      const webmBtn = document.createElement('button');
+      webmBtn.className = 'btn big';
+      webmBtn.textContent = 'Export animation (WebM)';
+      webmBtn.addEventListener('click', () => exportWebM(nameInput.value));
+      el.appendChild(webmBtn);
+
+      const jsonBtn = document.createElement('button');
+      jsonBtn.className = 'btn big';
+      jsonBtn.textContent = 'Export recipe (.json)';
+      jsonBtn.addEventListener('click', () => {
+        const manifest = buildManifest(P, currentImageMeta(), { format: 'recipe', width: previewCanvas.width, height: previewCanvas.height });
+        const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+        download(blob, nameInput.value + '.manifest.json');
+      });
+      el.appendChild(jsonBtn);
+
+      const batchTitle = document.createElement('div');
+      batchTitle.className = 'sec-title';
+      batchTitle.textContent = 'Batch';
+      el.appendChild(batchTitle);
+
+      const drop = document.createElement('div');
+      drop.className = 'eth-recipe';
+      drop.style.textAlign = 'center';
+      drop.style.cursor = 'pointer';
+      drop.textContent = 'Drop files here or click to pick (RAW supported)';
+      drop.addEventListener('click', () => pickBatchFiles());
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor = '#5b8cff'; });
+      drop.addEventListener('dragleave', () => drop.style.borderColor = '');
+      drop.addEventListener('drop', e => {
+        e.preventDefault(); drop.style.borderColor = '';
+        pickBatchFiles(e.dataTransfer.files);
+      });
+      el.appendChild(drop);
+
+      const progressOuter = document.createElement('div');
+      progressOuter.className = 'progress-bar';
+      const progressInner = document.createElement('div');
+      progressOuter.appendChild(progressInner);
+      el.appendChild(progressOuter);
+
+      const progress = document.createElement('div');
+      progress.className = 'hint';
+      progress.style.marginTop = '4px';
+      el.appendChild(progress);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn big';
+      cancelBtn.textContent = 'Cancel batch';
+      cancelBtn.style.display = 'none';
+      el.appendChild(cancelBtn);
+
+      let batchAbort = null;
+
+      async function pickBatchFiles(list) {
+        let files = list ? [...list] : null;
+        if (!files) {
+          files = await new Promise(res => {
+            const inp = document.createElement('input');
+            inp.type = 'file'; inp.multiple = true;
+            inp.accept = 'image/*,.cr2,.cr3,.nef,.arw,.dng,.raf,.orf,.rw2,.pef';
+            inp.onchange = () => res([...inp.files]);
+            inp.click();
+          });
+        }
+        if (!files.length) return;
+        batchAbort = { aborted: false };
+        cancelBtn.style.display = 'block';
+        cancelBtn.onclick = () => { batchAbort.aborted = true; };
+
+        const spec = {
+          format: fmtSel.value,
+          quality: parseFloat(qualityInput.value),
+          maxDim: parseInt(maxDimInput.value),
+        };
+
+        let okCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          if (batchAbort.aborted) break;
+          progress.textContent = `${i + 1}/${files.length}: ${files[i].name}`;
+          progressInner.style.width = `${(i / files.length) * 100}%`;
+          try {
+            await runSingleBatchJob(files[i], spec, nameInput.value);
+            okCount++;
+          } catch (err) {
+            console.warn('Batch job failed:', files[i].name, err);
+          }
+        }
+        progressInner.style.width = '100%';
+        progress.textContent = `Done: ${okCount}/${files.length}`;
+        cancelBtn.style.display = 'none';
+      }
+
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = 'Every export writes a sibling .manifest.json describing the recipe — hand off to the portfolio book builder by reading the manifest.';
+      el.appendChild(hint);
+    }
+
+    async function runSingleBatchJob(file, spec, baseName) {
+      // 1. decode (RAW or native)
+      const bmp = await decodeAny(file);
+
+      // 2. draw at max dim
+      const cw = bmp.width || bmp.naturalWidth;
+      const ch = bmp.height || bmp.naturalHeight;
+      const scale = Math.min(1, spec.maxDim / Math.max(cw, ch));
+      const outW = Math.max(1, Math.round(cw * scale));
+      const outH = Math.max(1, Math.round(ch * scale));
+
+      const c = document.createElement('canvas');
+      c.width = outW; c.height = outH;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(bmp, 0, 0, outW, outH);
+
+      // 3. grade
+      const img = cx.getImageData(0, 0, outW, outH);
+      const pipeline = buildPipeline(P);
+      pipeline.processImageData(img);
+      if (P.luts.length) applyLUTsToImageData(img, P.luts);
+      cx.putImageData(img, 0, 0);
+
+      // 4. effects — render through an offscreen mushu-flow instance
+      let outCanvas = c;
+      if (P.effectsEnabled && P.effects.some(e => e.enabled)) {
+        outCanvas = await renderEffectsOffscreen(c);
+      }
+
+      // 5. encode
+      const fmt = spec.format === 'png' ? 'image/png'
+        : spec.format === 'webp' ? 'image/webp'
+          : 'image/jpeg';
+      const lossy = fmt !== 'image/png';
+      const blob = await new Promise(r => outCanvas.toBlob(r, fmt, lossy ? spec.quality : undefined));
+      const ext = spec.format === 'jpeg' ? 'jpg' : spec.format;
+
+      // 6. download + manifest
+      const stem = file.name.replace(/\.[^.]+$/, '');
+      const manifest = buildManifest(P, {
+        name: file.name, width: cw, height: ch,
+        source: bmp.__meta?.source ?? 'native',
+        exif: bmp.__meta?.exif ?? null,
+      }, { format: spec.format, width: outW, height: outH, quality: lossy ? spec.quality : null });
+
+      download(blob, `${stem}.${ext}`);
+      await new Promise(r => setTimeout(r, 120));
+      download(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }), `${stem}.manifest.json`);
+      await new Promise(r => setTimeout(r, 120));
+    }
+
+    async function renderEffectsOffscreen(sourceCanvas) {
+      const gl = document.createElement('canvas');
+      gl.width = sourceCanvas.width;
+      gl.height = sourceCanvas.height;
+
+      const depth = document.createElement('canvas');
+      depth.width = gl.width; depth.height = gl.height;
+      const dctx = depth.getContext('2d');
+      dctx.fillStyle = '#fff'; dctx.fillRect(0, 0, depth.width, depth.height);
+
+      const eth = document.createElement('canvas');
+      eth.width = ETH_W; eth.height = ETH_H;
+      const ectx = eth.getContext('2d', { willReadFrequently: true });
+      const img = ectx.createImageData(ETH_W, ETH_H);
+      for (let i = 0; i < img.data.length; i += 4) { img.data[i] = 128; img.data[i + 3] = 255; }
+      // pack masks
+      const active = P.effects.filter(e => e.enabled).slice(0, MAX_EFFECTS);
+      let maskRow = 0;
+      for (let i = 0; i < active.length; i++) {
+        const e = active[i];
+        if (e.mask && maskRow < MAX_MASKS) {
+          const lut = makeCurveLUT(e.mask.points);
+          for (let x = 0; x < ETH_W; x++) {
+            const v = Math.round(evalLUT(lut, x / (ETH_W - 1)) * 255);
+            const idx = (maskRow * ETH_W + x) * 4;
+            img.data[idx] = v;
+          }
+          maskRow++;
+        }
+      }
+      ectx.putImageData(img, 0, 0);
+
+      // local uniform arrays
+      const localEffect = {
+        count: active.length,
+        type: new Float32Array(MAX_EFFECTS).fill(-1),
+        p0: new Float32Array(MAX_EFFECTS),
+        p1: new Float32Array(MAX_EFFECTS),
+        speed: new Float32Array(MAX_EFFECTS),
+        phase: new Float32Array(MAX_EFFECTS),
+        maskRow: new Float32Array(MAX_EFFECTS).fill(-1),
+      };
+      const localMask = {
+        channel: new Float32Array(MAX_MASKS),
+        rangeMin: new Float32Array(MAX_MASKS),
+        rangeMax: new Float32Array(MAX_MASKS),
+        spread: new Float32Array(MAX_MASKS),
+        weight: new Float32Array(MAX_MASKS),
+        invert: new Float32Array(MAX_MASKS),
+      };
+      let row = 0;
+      for (let i = 0; i < active.length; i++) {
+        const e = active[i];
+        localEffect.type[i] = EFFECT_TYPE_INDEX[e.typeId] ?? -1;
+        localEffect.p0[i] = e.params.p0 ?? 0;
+        localEffect.p1[i] = e.params.p1 ?? 0;
+        localEffect.speed[i] = e.speed ?? 1;
+        localEffect.phase[i] = e.phase ?? 0;
+        if (e.mask && row < MAX_MASKS) {
+          localEffect.maskRow[i] = row;
+          localMask.channel[row] = ETH_CHANNEL_INDEX[e.mask.channel] ?? 0;
+          localMask.rangeMin[row] = e.mask.rangeMin;
+          localMask.rangeMax[row] = e.mask.rangeMax;
+          localMask.spread[row] = e.mask.spread;
+          localMask.weight[row] = e.mask.weight;
+          localMask.invert[row] = e.mask.invert ? 1 : 0;
+          row++;
+        }
+      }
+
+      if (!effectShaderSrc) effectShaderSrc = buildEffectShaderSource();
+
+      const stage = flow(gl)
+        .use(texture(sourceCanvas, { name: 'uSource', unit: 0, flipY: true }))
+        .use(texture(depth, { name: 'uDepthMap', unit: 1, flipY: true }))
+        .use(texture(eth, { name: 'uEthereal', unit: 2, flipY: false }))
+        .use(shader(effectShaderSrc, {
+          uniforms: {
+            uTime: () => 0,
+            uGlobalIntensity: () => 1.0,
+            uDepthThreshold: () => -1.0,
+            uDepthFeather: () => 0.1,
+            uEffectCount: () => localEffect.count,
+            uEffectType: () => localEffect.type,
+            uEffectP0: () => localEffect.p0,
+            uEffectP1: () => localEffect.p1,
+            uEffectSpeed: () => localEffect.speed,
+            uEffectPhase: () => localEffect.phase,
+            uEffectMaskRow: () => localEffect.maskRow,
+            uMaskChannel: () => localMask.channel,
+            uMaskRangeMin: () => localMask.rangeMin,
+            uMaskRangeMax: () => localMask.rangeMax,
+            uMaskSpread: () => localMask.spread,
+            uMaskWeight: () => localMask.weight,
+            uMaskInvert: () => localMask.invert,
+          }
+        }))
+        .go();
+
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const out = document.createElement('canvas');
+      out.width = gl.width; out.height = gl.height;
+      out.getContext('2d').drawImage(gl, 0, 0);
+
+      try { stage.destroy(); } catch (_) { }
+      return out;
+    }
+
+    /* =========================================================
+       FILE / IMAGE HELPERS
+       ========================================================= */
+    function loadImage(src) {
+      return new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => res(img);
+        img.onerror = rej;
+        img.src = src;
+      });
+    }
+    function download(blob, filename) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }
+
+    /* =========================================================
+       RAW DECODE (libraw-wasm via Blob worker)
+       ========================================================= */
+    const RAW_EXTS = new Set(['cr2', 'cr3', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'raw', 'rwl',
+      'dng', 'pef', 'ptx', 'srw', 'x3f', '3fr', 'fff', 'iiq', 'k25', 'kdc', 'mef', 'mos', 'mrw', 'erf', 'dcr', 'dcs',
+      'ari', 'bay', 'cap', 'cine', 'cs1', 'eip', 'gpr', 'mdc', 'pxn', 'qtk', 'rdc', 'rwz', 'sti']);
+
+    function isRAW(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      return RAW_EXTS.has(ext);
+    }
+
+    const RAW_WORKER_SRC = `
+self.onmessage = async (ev) => {
+  const { id, buffer } = ev.data;
+  try {
+    importScripts('https://unpkg.com/libraw-wasm@0.21.1/dist/libraw.js');
+    if (typeof LibRaw !== 'function') throw new Error('libraw not available');
+    const wasm = await LibRaw();
+    const raw = wasm.open(new Uint8Array(buffer));
+    if (raw && raw.useCameraWhiteBalance) raw.useCameraWhiteBalance();
+    const { width, height, data } = raw.toImageData();
+    const out = new Uint8ClampedArray(data);
+    self.postMessage({ id, ok: true, width, height, data: out.buffer }, [out.buffer]);
+  } catch(e){
+    self.postMessage({ id, ok: false, error: String(e) });
+  }
+};
+`;
+
+    let rawWorker = null;
+    let rawJobId = 0;
+    const rawPending = new Map();
+
+    function ensureRawWorker() {
+      if (rawWorker) return rawWorker;
+      const blob = new Blob([RAW_WORKER_SRC], { type: 'application/javascript' });
+      rawWorker = new Worker(URL.createObjectURL(blob));
+      rawWorker.onmessage = (ev) => {
+        const p = rawPending.get(ev.data.id);
+        if (!p) return;
+        rawPending.delete(ev.data.id);
+        if (ev.data.ok) {
+          try {
+            const img = new ImageData(new Uint8ClampedArray(ev.data.data), ev.data.width, ev.data.height);
+            createImageBitmap(img).then(bmp => p.resolve(bmp));
+          } catch (e) { p.reject(e); }
+        } else {
+          p.reject(new Error(ev.data.error));
+        }
+      };
+      return rawWorker;
+    }
+
+    function decodeRAW(file) {
+      const w = ensureRawWorker();
+      const id = ++rawJobId;
+      return new Promise(async (resolve, reject) => {
+        rawPending.set(id, { resolve, reject });
+        const buf = await file.arrayBuffer();
+        w.postMessage({ id, buffer: buf }, [buf]);
+      });
+    }
+
+    async function decodeAny(file) {
+      if (isRAW(file)) {
+        const bmp = await decodeRAW(file);
+        bmp.__meta = { source: 'raw', filename: file.name };
+        return bmp;
+      }
+      const bmp = await createImageBitmap(file);
+      bmp.__meta = { source: 'native', filename: file.name, type: file.type };
+      return bmp;
+    }
+
+    /* =========================================================
+       MANIFEST
+       ========================================================= */
+    const MANIFEST_SCHEMA = 'lutstudio.manifest/v1';
+    function currentImageMeta() {
+      if (!sourceImage) return { name: 'unknown', width: 0, height: 0 };
+      return {
+        name: sourceImage.__meta?.filename || sourceImage.name || 'image',
+        width: sourceImage.naturalWidth || sourceImage.width,
+        height: sourceImage.naturalHeight || sourceImage.height,
+        source: sourceImage.__meta?.source || 'native',
+        exif: sourceImage.__meta?.exif || null,
+      };
+    }
+    function buildManifest(state, imageMeta, exportOpts) {
+      return {
+        schema: MANIFEST_SCHEMA,
+        generatedAt: new Date().toISOString(),
+        tool: { name: 'LUT Studio Pro', version: '1.0' },
+        source: {
+          filename: imageMeta.name,
+          width: imageMeta.width,
+          height: imageMeta.height,
+          source: imageMeta.source || 'native',
+        },
+        geometry: {
+          crop: { x: state.geometry.x, y: state.geometry.y, w: state.geometry.w, h: state.geometry.h },
+          rotate: state.geometry.rotate,
+          flipH: state.geometry.flipH, flipV: state.geometry.flipV,
+        },
+        grade: {
+          basic: pick(state, ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks',
+            'temperature', 'tint', 'vibrance', 'saturation']),
+          curves: state.curves,
+          splitTone: {
+            shadows: { hue: state.splitShadowHue, sat: state.splitShadowSat },
+            midtones: { hue: state.splitMidHue, sat: state.splitMidSat },
+            highlights: { hue: state.splitHighHue, sat: state.splitHighSat },
+            balance: state.splitBalance,
+          },
+          hsl: state.hsl,
+          lutStack: state.luts.map(l => ({ name: l.name, hash: l.hash, size: l.size, strength: l.strength })),
+        },
+        effects: state.effects.map(e => ({
+          type: e.typeId, enabled: e.enabled, params: e.params,
+          speed: e.speed, phase: e.phase,
+          mask: e.mask ? {
+            channel: e.mask.channel,
+            rangeMin: e.mask.rangeMin, rangeMax: e.mask.rangeMax,
+            spread: e.mask.spread, weight: e.mask.weight,
+            invert: e.mask.invert, points: e.mask.points,
+          } : null,
+        })),
+        timeline: { duration: state.timeline.duration, fps: state.timeline.fps },
+        output: {
+          format: exportOpts.format,
+          width: exportOpts.width, height: exportOpts.height,
+          quality: exportOpts.quality ?? null,
+          frames: exportOpts.frames ?? null,
+        },
+        hashes: {
+          recipe: hashRecipe(state),
+        },
+      };
+    }
+    function hashRecipe(state) {
+      const s = JSON.stringify({
+        g: state.geometry,
+        b: pick(state, ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'temperature', 'tint', 'vibrance', 'saturation']),
+        c: state.curves, t: [state.splitShadowHue, state.splitShadowSat,
+        state.splitMidHue, state.splitMidSat,
+        state.splitHighHue, state.splitHighSat],
+        h: state.hsl, l: state.luts.map(l => l.hash),
+        e: state.effects.map(e => e.typeId + ':' + JSON.stringify(e.params) + ':' + (e.mask?.channel || '')),
+      });
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      return (h >>> 0).toString(36);
+    }
+
+    /* =========================================================
+       EXPORT — still / animation
+       ========================================================= */
+    async function exportStill(name, format, quality, maxDim) {
+      if (!sourceImage) { alert('Load an image first.'); return; }
+      const src = P.effectsEnabled ? glPreviewCanvas : previewCanvas;
+      const scale = Math.min(1, maxDim / Math.max(src.width, src.height));
+      const outW = Math.max(1, Math.round(src.width * scale));
+      const outH = Math.max(1, Math.round(src.height * scale));
+
+      const c = document.createElement('canvas');
+      c.width = outW; c.height = outH;
+      c.getContext('2d').drawImage(src, 0, 0, outW, outH);
+
+      const mime = format === 'png' ? 'image/png'
+        : format === 'webp' ? 'image/webp'
+          : 'image/jpeg';
+      const blob = await new Promise(r => c.toBlob(r, mime, format !== 'png' ? quality : undefined));
+      const ext = format === 'jpeg' ? 'jpg' : format;
+      download(blob, `${name}.${ext}`);
+
+      const manifest = buildManifest(P, currentImageMeta(),
+        { format, width: outW, height: outH, quality: format !== 'png' ? quality : null });
+      await new Promise(r => setTimeout(r, 120));
+      download(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }), `${name}.manifest.json`);
+    }
+
+    async function exportWebM(name) {
+      if (!P.effectsEnabled) { alert('Enable shader effects first.'); return; }
+      if (!mushuFlow) { alert('Effects pipeline not initialised.'); return; }
+
+      // start a fresh playthrough
+      stopPreview();
+      pipelineTime = 0;
+      previewOffset = 0;
+      previewStart = performance.now();
+      previewPlaying = true;
+
+      const stream = glPreviewCanvas.captureStream(30);
+      const rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12_000_000 });
+      const chunks = [];
+      rec.ondataavailable = e => chunks.push(e.data);
+      const done = new Promise(r => rec.onstop = r);
+      rec.start();
+
+      await new Promise(r => setTimeout(r, P.timeline.duration * 1000 + 200));
+      previewPlaying = false;
+      rec.stop();
+      await done;
+
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      download(blob, `${name}.webm`);
+
+      const manifest = buildManifest(P, currentImageMeta(),
+        {
+          format: 'webm', width: glPreviewCanvas.width, height: glPreviewCanvas.height,
+          fps: 30, frames: Math.round(P.timeline.duration * 30)
+        });
+      await new Promise(r => setTimeout(r, 120));
+      download(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }), `${name}.manifest.json`);
+    }
+
+    /* =========================================================
+       FILE HANDLERS
+       ========================================================= */
+    fileInput.addEventListener('change', async e => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const bmp = await decodeAny(file);
+        sourceImage = bmp;
+        imgBtnLabel.classList.add('loaded');
+        render();
+        commit();
+      } catch (err) {
+        console.warn('Image load failed', err);
+        alert('Could not load: ' + err.message);
+      }
+      fileInput.value = '';
+    });
+
+    depthInput.addEventListener('change', async e => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const img = await loadImage(URL.createObjectURL(file));
+        depthImage = img;
+        depthBtnLabel.classList.add('loaded');
+        packEffects(); // to trigger depth redraw
+        render();
+        commit();
+      } catch (err) { console.warn('Depth load failed', err); }
+      depthInput.value = '';
+    });
+
+    resetBtn.addEventListener('click', () => {
+      if (!confirm('Reset everything?')) return;
+      P = defaultState();
+      selectedEffectId = null;
+      sourceImage = null;
+      depthImage = null;
+      depthBtnLabel.classList.remove('loaded');
+      imgBtnLabel.classList.remove('loaded');
+      setEffectsMode(false);
+      packEffects();
+      buildUI();
+      restoreActiveTab();
+      commit();
+      render();
+    });
+
+    undoBtn.addEventListener('click', undo);
+    redoBtn.addEventListener('click', redo);
+
+    /* =========================================================
+       TABS
+       ========================================================= */
+    function restoreActiveTab() {
+      const activeTab = document.querySelector('.tab.active');
+      if (!activeTab) return;
+      document.querySelectorAll('.panel-body').forEach(p => p.classList.remove('active'));
+      const panel = document.querySelector(`[data-panel="${activeTab.dataset.tab}"]`);
+      if (panel) panel.classList.add('active');
+    }
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel-body').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+        updateCropOverlay();
+        scheduleSave();
+      });
+    });
+
+    /* =========================================================
+       KEYBOARD
+       ========================================================= */
+    document.addEventListener('keydown', e => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+    });
+
+    /* =========================================================
+       SAVE ON UNLOAD
+       ========================================================= */
+    window.addEventListener('beforeunload', () => {
+      if (saveTimer) { clearTimeout(saveTimer); saveNow(); }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && saveTimer) { clearTimeout(saveTimer); saveNow(); }
+    });
+
+    /* =========================================================
+       BOOT
+       ========================================================= */
+    async function boot() {
+      bindTimeline();
+
+      /* Restore saved state */
+      const saved = loadSaved();
+      if (saved && saved.state) {
+        try {
+          const s = saved.state;
+          // rebuild state on top of defaults so missing keys are filled
+          const def = defaultState();
+          P = Object.assign(def, s);
+          if (!P.effects) P.effects = [];
+          if (!P.luts) P.luts = [];
+          if (!P.geometry) P.geometry = { x: 0, y: 0, w: 1, h: 1, aspect: null, rotate: 0, flipH: false, flipV: false };
+          if (!P.timeline) P.timeline = { duration: 4, fps: 24 };
+        } catch (_) { P = defaultState(); }
+      }
+      if (saved && saved.activeTab) {
+        document.querySelectorAll('.tab').forEach(t => {
+          t.classList.toggle('active', t.dataset.tab === saved.activeTab);
+        });
+      }
+
+      /* Restore LUTs from IDB */
+      try {
+        const stored = await idbAll('luts');
+        for (const rec of stored) {
+          const data = new Float32Array(rec.buffer);
+          P.luts.push({
+            hash: rec.hash, name: rec.name, size: rec.size, strength: 1,
+            lut: {
+              name: rec.name, size: rec.size, dim: 3, data,
+              domainMin: rec.domainMin || [0, 0, 0], domainMax: rec.domainMax || [1, 1, 1]
+            },
+          });
+        }
+      } catch (e) { /* ignore */ }
+
+      /* Restore user presets from IDB */
+      try {
+        const stored = await idbAll('presets');
+        P.presets = stored;
+      } catch (e) { /* ignore */ }
+
+      /* Init mask atlas */
+      packEffects();
+
+      buildUI();
+      restoreActiveTab();
+
+      /* Fallback blank image */
+      if (!sourceImage) {
+        const blank = document.createElement('canvas');
+        blank.width = 800; blank.height = 600;
+        const bctx = blank.getContext('2d');
+        const grd = bctx.createLinearGradient(0, 0, 800, 600);
+        grd.addColorStop(0, '#1a1f27'); grd.addColorStop(1, '#2a3040');
+        bctx.fillStyle = grd; bctx.fillRect(0, 0, 800, 600);
+        bctx.fillStyle = '#5b8cff'; bctx.font = 'bold 30px sans-serif'; bctx.textAlign = 'center';
+        bctx.fillText('Load an image or drop a RAW', 400, 290);
+        bctx.fillStyle = '#5f6b7a'; bctx.font = '15px sans-serif';
+        bctx.fillText('Everything is saved automatically', 400, 330);
+        sourceImage = await loadImage(blank.toDataURL());
+        sourceImage.__meta = { source: 'placeholder' };
+      }
+
+      render();
+
+      /* Seed history */
+      historyStack = [{ snap: snapshot(), t: Date.now() }];
+      historyIndex = 0;
+      updateHistoryButtons();
+    }
+
+    boot();
+
+  </script>
+</body>
+
+</html>

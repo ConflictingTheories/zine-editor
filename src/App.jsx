@@ -10,6 +10,7 @@ import TemplateModal from './components/TemplateModal.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Editor from './components/Editor.jsx'
 import Reader from './components/Reader.jsx'
+import LightTable from './components/LightTable.jsx'
 import VfxSystem from './components/VfxSystem.jsx'
 import Toast from './components/Toast.jsx'
 import { useVP } from './context/VPContext.jsx'
@@ -31,6 +32,8 @@ function App() {
                 return <Editor />
             case 'reader':
                 return <Reader />
+            case 'lighttable':
+                return <LightTable />
             default:
                 return <Dashboard />
         }
@@ -38,7 +41,7 @@ function App() {
 
     return (
         <div className={`app-container ${activeVfx === 'shake' ? 'shake-anim' : ''} ${activeVfx === 'pulse' ? 'pulse-anim' : ''}`}>
-            <TopNav />
+            {vpState.currentView !== 'lighttable' && <TopNav />}
             <main className="main-content">
                 {renderView()}
             </main>

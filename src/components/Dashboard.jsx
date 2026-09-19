@@ -19,7 +19,11 @@ function Dashboard() {
     const { vpState, updateVpState, showView, showModal, createProject, openProject, saveLocal, deleteProject, toast } = useVP()
 
     const handleCreateZine = () => {
-        showModal('themePicker')
+        showModal('themePicker', 'zine')
+    }
+
+    const handleCreatePortfolio = () => {
+        showModal('themePicker', 'photo-portfolio')
     }
 
     const handleOpenProject = (index) => {
@@ -70,7 +74,25 @@ function Dashboard() {
                     </div>
                     <div className="zine-card-body">
                         <h3>Create New Zine</h3>
-                        <p>Start a new project</p>
+                        <p>Start a new interactive project</p>
+                    </div>
+                </div>
+                <div className="zine-card create-card" onClick={handleCreatePortfolio}>
+                    <div className="zine-card-cover">
+                        <div className="cover-icon">📷</div>
+                    </div>
+                    <div className="zine-card-body">
+                        <h3>Create Portfolio Book</h3>
+                        <p>Start a new photo-centric project</p>
+                    </div>
+                </div>
+                <div className="zine-card create-card" onClick={() => updateVpState({ currentView: 'lighttable' })}>
+                    <div className="zine-card-cover">
+                        <div className="cover-icon" style={{ filter: 'invert(1)' }}>💡</div>
+                    </div>
+                    <div className="zine-card-body">
+                        <h3>Light Table</h3>
+                        <p>Process library images natively</p>
                     </div>
                 </div>
                 {projects.map((project, index) => {

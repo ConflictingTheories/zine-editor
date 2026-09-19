@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Portfolio Book</title>
+<style>
+:root {
+  --shell-bg: #2B2622;
+  --shell-control-bg: #2B2622;
+  --shell-text: #EDE7DD;
+  --shell-text-soft: #A79E92;
+  --shell-border: rgba(237, 231, 221, 0.16);
+
+  --paper: #FBFAF8;
+  --ink: #1F1B18;
+  --ink-soft: #948A7D;
+
+  --accent: #7A2E2E;
+  --on-accent: #F5F1EA;
+
+  --title-font: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --photo-fit: contain;
+  --mat-size: 0mm;
+  --mat-color: transparent;
+  --photo-border: none;
+
+  --page-gap: 28px;
+  --page-ratio: 210 / 297;
+  --page-width: 210mm;
+  --page-height: 297mm;
+}
+
+body.theme-light {
+  --shell-bg: #EDE8E0;
+  --shell-control-bg: #FFFFFF;
+  --shell-text: #2A2622;
+  --shell-text-soft: #726A5E;
+  --shell-border: rgba(42, 38, 34, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--shell-bg);
+  color: var(--shell-text);
+}
+
+button, select, textarea, input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, select {
+  touch-action: manipulation;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--shell-bg);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.brand {
+  font-size: 15px;
+  color: var(--shell-text);
+  letter-spacing: 0.01em;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+}
+
+.notice p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.notice button {
+  border: none;
+  background: transparent;
+  color: var(--on-accent);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.settings-panel {
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--shell-bg);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.settings-panel.open {
+  display: flex;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.setting-label {
+  font-size: 13px;
+  color: var(--shell-text-soft);
+}
+
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+}
+
+.swatch.selected {
+  border-color: var(--shell-text);
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--shell-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segment {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--shell-text-soft);
+}
+
+.segment.selected {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+select {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--shell-border);
+  background: var(--shell-control-bg);
+  color: var(--shell-text);
+}
+
+.primary-button {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  transition: transform 0.1s ease;
+}
+
+.primary-button:active {
+  transform: scale(0.96);
+}
+
+.ghost-button {
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--shell-border);
+  background: transparent;
+  color: var(--shell-text);
+  transition: transform 0.1s ease;
+}
+
+.ghost-button:active {
+  transform: scale(0.96);
+}
+
+.ghost-button.small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.ghost-button.selected {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.ghost-button:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+#book, #pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--page-gap);
+  width: 100%;
+}
+
+#book {
+  padding: var(--page-gap) 16px 120px;
+}
+
+.page {
+  width: min(100%, 480px);
+  aspect-ratio: var(--page-ratio);
+  background: var(--paper);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 10mm;
+  overflow: hidden;
+}
+
+.cover-page {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 16px;
+}
+
+.cover-photo {
+  position: relative;
+  width: 68%;
+  aspect-ratio: 1;
+  padding: var(--mat-size);
+  background: var(--mat-color);
+  overflow: hidden;
+}
+
+.cover-photo.empty {
+  background: #EFEAE1;
+}
+
+.cover-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-orientation: from-image;
+  border: var(--photo-border);
+  touch-action: none;
+  cursor: grab;
+}
+
+.cover-photo img:active {
+  cursor: grabbing;
+}
+
+.cover-photo-button {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.cover-photo.empty .cover-photo-button {
+  border: 1px dashed rgba(31, 27, 24, 0.3);
+}
+
+.cover-photo:not(.empty) .cover-photo-button {
+  display: none;
+}
+
+.edit-badge {
+  display: none;
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: rgba(31, 27, 24, 0.6);
+  color: var(--on-accent);
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.cover-photo:not(.empty) .edit-badge {
+  display: flex;
+}
+
+.title-input, .subtitle-input {
+  display: block;
+  width: 100%;
+  text-align: center;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.title-input {
+  font-family: var(--title-font);
+  font-size: clamp(22px, 6vw, 32px);
+}
+
+.subtitle-input {
+  font-size: 14px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.photo-frame {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--mat-size);
+  background: var(--mat-color);
+}
+
+.photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: var(--photo-fit);
+  image-orientation: from-image;
+  border: var(--photo-border);
+}
+
+.photo-frame img.repositionable {
+  touch-action: none;
+  cursor: grab;
+}
+
+.photo-frame img.repositionable:active {
+  cursor: grabbing;
+}
+
+.caption-input {
+  margin-top: 10px;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.page-number {
+  position: absolute;
+  bottom: 6mm;
+  right: 8mm;
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+
+.page-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.icon-button.active {
+  background: var(--accent);
+}
+
+.adjust-panel {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 480px);
+  padding: 14px 16px;
+  background: var(--shell-control-bg);
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+}
+
+.adjust-panel.open {
+  display: flex;
+}
+
+.adjust-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--shell-text-soft);
+}
+
+.adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adjust-row label {
+  font-size: 12px;
+  color: var(--shell-text-soft);
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.adjust-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.adjust-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.empty-hint {
+  color: var(--shell-text-soft);
+  font-size: 14px;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.fab {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 20;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 28px;
+  line-height: 1;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s ease;
+}
+
+.fab:active {
+  transform: scale(0.94);
+}
+
+.tip {
+  text-align: center;
+  font-size: 12px;
+  color: var(--shell-text-soft);
+  padding: 0 24px 24px;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-button, .fab, .ghost-button {
+    transition: none;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  html, body {
+    background: white;
+  }
+
+  #book, #pages {
+    display: block;
+    gap: 0;
+    padding: 0;
+    margin: 0;
+    width: auto;
+  }
+
+  .page {
+    width: var(--page-width);
+    height: var(--page-height);
+    aspect-ratio: auto;
+    margin: 0;
+    box-shadow: none;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .title-input::placeholder,
+  .subtitle-input::placeholder,
+  .caption-input::placeholder {
+    color: transparent;
+  }
+
+  input:focus, textarea:focus {
+    box-shadow: none;
+  }
+}
+</style>
+<style id="printStyle"></style>
+</head>
+<body>
+
+<header class="topbar no-print">
+  <span class="brand">Portfolio Book</span>
+  <div class="topbar-controls">
+    <button id="settingsToggle" class="ghost-button" type="button">Settings</button>
+    <button id="exportButton" class="primary-button" type="button">Save as PDF</button>
+  </div>
+</header>
+
+<div class="notice no-print" id="browserNotice">
+  <p>Photos and PDF export need a real browser tab. Tap Share, then Open in Safari or Chrome, if this preview doesn't respond.</p>
+  <button type="button" id="dismissNotice" aria-label="Dismiss">&times;</button>
+</div>
+
+<div class="settings-panel open no-print" id="settingsPanel">
+  <div class="setting-row">
+    <span class="setting-label">Page Size</span>
+    <select id="pageSizeSelect" aria-label="Page size">
+      <option value="a4">A4</option>
+      <option value="letter">US Letter</option>
+      <option value="square">Square</option>
+    </select>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Orientation</span>
+    <div class="segmented" id="orientationToggle">
+      <button type="button" class="segment selected" data-orientation="portrait">Portrait</button>
+      <button type="button" class="segment" data-orientation="landscape">Landscape</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Title Font</span>
+    <select id="fontSelect" aria-label="Title font">
+      <option value="book">Book Serif</option>
+      <option value="classic">Classic Serif</option>
+      <option value="modern">Modern Sans</option>
+      <option value="editorial">Editorial Mono</option>
+    </select>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Accent</span>
+    <div class="swatches" id="accentSwatches">
+      <button type="button" class="swatch selected" data-color="#7A2E2E" style="background:#7A2E2E" aria-label="Oxblood accent"></button>
+      <button type="button" class="swatch" data-color="#2B3A5C" style="background:#2B3A5C" aria-label="Navy accent"></button>
+      <button type="button" class="swatch" data-color="#2F4A3C" style="background:#2F4A3C" aria-label="Forest accent"></button>
+      <button type="button" class="swatch" data-color="#8A6E3E" style="background:#8A6E3E" aria-label="Brass accent"></button>
+      <button type="button" class="swatch" data-color="#4A4540" style="background:#4A4540" aria-label="Graphite accent"></button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Theme</span>
+    <div class="segmented" id="themeToggle">
+      <button type="button" class="segment selected" data-theme="dark">Dark</button>
+      <button type="button" class="segment" data-theme="light">Light</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Photo Fit</span>
+    <div class="segmented" id="fitToggle">
+      <button type="button" class="segment selected" data-fit="contain">Fit</button>
+      <button type="button" class="segment" data-fit="cover">Fill</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Mat</span>
+    <div class="segmented" id="matToggle">
+      <button type="button" class="segment selected" data-mat="none">None</button>
+      <button type="button" class="segment" data-mat="paper">Paper</button>
+      <button type="button" class="segment" data-mat="black">Black</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Border</span>
+    <div class="segmented" id="borderToggle">
+      <button type="button" class="segment selected" data-border="off">Off</button>
+      <button type="button" class="segment" data-border="on">On</button>
+    </div>
+  </div>
+</div>
+
+<main id="book">
+  <section class="page cover-page">
+    <div class="cover-photo empty" id="coverPhotoFrame">
+      <img id="coverPhotoImg" alt="" hidden>
+      <button type="button" class="cover-photo-button no-print" id="coverPhotoButton" aria-label="Add cover photo">+ Cover Photo</button>
+      <button type="button" class="edit-badge no-print" id="coverEditBadge" aria-label="Change cover photo">&#9998;</button>
+    </div>
+    <textarea id="titleInput" class="title-input" rows="1" placeholder="Book Title" aria-label="Book title"></textarea>
+    <textarea id="subtitleInput" class="subtitle-input" rows="1" placeholder="Your Name" aria-label="Author or subtitle"></textarea>
+  </section>
+  <div id="pages"></div>
+</main>
+
+<button id="addPhotosFab" class="fab no-print" type="button" aria-label="Add photos">+</button>
+<input id="photoInput" type="file" accept="image/*" multiple hidden>
+<input id="coverInput" type="file" accept="image/*" hidden>
+
+<p class="tip no-print">Tip: in the print dialog, choose Save as PDF (Save to Files on iPhone) and match the paper size above. Drag any photo (while its adjust panel is open) or the cover photo to reposition it.</p>
+
+<script>
+const pagesContainer = document.getElementById('pages');
+const pageSizeSelect = document.getElementById('pageSizeSelect');
+const orientationToggle = document.getElementById('orientationToggle');
+const fontSelect = document.getElementById('fontSelect');
+const exportButton = document.getElementById('exportButton');
+const titleInput = document.getElementById('titleInput');
+const subtitleInput = document.getElementById('subtitleInput');
+const coverPhotoFrame = document.getElementById('coverPhotoFrame');
+const coverPhotoImg = document.getElementById('coverPhotoImg');
+const coverPhotoButton = document.getElementById('coverPhotoButton');
+const coverEditBadge = document.getElementById('coverEditBadge');
+const coverInput = document.getElementById('coverInput');
+const photoInput = document.getElementById('photoInput');
+const addPhotosFab = document.getElementById('addPhotosFab');
+const printStyle = document.getElementById('printStyle');
+const settingsToggle = document.getElementById('settingsToggle');
+const settingsPanel = document.getElementById('settingsPanel');
+const accentSwatches = document.getElementById('accentSwatches');
+const themeToggle = document.getElementById('themeToggle');
+const fitToggle = document.getElementById('fitToggle');
+const matToggle = document.getElementById('matToggle');
+const borderToggle = document.getElementById('borderToggle');
+const browserNotice = document.getElementById('browserNotice');
+const dismissNotice = document.getElementById('dismissNotice');
+
+const PAGE_SIZES = {
+  a4: { widthMm: 210, heightMm: 297 },
+  letter: { widthMm: 215.9, heightMm: 279.4 },
+  square: { widthMm: 210, heightMm: 210 }
+};
+
+const FONTS = {
+  book: '"Iowan Old Style", "Palatino Linotype", Georgia, serif',
+  classic: 'Georgia, "Times New Roman", serif',
+  modern: '-apple-system, "Helvetica Neue", Arial, sans-serif',
+  editorial: '"SF Mono", "Courier New", monospace'
+};
+
+const MAT_STYLES = {
+  none: { size: '0mm', color: 'transparent' },
+  paper: { size: '10mm', color: 'var(--paper)' },
+  black: { size: '10mm', color: '#1A1816' }
+};
+
+const ICONS = {
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  remove: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  adjust: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.6" fill="currentColor" stroke="none"/></svg>'
+};
+
+let photos = [];
+let currentOrientation = 'portrait';
+let coverPosition = { x: 50, y: 50 };
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function rotateImageDataUrl(dataUrl, degrees) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const swap = degrees % 180 !== 0;
+      const canvas = document.createElement('canvas');
+      canvas.width = swap ? image.height : image.width;
+      canvas.height = swap ? image.width : image.height;
+      const context = canvas.getContext('2d');
+      context.translate(canvas.width / 2, canvas.height / 2);
+      context.rotate((degrees * Math.PI) / 180);
+      context.drawImage(image, -image.width / 2, -image.height / 2);
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+}
+
+function applyFilter(photo, img) {
+  const filters = [
+    `brightness(${photo.brightness}%)`,
+    `contrast(${photo.contrast}%)`,
+    `saturate(${photo.saturation}%)`
+  ];
+  if (photo.grayscale) filters.push('grayscale(1)');
+  img.style.filter = filters.join(' ');
+}
+
+function enableDragReposition(img, getPosition, setPosition, isEnabled) {
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startPositionX = 0;
+  let startPositionY = 0;
+
+  img.addEventListener('pointerdown', event => {
+    if (!isEnabled()) return;
+    const current = getPosition();
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    startPositionX = current.x;
+    startPositionY = current.y;
+    img.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  img.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    const rect = img.getBoundingClientRect();
+    const deltaXPercent = ((event.clientX - startX) / rect.width) * 100;
+    const deltaYPercent = ((event.clientY - startY) / rect.height) * 100;
+    const x = clamp(startPositionX - deltaXPercent, 0, 100);
+    const y = clamp(startPositionY - deltaYPercent, 0, 100);
+    setPosition(x, y);
+    img.style.objectPosition = `${x}% ${y}%`;
+  });
+
+  img.addEventListener('pointerup', () => { dragging = false; });
+  img.addEventListener('pointercancel', () => { dragging = false; });
+}
+
+function applyPageSize() {
+  const size = PAGE_SIZES[pageSizeSelect.value];
+  const landscape = currentOrientation === 'landscape';
+  const widthMm = landscape ? size.heightMm : size.widthMm;
+  const heightMm = landscape ? size.widthMm : size.heightMm;
+  const root = document.documentElement.style;
+  root.setProperty('--page-ratio', `${widthMm} / ${heightMm}`);
+  root.setProperty('--page-width', `${widthMm}mm`);
+  root.setProperty('--page-height', `${heightMm}mm`);
+  printStyle.textContent = `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }`;
+}
+
+function applyMat(styleKey) {
+  const style = MAT_STYLES[styleKey];
+  document.documentElement.style.setProperty('--mat-size', style.size);
+  document.documentElement.style.setProperty('--mat-color', style.color);
+}
+
+function applyBorder(enabled) {
+  document.documentElement.style.setProperty('--photo-border', enabled ? '1px solid var(--ink-soft)' : 'none');
+}
+
+async function addPhotos(fileList) {
+  const imageFiles = Array.from(fileList).filter(file => file.type.startsWith('image/'));
+  const results = await Promise.allSettled(imageFiles.map(readFileAsDataUrl));
+  results.forEach(result => {
+    if (result.status === 'fulfilled') {
+      photos.push({
+        url: result.value,
+        originalUrl: result.value,
+        caption: '',
+        brightness: 100,
+        contrast: 100,
+        saturation: 100,
+        grayscale: false,
+        positionX: 50,
+        positionY: 50
+      });
+    }
+  });
+  renderPages();
+}
+
+function removePhoto(index) {
+  photos.splice(index, 1);
+  renderPages();
+}
+
+function movePhoto(index, direction) {
+  const target = index + direction;
+  if (target < 0 || target >= photos.length) return;
+  const [photo] = photos.splice(index, 1);
+  photos.splice(target, 0, photo);
+  renderPages();
+}
+
+async function setCoverPhoto(file) {
+  const url = await readFileAsDataUrl(file);
+  coverPhotoImg.src = url;
+  coverPhotoImg.hidden = false;
+  coverPhotoFrame.classList.remove('empty');
+  coverPosition = { x: 50, y: 50 };
+  coverPhotoImg.style.objectPosition = '50% 50%';
+}
+
+function autoResizeTextarea(el) {
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+function createIconButton(icon, label, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-button';
+  button.setAttribute('aria-label', label);
+  button.innerHTML = ICONS[icon];
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function createSlider(labelText, min, max, value, onChange) {
+  const row = document.createElement('div');
+  row.className = 'adjust-row';
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = min;
+  input.max = max;
+  input.value = value;
+  input.addEventListener('input', () => onChange(Number(input.value)));
+  row.append(label, input);
+  return { row, input };
+}
+
+function createAdjustPanel(photo, img) {
+  const panel = document.createElement('div');
+  panel.className = 'adjust-panel no-print';
+
+  const hint = document.createElement('p');
+  hint.className = 'adjust-hint';
+  hint.textContent = 'Drag the photo above to reposition it.';
+
+  const brightness = createSlider('Brightness', 50, 150, photo.brightness, value => {
+    photo.brightness = value;
+    applyFilter(photo, img);
+  });
+  const contrast = createSlider('Contrast', 50, 150, photo.contrast, value => {
+    photo.contrast = value;
+    applyFilter(photo, img);
+  });
+  const saturation = createSlider('Saturation', 0, 200, photo.saturation, value => {
+    photo.saturation = value;
+    applyFilter(photo, img);
+  });
+
+  const bwButton = document.createElement('button');
+  bwButton.type = 'button';
+  bwButton.className = 'ghost-button small';
+  bwButton.textContent = 'B&W';
+  bwButton.classList.toggle('selected', photo.grayscale);
+  bwButton.addEventListener('click', () => {
+    photo.grayscale = !photo.grayscale;
+    bwButton.classList.toggle('selected', photo.grayscale);
+    applyFilter(photo, img);
+  });
+
+  const rotateButton = document.createElement('button');
+  rotateButton.type = 'button';
+  rotateButton.className = 'ghost-button small';
+  rotateButton.textContent = 'Rotate';
+  rotateButton.addEventListener('click', async () => {
+    rotateButton.disabled = true;
+    try {
+      photo.url = await rotateImageDataUrl(photo.url, 90);
+      img.src = photo.url;
+    } catch (error) {
+      // rotation failed; photo is left unchanged
+    } finally {
+      rotateButton.disabled = false;
+    }
+  });
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.className = 'ghost-button small';
+  resetButton.textContent = 'Reset';
+  resetButton.addEventListener('click', () => {
+    photo.url = photo.originalUrl;
+    photo.brightness = 100;
+    photo.contrast = 100;
+    photo.saturation = 100;
+    photo.grayscale = false;
+    photo.positionX = 50;
+    photo.positionY = 50;
+    img.src = photo.url;
+    img.style.objectPosition = '50% 50%';
+    brightness.input.value = 100;
+    contrast.input.value = 100;
+    saturation.input.value = 100;
+    bwButton.classList.remove('selected');
+    applyFilter(photo, img);
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'adjust-actions';
+  actions.append(bwButton, rotateButton, resetButton);
+
+  panel.append(hint, brightness.row, contrast.row, saturation.row, actions);
+  return panel;
+}
+
+function createPhotoEntry(photo, index) {
+  const img = document.createElement('img');
+  img.src = photo.url;
+  img.alt = photo.caption;
+  img.style.objectPosition = `${photo.positionX}% ${photo.positionY}%`;
+  applyFilter(photo, img);
+
+  enableDragReposition(
+    img,
+    () => ({ x: photo.positionX, y: photo.positionY }),
+    (x, y) => { photo.positionX = x; photo.positionY = y; },
+    () => img.classList.contains('repositionable')
+  );
+
+  const frame = document.createElement('div');
+  frame.className = 'photo-frame';
+  frame.appendChild(img);
+
+  const caption = document.createElement('textarea');
+  caption.className = 'caption-input';
+  caption.placeholder = 'Add a caption';
+  caption.rows = 1;
+  caption.value = photo.caption;
+  caption.addEventListener('input', () => {
+    photo.caption = caption.value;
+    img.alt = caption.value;
+    autoResizeTextarea(caption);
+  });
+
+  const pageNumber = document.createElement('span');
+  pageNumber.className = 'page-number';
+  pageNumber.textContent = `${index + 1} / ${photos.length}`;
+
+  const adjustPanel = createAdjustPanel(photo, img);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'page-toolbar no-print';
+  const upButton = createIconButton('up', 'Move photo up', () => movePhoto(index, -1));
+  const downButton = createIconButton('down', 'Move photo down', () => movePhoto(index, 1));
+  const adjustButton = createIconButton('adjust', 'Adjust photo', () => {
+    const isOpen = adjustPanel.classList.toggle('open');
+    img.classList.toggle('repositionable', isOpen);
+    adjustButton.classList.toggle('active', isOpen);
+  });
+  upButton.disabled = index === 0;
+  downButton.disabled = index === photos.length - 1;
+  toolbar.append(upButton, downButton, adjustButton, createIconButton('remove', 'Remove photo', () => removePhoto(index)));
+
+  const page = document.createElement('section');
+  page.className = 'page photo-page';
+  page.append(frame, caption, pageNumber, toolbar);
+
+  return { page, adjustPanel };
+}
+
+function createEmptyHint() {
+  const hint = document.createElement('p');
+  hint.className = 'empty-hint no-print';
+  hint.textContent = 'No photos yet. Tap + to add your first photo.';
+  return hint;
+}
+
+function renderPages() {
+  pagesContainer.innerHTML = '';
+  if (photos.length === 0) {
+    pagesContainer.appendChild(createEmptyHint());
+    return;
+  }
+  photos.forEach((photo, index) => {
+    const { page, adjustPanel } = createPhotoEntry(photo, index);
+    pagesContainer.append(page, adjustPanel);
+    autoResizeTextarea(page.querySelector('.caption-input'));
+  });
+}
+
+pageSizeSelect.addEventListener('change', () => applyPageSize());
+
+orientationToggle.addEventListener('click', event => {
+  const button = event.target.closest('.segment');
+  if (!button) return;
+  currentOrientation = button.dataset.orientation;
+  applyPageSize();
+  orientationToggle.querySelectorAll('.segment').forEach(b => b.classList.remove('selected'));
+  button.classList.add('selected');
+});
+
+fontSelect.addEventListener('change', () => {
+  document.documentElement.style.setProperty('--title-font', FONTS[fontSelect.value]);
+});
+
+exportButton.addEventListener('click', () => window.print());
+
+titleInput.addEventListener('input', () => {
+  document.title = titleInput.value.trim() || 'Portfolio Book';
+  autoResizeTextarea(titleInput);
+});
+
+subtitleInput.addEventListener('input', () => autoResizeTextarea(subtitleInput));
+
+addPhotosFab.addEventListener('click', () => photoInput.click());
+
+photoInput.addEventListener('change', () => {
+  addPhotos(photoInput.files);
+  photoInput.value = '';
+});
+
+coverPhotoButton.addEventListener('click', () => coverInput.click());
+coverEditBadge.addEventListener('click', () => coverInput.click());
+
+coverInput.addEventListener('change', () => {
+  const file = coverInput.files[0];
+  if (file) setCoverPhoto(file).catch(() => {});
+  coverInput.value = '';
+});
+
+enableDragReposition(
+  coverPhotoImg,
+  () => coverPosition,
+  (x, y) => { coverPosition = { x, y }; },
+  () => !coverPhotoFrame.classList.contains('empty')
+);
+
+settingsToggle.addEventListener('click', () => {
+  settingsPanel.classList.toggle('open');
+});
+
+accentSwatches.addEventListener('click', event => {
+  const swatch = event.target.closest('.swatch');
+  if (!swatch) return;
+  document.documentElement.style.setProperty('--accent', swatch.dataset.color);
+  accentSwatches.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+  swatch.classList.add('selected');
+});
+
+themeToggle.addEventListener('click', event => {
+  const button = event.target.closest('.segment');
+  if (!button) return;
+  document.body.classList.toggle('theme-light', button.dataset.theme === 'light');
+  themeToggle.querySelectorAll('.segment').forEach(b => b.classList.remove('selected'));
+  button.classList.add('selected');
+});
+
+fitToggle.addEventListener('click', event => {
+  const button = event.target.closest('.segment');
+  if (!button) return;
+  document.documentElement.style.setProperty('--photo-fit', button.dataset.fit);
+  fitToggle.querySelectorAll('.segment').forEach(b => b.classList.remove('selected'));
+  button.classList.add('selected');
+});
+
+matToggle.addEventListener('click', event => {
+  const button = event.target.closest('.segment');
+  if (!button) return;
+  applyMat(button.dataset.mat);
+  matToggle.querySelectorAll('.segment').forEach(b => b.classList.remove('selected'));
+  button.classList.add('selected');
+});
+
+borderToggle.addEventListener('click', event => {
+  const button = event.target.closest('.segment');
+  if (!button) return;
+  applyBorder(button.dataset.border === 'on');
+  borderToggle.querySelectorAll('.segment').forEach(b => b.classList.remove('selected'));
+  button.classList.add('selected');
+});
+
+dismissNotice.addEventListener('click', () => {
+  browserNotice.remove();
+});
+
+applyPageSize();
+renderPages();
+</script>
+</body>
+</html>

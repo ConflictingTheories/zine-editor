@@ -18,7 +18,7 @@ import { useVP } from '../context/VPContext.jsx'
  * - selection, pageIdx, selectedElement: editor selection context
  */
 export default function ContextMenu({ x, y, visible, onClose, selection, pageIdx, selectedElement }) {
-    const { copyElement, pasteElement, duplicateElement, moveLayer, deleteElement, updateElement } = useVP()
+    const { copyElement, pasteElement, duplicateElement, moveLayer, deleteElement, updateElement, updateVpState } = useVP()
 
     useEffect(() => {
         if (!visible) return
@@ -53,6 +53,9 @@ export default function ContextMenu({ x, y, visible, onClose, selection, pageIdx
             <div className="ctx-menu-item" onClick={e => handle(e, () => duplicateElement())}>⧉ Duplicate</div>
             {hasElement && selectedElement && (
                 <div className="ctx-menu-item" onClick={e => { e.stopPropagation(); updateElement(pageIdx, selection.id, { locked: !selectedElement.locked }); onClose(); }}>🔒 {selectedElement.locked ? 'Unlock' : 'Lock'}</div>
+            )}
+            {hasElement && selectedElement?.type === 'image' && (
+                <div className="ctx-menu-item" onClick={e => handle(e, () => updateVpState({ currentView: 'lighttable', lightTableAsset: { id: selectedElement.id, name: 'Page image', src: selectedElement.src }, lightTableReturnView: 'editor' }))}>✦ Open in Light Table</div>
             )}
             <div className="ctx-menu-sep" />
             <div className="ctx-menu-item ctx-menu-item-danger" onClick={e => handle(e, () => deleteElement())}>✕ Delete</div>

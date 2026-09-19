@@ -602,6 +602,15 @@ function PropertyPanel({ activeTab = 'props' }) {
                         <label>Radius</label>
                         <input type="number" value={element.imgRadius || 0} onChange={(e) => handleChange('imgRadius', parseInt(e.target.value))} />
                     </div>
+                    <div className="form-row">
+                        <label>Mat Style (Frame)</label>
+                        <select value={element.matStyle || 'none'} onChange={(e) => handleChange('matStyle', e.target.value)}>
+                            <option value="none">None</option>
+                            <option value="thin">Thin Border</option>
+                            <option value="polaroid">Polaroid / Classic</option>
+                            <option value="gallery">Gallery Frame</option>
+                        </select>
+                    </div>
                 </div>
             )}
 

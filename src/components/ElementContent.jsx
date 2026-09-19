@@ -54,9 +54,20 @@ const styles = {
         textShadow: el.textShadow || 'none',
         WebkitTextStroke: el.strokeWidth ? `${el.strokeWidth}px ${el.strokeColor || '#fff'}` : 'none'
     }),
-    imageContainer: {
-        width: '100%',
-        height: '100%'
+    imageContainer: (el) => {
+        let pad = 0; let bg = 'transparent'; let shadow = 'none'; let border = 'none';
+        if (el.matStyle === 'thin') { pad = '8px'; bg = '#fff'; shadow = '0 2px 8px rgba(0,0,0,0.2)'; }
+        if (el.matStyle === 'polaroid') { pad = '12px 12px 40px 12px'; bg = '#fff'; shadow = '0 4px 12px rgba(0,0,0,0.3)'; }
+        if (el.matStyle === 'gallery') { pad = '40px'; bg = '#fafafa'; shadow = 'inset 0 0 10px rgba(0,0,0,0.1), 0 10px 25px rgba(0,0,0,0.5)'; border = '4px solid #222'; }
+        return {
+            width: '100%',
+            height: '100%',
+            padding: pad,
+            background: bg,
+            boxShadow: shadow,
+            border: border,
+            boxSizing: 'border-box'
+        }
     },
     image: (el) => ({
         pointerEvents: 'none',
@@ -217,7 +228,7 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
             return <div className="el-text el-symbol" style={styles.text(el)}>{el.content}</div>
         case 'image':
             return (
-                <div className="el-img" style={styles.imageContainer}>
+                <div className="el-img" style={typeof styles.imageContainer === 'function' ? styles.imageContainer(el) : styles.imageContainer}>
                     <img
                         src={el.src}
                         alt=""

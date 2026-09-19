@@ -90,7 +90,7 @@ function PageThumbnail({ page, index, active, onSelect }) {
 }
 
 function Editor() {
-    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes } = useVP()
+    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes, toast } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => {
         const pages = vpState.currentProject?.pages || []
@@ -112,6 +112,7 @@ function Editor() {
     const currentPage = pages[safePageIdx] || { id: 'empty-page', elements: [], background: '#fff', orientation: 'portrait' }
     const themeStatus = themes[project?.theme || 'classic']?.status || 'STABLE'
     const templateOptions = [...BUILT_IN_TEMPLATES, ...(vpState.templates || [])]
+    const isPortfolio = project?.editorMode === 'photo-portfolio'
 
     useEffect(() => {
         const onKey = (e) => {
@@ -219,16 +220,11 @@ function Editor() {
                 addedAt: new Date().toISOString()
             }))
             if (!imported.length) return
+            // Bulk import is library-first. Dropping a whole shoot onto the
+            // active page made the editor unusable and contradicted the media
+            // library workflow; images can be intentionally placed from it.
             addImportedAssets(imported)
-            addElements(pageIdx, imported.map((asset, index) => ({
-                type: 'image',
-                src: asset.src,
-                x: 80 + ((index % 3) * 28),
-                y: 80 + ((index % 3) * 28),
-                width: 240,
-                height: 180,
-                objectFit: 'contain'
-            })))
+            toast(`${imported.length} image${imported.length === 1 ? '' : 's'} added to the library`, 'success')
         })
     }
 
@@ -272,7 +268,7 @@ function Editor() {
         <div className="editor" id="editorContainer">
             <div className="ed-toolbar-top">
                 <div className="ed-workspace-modes" role="tablist" aria-label="Editor workspace">
-                    {[['compose', 'Compose'], ['media', 'Media'], ['settings', 'Zine settings']].map(([mode, label]) => (
+                    {[['compose', isPortfolio ? 'Build book' : 'Compose'], ['media', 'Library'], ['settings', isPortfolio ? 'Book settings' : 'Zine settings']].map(([mode, label]) => (
                         <button key={mode} type="button" role="tab" aria-selected={workspaceMode === mode} className={`ed-workspace-tab ${workspaceMode === mode ? 'active' : ''}`} onClick={() => setWorkspaceMode(mode)}>{label}</button>
                     ))}
                 </div>
@@ -282,13 +278,13 @@ function Editor() {
                         <button className="ed-tool" title="Redo (Ctrl+Shift+Z)" onClick={redo}>↪</button>
                         <span className="ed-toolbar-label">Elements</span>
                         <button className="ed-tool" onClick={handleAddText}>Text</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>Panel</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>Shape</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>Balloon</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>SFX</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>Symbol</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>Shader</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>3D object</button>
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>{isPortfolio ? 'Photo frame' : 'Panel'}</button>
+                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>Shape</button>}
+                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>Balloon</button>}
+                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>SFX</button>}
+                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>Symbol</button>}
+                        <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>Ethereal effect</button>
+                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>3D object</button>}
                         <span className="ed-toolbar-label">View</span>
                         <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>Grid</button>
                         <button className={`ed-tool ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(!snapOn)}>Snap</button>
@@ -298,6 +294,7 @@ function Editor() {
                         <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = event => importFiles(event.target.files); input.click() }}>Bulk images</button>
                         <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.multiple = true; input.onchange = event => importAudioFiles(event.target.files); input.click() }}>Import audio</button>
                         <button className="ed-tool" onClick={() => showModal('assetModal', 'imported')}>Image library</button>
+                        <button className="ed-tool" onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor' })}>Open Light Table</button>
                         <button className="ed-tool" onClick={() => showModal('assetModal', 'audio')}>Audio library</button>
                         <button className="ed-tool" onClick={() => openAudioPicker('project')}>Set background audio</button>
                     </>}
@@ -314,7 +311,7 @@ function Editor() {
             {/* Left panel */}
             <div className="ed-left">
                 {workspaceMode === 'settings' && <div className="ed-panel-section ed-left-pane zine-settings-pane">
-                    <h4>Zine settings</h4>
+                    <h4>{isPortfolio ? 'Portfolio book settings' : 'Zine settings'}</h4>
                     <div className="form-row">
                         <label>Title</label>
                         <input type="text" value={project.title || ''} onChange={event => updateProjectSettings({ title: event.target.value })} />
@@ -354,6 +351,7 @@ function Editor() {
                     <h4>Media library</h4>
                     <p className="ed-pane-hint">Images and audio stay reusable across this workspace.</p>
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'imported')}>Browse image library</button>
+                    <button className="ed-panel-btn" onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor' })}>✦ Grade images in Light Table</button>
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'audio')}>Browse audio library</button>
                     <div className="media-library-summary"><strong>{vpState.library?.imported?.length || 0}</strong><span>images saved</span><strong>{vpState.library?.audio?.length || 0}</strong><span>audio files saved</span></div>
                     <div className="settings-divider">Page audio</div>
@@ -380,8 +378,8 @@ function Editor() {
                         <h4>Pages <span>{pages.length}</span></h4>
                         <div className="ed-panel-actions">
                             <button className="ed-panel-btn" onClick={addPage}>+ Blank Page</button>
-                            <button className="ed-panel-btn" onClick={() => insertTemplate('cover')}>📕 Cover Page</button>
-                            <button className="ed-panel-btn" onClick={() => insertTemplate('content')}>📄 Theme Page</button>
+                            <button className="ed-panel-btn" onClick={() => insertTemplate(isPortfolio ? 'cover-photo' : 'cover')}>📕 {isPortfolio ? 'Portfolio Cover' : 'Cover Page'}</button>
+                            <button className="ed-panel-btn" onClick={() => insertTemplate(isPortfolio ? 'photo-grid' : 'content')}>📄 {isPortfolio ? 'Photo Grid' : 'Theme Page'}</button>
                             <button className="ed-panel-btn" onClick={() => insertTemplate('back')}>📗 Back Cover</button>
                             <button className="ed-panel-btn template-launch" onClick={() => showModal('templateModal', 'browse')}>✦ Browse Templates</button>
                             <button className="ed-panel-btn" onClick={duplicatePage}>⧉ Duplicate</button>
@@ -471,7 +469,7 @@ function Editor() {
                 <div className="prop-tabs" id="propTabs">
                     <button className={`prop-tab ${propTab === 'props' ? 'active' : ''}`} onClick={() => setPropTab('props')}>Design</button>
                     <button className={`prop-tab ${propTab === 'effects' ? 'active' : ''}`} onClick={() => setPropTab('effects')}>Effects</button>
-                    <button className={`prop-tab ${propTab === 'logic' ? 'active' : ''}`} onClick={() => setPropTab('logic')}>Interactions</button>
+                    {!isPortfolio && <button className={`prop-tab ${propTab === 'logic' ? 'active' : ''}`} onClick={() => setPropTab('logic')}>Interactions</button>}
                 </div>
                 <div className="prop-pane active">
                     <PropertyPanel activeTab={propTab} />

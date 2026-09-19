@@ -318,8 +318,8 @@ function Modal() {
                         </div>
                     ))}
                 </div>
-                <button className="btn-premium" onClick={() => createProject(vpState.selectedTheme)} style={{ width: '100%' }}>
-                    Create Zine
+                <button className="btn-premium" onClick={() => createProject(vpState.selectedTheme, vpState.modals?.themePicker?.subtype || vpState.modals?.themePickerModal?.subtype || 'zine')} style={{ width: '100%' }}>
+                    Create {(vpState.modals?.themePicker?.subtype === 'photo-portfolio' || vpState.modals?.themePickerModal?.subtype === 'photo-portfolio') ? 'Portfolio' : 'Zine'}
                 </button>
             </div>
         </div>
