@@ -2,12 +2,12 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 
-// Import economy service for Stripe and XRP integration
+// The credit vault is the single unit of value. Payments only turn money into
+// credits; every balance and unlock is a ledger fact recorded in the vault.
 const economyService = require('./economyService.cjs');
-const contributionService = require('./contributionService.cjs');
-const sovereignService = require('./sovereignService.cjs');
-const { encrypt, decrypt } = require('./encryption.cjs');
-const xrpService = require('./xrpService.cjs');
+const vault = require('./vaultService.cjs');
+const accountRoutes = require('./accountRoutes.cjs');
+const { seedDemoUser, DEMO_TOKEN } = require('./demoAccount.cjs');
 const { registerSvrnRoutes } = require('./svrnRoutes.cjs');
 
 const {
@@ -23,7 +23,7 @@ const {
 
 const { server, jwt: jwtConfig, database, payment, xrp } = CONFIG;
 const JWT_SECRET = jwtConfig.secret;
-const STRIPE_SECRET_KEY = payment.stripeSecretKey;
+const { isFunded, evaluateAccess, registerAccountRoutes } = accountRoutes;
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -169,157 +169,212 @@ app.delete('/api/zines/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// The monetization models a creator can publish under. Each resolves to a
+// single, unambiguous access rule in `evaluateAccess`:
+//   free        — always readable
+//   one_time    — a single credit purchase, recorded as a purchase
+//   crowdfund   — contributions; open to all once the goal is met
+//   subscription — readable while a subscription to the creator is active
+const MONETIZATION_TYPES = ['free', 'one_time', 'crowdfund', 'subscription'];
+const MAX_PRICE_USD = 500;
+
 // List Published Zines (Public)
 app.get('/api/published', async (req, res) => {
-    const { q, genre } = req.query;
+    const { q, genre, sort } = req.query;
     try {
-        let query = db('zines').where({ is_published: 1 });
+        // Only the columns a browse card needs. The zine `data` column is the
+        // whole document and was being shipped for all 50 results on every
+        // page load.
+        const columns = [
+            'id', 'title', 'author_name', 'genre', 'tags',
+            'monetization_type', 'price_units', 'currency',
+            'cover_image', 'read_count', 'published_at',
+            'funding_goal', 'amount_raised', 'access_level'
+        ];
 
-        if (genre) {
+        let query = db('zines').where({ is_published: 1 }).select(columns);
+
+        if (genre && genre !== 'all') {
             query = query.where({ genre });
         }
         if (q) {
+            const term = `%${q}%`;
             query = query.where((builder) => {
-                builder.where('title', 'like', `%${q}%`)
-                    .orWhere('author_name', 'like', `%${q}%`)
-                    .orWhere('tags', 'like', `%${q}%`);
+                builder.where('title', 'like', term)
+                    .orWhere('author_name', 'like', term)
+                    .orWhere('tags', 'like', term);
             });
         }
 
-        const rows = await query.orderBy('published_at', 'desc').limit(50);
-        res.json(rows);
+        if (sort === 'popular') {
+            query = query.orderBy('read_count', 'desc');
+        } else {
+            query = query.orderBy('published_at', 'desc');
+        }
+
+        const rows = await query.limit(60);
+        res.json(rows.map(row => ({
+            ...row,
+            price: row.price_units
+                ? vault.fromUnits(row.price_units, { currency: row.currency })
+                : null
+        })));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // Publish Zine
+//
+// Takes the full publication and monetization configuration in one call. The
+// old handler only stored title/genre/tags, so every monetization field the
+// publish dialog collected was silently discarded — the feature could not work
+// end to end no matter what the client sent.
 app.post('/api/publish/:id', authenticateToken, async (req, res) => {
-    const { author_name, genre, tags } = req.body;
     try {
+        const {
+            author_name, genre, tags, description, cover_image,
+            monetization_type, price, funding_goal, currency
+        } = req.body;
+
+        const existing = await db('zines')
+            .select('id', 'monetization_type', 'amount_raised')
+            .where({ id: req.params.id, user_id: req.user.id })
+            .first();
+        if (!existing) return res.status(404).json({ error: 'Zine not found or not owned' });
+
+        const model = MONETIZATION_TYPES.includes(monetization_type)
+            ? monetization_type
+            : (existing.monetization_type || 'free');
+
+        // A paid model needs a price; a free or crowdfunded one must not carry
+        // a price, or a reader would be charged for nothing.
+        let priceUnits = 0
+        let fundingGoal = null
+
+        if (model === 'one_time' || model === 'subscription') {
+            const parsed = Number(price)
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                return res.status(400).json({ error: `A ${model} zine needs a price above zero` })
+            }
+            if (parsed > MAX_PRICE_USD) {
+                return res.status(400).json({ error: `Price cannot exceed $${MAX_PRICE_USD}` })
+            }
+            priceUnits = Math.round(parsed * vault.UNITS_PER_USD)
+        } else if (model === 'crowdfund') {
+            const parsed = Number(funding_goal)
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                return res.status(400).json({ error: 'A crowdfunded zine needs a funding goal' })
+            }
+            fundingGoal = parsed
+        }
+
         const changes = await db('zines')
             .where({ id: req.params.id, user_id: req.user.id })
             .update({
                 is_published: 1,
                 published_at: db.fn.now(),
-                author_name,
-                genre,
-                tags
+                author_name: author_name || null,
+                genre: genre || null,
+                tags: tags || null,
+                description: description || null,
+                cover_image: cover_image || null,
+                monetization_type: model,
+                access_level: model === 'free' ? 'public' : 'gated',
+                price_units: priceUnits,
+                currency: currency || 'USD',
+                funding_goal: fundingGoal,
+                // Re-publishing a crowdfund zine starts a new goal, so any
+                // amount already raised no longer counts toward it.
+                amount_raised: 0,
+                is_funded: 0
             });
+
         if (changes === 0) return res.status(404).json({ error: 'Zine not found or not owned' });
-        res.json({ status: 'published' });
+
+        res.json({
+            status: 'published',
+            monetization_type: model,
+            price: priceUnits ? vault.fromUnits(priceUnits, { currency: currency || 'USD' }) : null
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // Get Single Zine (for Reader)
+//
+// Returns either the full document or a single-page preview, decided by the
+// shared `evaluateAccess` used by the access endpoint and the unlock flow, so
+// the browse grid, the reader and the purchase button can never disagree about
+// whether a zine is readable.
 app.get('/api/zines/:id', async (req, res) => {
     try {
         const zine = await db('zines').where({ id: req.params.id }).first();
         if (!zine) return res.status(404).json({ error: 'Not found' });
 
-        const isFunded = zine.funding_goal > 0 && zine.amount_raised >= zine.funding_goal;
+        const token = req.headers['authorization']?.split(' ')[1];
+        const user = await resolveOptionalUser(token);
 
-        const applyAccessControl = async (zine, user) => {
-            // DEBUG: Log access check details
-            console.log('Access check:', {
-                zineId: zine.id,
-                zineUserId: zine.user_id,
-                zineMonetization: zine.monetization_type,
-                zineAccessLevel: zine.access_level,
-                requestUserId: user?.id,
-                requestUserType: user?.id ? typeof user.id : 'none'
-            });
-
-            // 1. FREE CONTENT: Always accessible to everyone (logged in or not)
-            if (zine.monetization_type === 'free' || zine.access_level === 'public') {
-                console.log('Access granted: free/public content');
-                return { ...zine, data: JSON.parse(zine.data) };
+        if (!zine.is_published) {
+            // Unpublished work is visible only to its author.
+            if (!user || Number(zine.user_id) !== Number(user.id)) {
+                return res.status(403).json({ error: 'Forbidden' });
             }
-
-            // 2. FUNDED CROWDFUND: Free for everyone once funded
-            if (zine.monetization_type === 'crowdfund' && isFunded) {
-                console.log('Access granted: crowdfunded content is funded');
-                return { ...zine, data: JSON.parse(zine.data) };
-            }
-
-            // 3. AUTHOR: Always has full access
-            // Fix: Ensure type-safe comparison (convert both to numbers)
-            const isAuthor = user && Number(zine.user_id) === Number(user.id);
-            if (isAuthor) {
-                console.log('Access granted: user is author');
-                return { ...zine, data: JSON.parse(zine.data) };
-            }
-
-            // 4. CHECK IF USER HAS PAID/CONTRIBUTED
-            let hasPaid = false;
-            if (user) {
-                const contribution = await db('contributions')
-                    .where({ user_id: user.id, zine_id: zine.id })
-                    .first();
-                if (contribution) {
-                    hasPaid = true;
-                    console.log('Access granted: user has contribution');
-                }
-            }
-
-            const canReadFully = hasPaid;
-
-            if (canReadFully) {
-                return { ...zine, data: JSON.parse(zine.data) };
-            } else {
-                // Preview: only first page
-                const zineData = JSON.parse(zine.data);
-                const firstPage = zineData.pages.length > 0 ? [zineData.pages[0]] : [];
-                return {
-                    ...zine,
-                    data: { pages: firstPage },
-                    locked: true,
-                    preview: true,
-                    reason: zine.monetization_type === 'crowdfund' ? 'funding_required' : 'payment_required'
-                };
-            }
-        };
-
-        if (zine.is_published) {
-            // Increment read count async
-            db('zines').where({ id: req.params.id }).increment('read_count', 1).catch(() => { });
-
-            const token = req.headers['authorization']?.split(' ')[1];
-            if (!token) {
-                return res.json(await applyAccessControl(zine, null));
-            }
-
-            jwt.verify(token, JWT_SECRET, async (err, user) => {
-                if (err) {
-                    return res.json(await applyAccessControl(zine, null));
-                }
-                return res.json(await applyAccessControl(zine, user));
-            });
-        } else {
-            // Check auth for private zines
-            const token = req.headers['authorization']?.split(' ')[1];
-            if (!token) {
-                if (zine.monetization_type === 'free' || zine.access_level === 'public') {
-                    return res.json({ ...zine, data: JSON.parse(zine.data) });
-                }
-                return res.status(403).json({ error: 'Private zine' });
-            }
-
-            if (token === 'local_offline_token') {
-                return res.json({ ...zine, data: JSON.parse(zine.data) });
-            }
-
-            jwt.verify(token, JWT_SECRET, (err, user) => {
-                if (err || Number(user.id) !== Number(zine.user_id)) return res.status(403).json({ error: 'Forbidden' });
-                res.json({ ...zine, data: JSON.parse(zine.data) });
-            });
+            return res.json({ ...zine, data: parseZineData(zine) });
         }
+
+        // Reads are counted, not awaited: a slow counter must not delay the
+        // document, and a counter failure must not fail the read.
+        db('zines').where({ id: zine.id }).increment('read_count', 1).catch(() => { });
+
+        const access = await evaluateAccess(zine, user);
+        if (access.granted) {
+            return res.json({ ...zine, data: parseZineData(zine) });
+        }
+
+        const data = parseZineData(zine);
+        res.json({
+            ...zine,
+            data: { pages: data.pages.slice(0, 1) },
+            locked: true,
+            preview: true,
+            reason: access.reason,
+            priceUnits: zine.price_units || 0,
+            price: zine.price_units
+                ? vault.fromUnits(zine.price_units, { currency: zine.currency })
+                : null
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
+
+/** Parse a zine's stored JSON document, tolerating a corrupt row. */
+function parseZineData(zine) {
+    try {
+        const parsed = JSON.parse(zine.data);
+        return { pages: Array.isArray(parsed?.pages) ? parsed.pages : [] };
+    } catch {
+        return { pages: [] };
+    }
+}
+
+/**
+ * Resolve the caller from a bearer token without requiring one.
+ * A bad or absent token is simply "not signed in" — browsing public work must
+ * not 401.
+ * @param {string|undefined} token
+ * @returns {Promise<object|null>}
+ */
+function resolveOptionalUser(token) {
+    if (!token) return Promise.resolve(null);
+    if (token === DEMO_TOKEN) return Promise.resolve(null);
+    if (token === 'local_offline_token') return Promise.resolve(null);
+    return new Promise((resolve) => {
+        jwt.verify(token, JWT_SECRET, (err, user) => resolve(err ? null : user));
+    });
+}
 
 // MCP Interface for programmatic zine manipulation and automation
 app.get('/mcp/zines/:id', authenticateToken, async (req, res) => {
@@ -1526,1150 +1581,137 @@ app.post('/mcp/export/pdf', authenticateToken, (req, res) => {
 });
 
 // ============================================
-// XRP PayID Integration API Endpoints
+// ACCOUNT & ECONOMY
+//
+// Replaces the previous XRP/PayID, VPC-credit, token-marketplace, trustline,
+// bid and sovereign-gate endpoint families. Those were four disconnected
+// ledgers behind ~35 routes that a client could not reason about; the account
+// surface below is the single coherent replacement.
 // ============================================
+accountRoutes.attachDb(db);
+registerAccountRoutes(app, { db, authenticateToken, economy: economyService });
 
-// ---- Credits API ----
-
-// Purchase credits (simulated fiat purchase)
-app.post('/api/credits/purchase', authenticateToken, async (req, res) => {
-    const { amount, paymentMethod } = req.body;
-    if (!amount || amount <= 0) {
-        return res.status(400).json({ error: 'Invalid amount' });
-    }
-
-    try {
-        // In production, this would integrate with a payment processor (Stripe, etc.)
-        // For now, we simulate the purchase
-        const creditRow = await db('credits').where({ user_id: req.user.id }).first();
-
-        if (creditRow) {
-            await db('credits')
-                .where({ user_id: req.user.id })
-                .update({
-                    balance: creditRow.balance + amount,
-                    total_spent: creditRow.total_spent + amount,
-                    updated_at: db.fn.now()
-                });
-
-            // Record transaction
-            await db('transactions').insert({
-                from_user_id: req.user.id,
-                to_user_id: null,
-                amount: amount,
-                type: 'credit_purchase',
-                description: `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`
-            });
-
-            res.json({ success: true, newBalance: creditRow.balance + amount, amount });
-        } else {
-            await db('credits').insert({
-                user_id: req.user.id,
-                balance: amount,
-                total_spent: amount
-            });
-
-            // Record transaction
-            await db('transactions').insert({
-                from_user_id: req.user.id,
-                to_user_id: null,
-                amount: amount,
-                type: 'credit_purchase',
-                description: `Purchased ${amount} credits via ${paymentMethod || 'simulated'}`
-            });
-
-            res.json({ success: true, newBalance: amount, amount });
+// Stripe webhook. Declared after the JSON body parser, so the raw body
+// middleware below must come first for signature verification to work.
+app.post('/api/stripe/webhook',
+    bodyParser.raw({ type: 'application/json' }),
+    async (req, res) => {
+        try {
+            const result = await economyService.handleWebhook(req.headers['stripe-signature'], req.body, db);
+            res.json(result);
+        } catch (err) {
+            res.status(err.status || 400).json({ error: err.message });
         }
-    } catch (err) {
-        res.status(500).json({ error: err.message });
     }
-});
+);
 
-// Get credit balance
-app.get('/api/credits/balance', authenticateToken, async (req, res) => {
+// ── Crowdfunding ──────────────────────────────────────────────────────
+// Crowdfunding is retained: it is a real and useful model, and it now settles
+// through the same vault as everything else. A contribution both raises the
+// goal and records an explicit purchase, so contributors get permanent access
+// rather than the old "any contribution row unlocks everything" behaviour.
+app.get('/api/zines/:id/funding', async (req, res) => {
     try {
-        const row = await db('credits').where({ user_id: req.user.id }).first();
-        res.json({ balance: row ? row.balance : 0 });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ---- Wallet API ----
-
-// Helper to get or create wallet
-const getOrCreateWallet = async (userId, providedAddress, providedPayId) => {
-    try {
-        const existing = await db('wallets').where({ user_id: userId }).first();
-
-        if (existing) {
-            return existing;
-        }
-
-        // Create new wallet if not exists
-        // If address provided, use it (non-custodial view), else generate (custodial)
-        const walletData = providedAddress ? { address: providedAddress, seed: null } : await xrpService.createWallet();
-        const encryptedSecret = walletData.seed ? encrypt(walletData.seed) : null;
-
-        await db('wallets').insert({
-            user_id: userId,
-            xrp_address: walletData.address,
-            xrp_secret_encrypted: encryptedSecret,
-            payid: providedPayId || null,
-            is_verified: 1
-        });
-
-        return { xrp_address: walletData.address, xrp_secret_encrypted: walletData.seed };
-    } catch (e) {
-        throw e;
-    }
-};
-
-// Create new XRP wallet for user
-app.post('/api/wallet/create', authenticateToken, async (req, res) => {
-    const { xrpAddress, payid } = req.body;
-
-    try {
-        const wallet = await getOrCreateWallet(req.user.id, xrpAddress, payid);
-        res.json({ success: true, xrpAddress: wallet.xrp_address, payid: wallet.payid });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get user's wallet info
-app.get('/api/wallet', authenticateToken, async (req, res) => {
-    try {
-        const wallet = await db('wallets').where({ user_id: req.user.id }).first();
-        res.json(wallet || { xrp_address: null, payid: null, is_verified: false });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-
-// ---- Tokens API ----
-
-// Create new token (creator issues their own currency)
-app.post('/api/tokens/create', authenticateToken, async (req, res) => {
-    const { tokenCode, tokenName, description, iconUrl, initialSupply, pricePerToken } = req.body;
-
-    if (!tokenCode || !tokenName) {
-        return res.status(400).json({ error: 'Token code and name required' });
-    }
-
-    // Generate XRPL-compatible currency code (max 20 chars, uppercase)
-    const xrpCurrencyCode = tokenCode.length === 3 ? tokenCode.toUpperCase() : Buffer.from(tokenCode).toString('hex').padEnd(40, '0').toUpperCase();
-
-    try {
-        const [tokenId] = await db('tokens').insert({
-            creator_id: req.user.id,
-            token_code: tokenCode.toUpperCase(),
-            token_name: tokenName,
-            description: description || '',
-            icon_url: iconUrl || null,
-            initial_supply: initialSupply || 1000000,
-            current_supply: initialSupply || 1000000,
-            price_per_token: pricePerToken || 0.01,
-            xrp_currency_code: xrpCurrencyCode
-        });
-
-        // Initialize reputation for creator
-        await db('reputation')
-            .insert({ user_id: req.user.id, score: 0, level: 'creator' })
-            .onConflict('user_id')
-            .ignore();
-
-        res.json({ success: true, tokenId, tokenCode: xrpCurrencyCode, tokenName });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get all active tokens (marketplace)
-app.get('/api/tokens', async (req, res) => {
-    const { creatorId } = req.query;
-    try {
-        let query = db('tokens as t')
-            .join('users as u', 't.creator_id', 'u.id')
-            .select('t.*', 'u.username as creator_name')
-            .where('t.is_active', 1);
-
-        if (creatorId) {
-            query = query.where('t.creator_id', creatorId);
-        }
-
-        const rows = await query.orderBy('t.created_at', 'desc');
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get specific token
-app.get('/api/tokens/:id', async (req, res) => {
-    try {
-        const token = await db('tokens as t')
-            .join('users as u', 't.creator_id', 'u.id')
-            .select('t.*', 'u.username as creator_name')
-            .where('t.id', req.params.id)
+        const zine = await db('zines')
+            .select('id', 'funding_goal', 'amount_raised', 'funding_currency', 'funding_deadline', 'is_funded')
+            .where({ id: req.params.id })
             .first();
-
-        if (!token) return res.status(404).json({ error: 'Token not found' });
-        res.json(token);
+        if (!zine) return res.status(404).json({ error: 'Not found' });
+        res.json({ ...zine, isFunded: isFunded(zine) });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Buy tokens with credits
-app.post('/api/tokens/:id/buy', authenticateToken, async (req, res) => {
-    const { amount } = req.body;
-    const tokenId = req.params.id;
-
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid amount' });
-
-    try {
-        const token = await db('tokens').where({ id: tokenId, is_active: 1 }).first();
-        if (!token) return res.status(404).json({ error: 'Token not found' });
-
-        const totalCost = amount * token.price_per_token;
-        const creditRow = await db('credits').where({ user_id: req.user.id }).first();
-        const currentBalance = creditRow ? creditRow.balance : 0;
-
-        if (currentBalance < totalCost) {
-            return res.status(400).json({ error: 'Insufficient credits', required: totalCost, available: currentBalance });
-        }
-
-        const vpcResult = await economyService.transferCredits(req.user.id, token.creator_id, totalCost, db);
-        const buyerWallet = await db('wallets').where({ user_id: req.user.id }).first();
-        if (!buyerWallet) return res.status(500).json({ error: 'Wallet error after payment' });
-
-        const tokenTx = await economyService.issueCreatorTokenToBuyer(token.creator_id, buyerWallet.xrp_address, token.token_code, amount, db);
-
-        // Update DB state
-        await db.transaction(async trx => {
-            await trx('credits').where({ user_id: req.user.id }).decrement('balance', totalCost);
-            await trx('credits')
-                .insert({ user_id: token.creator_id, balance: totalCost })
-                .onConflict('user_id')
-                .merge({ balance: db.raw('credits.balance + ?', [totalCost]) });
-            await trx('tokens').where({ id: tokenId }).decrement('current_supply', amount);
-            await trx('transactions').insert({
-                from_user_id: req.user.id,
-                to_user_id: token.creator_id,
-                token_id: tokenId,
-                amount,
-                type: 'token_purchase',
-                description: `Bought ${amount} ${token.token_name}`,
-                xrp_tx_hash: tokenTx.txHash
-            });
-        });
-
-        res.json({ success: true, amount, totalCost, tokenName: token.token_name, txHash: tokenTx.txHash });
-    } catch (err) {
-        console.error('Token buy failed:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Purchase Zine with Tokens (Instant Unlock)
-app.post('/api/zines/:id/purchase', authenticateToken, async (req, res) => {
+app.post('/api/zines/:id/fund', authenticateToken, async (req, res) => {
     const zineId = req.params.id;
-
-    try {
-        const zine = await db('zines as z')
-            .leftJoin('tokens as t', function () {
-                this.on('z.token_price', '>', 0).andOn('t.creator_id', '=', 'z.user_id');
-            })
-            .leftJoin('wallets as w', 'z.user_id', 'w.user_id')
-            .select('z.*', 't.token_code', 't.xrp_currency_code', 'w.xrp_address as creator_address')
-            .where('z.id', zineId)
-            .first();
-
-        if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        if (!zine.is_token_gated || zine.token_price <= 0) return res.status(400).json({ error: 'Zine is free' });
-        if (!zine.xrp_currency_code) return res.status(400).json({ error: 'Creator has no active token' });
-
-        const wallet = await db('wallets').where({ user_id: req.user.id }).first();
-        if (!wallet) return res.status(404).json({ error: 'User wallet not found' });
-
-        const decryptedSecret = decrypt(wallet.xrp_secret_encrypted);
-        const txHash = await xrpService.sendPayment(
-            decryptedSecret,
-            zine.creator_address,
-            zine.token_price,
-            zine.xrp_currency_code,
-            zine.creator_address
-        );
-
-        if (!txHash) throw new Error('Payment failed on ledger');
-
-        await db('bids').insert({
-            bidder_id: req.user.id,
-            zine_id: zineId,
-            amount: zine.token_price,
-            message: 'Instant Purchase via Token',
-            status: 'accepted'
-        });
-
-        res.json({ success: true, txHash, message: 'Zine purchased successfully' });
-    } catch (error) {
-        res.status(500).json({ error: 'Purchase failed: ' + error.message });
-    }
-});
-
-// ---- Trust Lines API ----
-
-// Create trust line record
-app.post('/api/trustlines', authenticateToken, async (req, res) => {
-    const { tokenId, limit } = req.body;
-    if (!tokenId) return res.status(400).json({ error: 'Token ID required' });
-
-    try {
-        const existing = await db('trust_lines')
-            .where({ user_id: req.user.id, token_id: tokenId, is_active: 1 })
-            .first();
-
-        if (existing) return res.status(400).json({ error: 'Trust line already exists' });
-
-        const tokenInfo = await db('tokens as t')
-            .join('wallets as w', 't.creator_id', 'w.user_id')
-            .select('t.xrp_currency_code', 'w.xrp_address as issuer_address')
-            .where('t.id', tokenId)
-            .first();
-
-        if (!tokenInfo) return res.status(404).json({ error: 'Token info not found' });
-
-        const wallet = await db('wallets').where({ user_id: req.user.id }).first();
-        if (!wallet) return res.status(404).json({ error: 'User wallet not found' });
-
-        const decryptedSecret = decrypt(wallet.xrp_secret_encrypted);
-        const result = await economyService.establishTrustLine(decryptedSecret, tokenInfo.issuer_address, tokenInfo.xrp_currency_code, limit);
-
-        if (!result.success) return res.status(500).json({ error: 'XRPL TrustSet failed: ' + result.error });
-
-        const [id] = await db('trust_lines').insert({
-            user_id: req.user.id,
-            token_id: tokenId,
-            trust_line_limit: limit || 1000000,
-            xrpl_trustline_hash: 'confirmed_on_ledger'
-        });
-
-        res.json({ success: true, trustLineId: id });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get user's trust lines
-app.get('/api/trustlines', authenticateToken, async (req, res) => {
-    try {
-        const rows = await db('trust_lines as tl')
-            .join('tokens as t', 'tl.token_id', 't.id')
-            .select('tl.*', 't.token_code', 't.token_name')
-            .where({ 'tl.user_id': req.user.id, 'tl.is_active': 1 });
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ---- Subscriptions API ----
-
-// Subscribe to creator
-app.post('/api/subscriptions/subscribe', authenticateToken, async (req, res) => {
-    const { creatorId, tokenId, amountPerPeriod, periodDays } = req.body;
-    if (!creatorId || !tokenId) return res.status(400).json({ error: 'Creator ID and Token ID required' });
-    if (creatorId === req.user.id) return res.status(400).json({ error: 'Cannot subscribe to yourself' });
-
-    const amount = amountPerPeriod || 10;
-    const period = periodDays || 30;
-
-    try {
-        const creditRow = await db('credits').where({ user_id: req.user.id }).first();
-        const currentBalance = creditRow ? creditRow.balance : 0;
-        if (currentBalance < amount) {
-            return res.status(400).json({ error: 'Insufficient credits', required: amount, available: currentBalance });
-        }
-
-        const creator = await db('users').where({ id: creatorId }).select('id', 'username').first();
-        if (!creator) return res.status(404).json({ error: 'Creator not found' });
-
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + period);
-
-        const existing = await db('subscriptions')
-            .where({ subscriber_id: req.user.id, creator_id: creatorId, is_active: 1 })
-            .first();
-
-        await db.transaction(async trx => {
-            await trx('credits').where({ user_id: req.user.id }).decrement('balance', amount);
-
-            if (existing) {
-                await trx('subscriptions')
-                    .where({ id: existing.id })
-                    .update({
-                        amount_per_period: amount,
-                        expires_at: expiresAt.toISOString(),
-                        token_id: tokenId
-                    });
-            } else {
-                await trx('subscriptions').insert({
-                    subscriber_id: req.user.id,
-                    creator_id: creatorId,
-                    token_id: tokenId,
-                    amount_per_period: amount,
-                    period_days: period,
-                    expires_at: expiresAt.toISOString()
-                });
-                await trx('reputation')
-                    .where({ user_id: creatorId })
-                    .increment({ total_subscribers: 1, score: 10 });
-            }
-
-            await trx('transactions').insert({
-                from_user_id: req.user.id,
-                to_user_id: creatorId,
-                token_id: tokenId,
-                amount,
-                type: 'subscription',
-                description: `Subscribed to creator for ${amount} credits`
-            });
-        });
-
-        res.json({ success: true, message: existing ? 'Subscription renewed' : 'Subscribed successfully' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Cancel subscription
-app.post('/api/subscriptions/cancel', authenticateToken, async (req, res) => {
-    const { subscriptionId } = req.body;
-    if (!subscriptionId) return res.status(400).json({ error: 'Subscription ID required' });
-
-    try {
-        const changes = await db('subscriptions')
-            .where({ id: subscriptionId, subscriber_id: req.user.id })
-            .update({ is_active: 0 });
-        if (changes === 0) return res.status(404).json({ error: 'Subscription not found' });
-        res.json({ success: true, message: 'Subscription cancelled' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get user's subscriptions
-app.get('/api/subscriptions', authenticateToken, async (req, res) => {
-    const { type } = req.query;
-    try {
-        let query = db('subscriptions as s');
-        if (type === 'subscribers') {
-            query = query.join('users as u', 's.subscriber_id', 'u.id')
-                .select('s.*', 'u.username as subscriber_name')
-                .where({ 's.creator_id': req.user.id, 's.is_active': 1 });
-        } else {
-            query = query.join('users as u', 's.creator_id', 'u.id')
-                .select('s.*', 'u.username as creator_name')
-                .where({ 's.subscriber_id': req.user.id, 's.is_active': 1 });
-        }
-        const rows = await query;
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ---- Bids API ----
-
-// Place bid on content
-app.post('/api/bids/create', authenticateToken, async (req, res) => {
-    const { zineId, amount, message } = req.body;
-    if (!zineId || !amount) return res.status(400).json({ error: 'Zine ID and amount required' });
-
-    try {
-        const creditRow = await db('credits').where({ user_id: req.user.id }).first();
-        const currentBalance = creditRow ? creditRow.balance : 0;
-        if (currentBalance < amount) {
-            return res.status(400).json({ error: 'Insufficient credits', required: amount, available: currentBalance });
-        }
-
-        const [id] = await db('bids').insert({
-            bidder_id: req.user.id,
-            zine_id: zineId,
-            amount: amount,
-            message: message || null
-        });
-
-        res.json({ success: true, bidId: id, amount });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Accept bid
-app.post('/api/bids/:id/accept', authenticateToken, async (req, res) => {
-    const bidId = req.params.id;
-
-    try {
-        const bid = await db('bids as b')
-            .join('zines as z', 'b.zine_id', 'z.id')
-            .select('b.*', 'z.user_id as zine_owner_id')
-            .where('b.id', bidId)
-            .first();
-
-        if (!bid) return res.status(404).json({ error: 'Bid not found' });
-        if (bid.zine_owner_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
-
-        await db.transaction(async trx => {
-            await trx('credits').where({ user_id: bid.bidder_id }).decrement('balance', bid.amount);
-            await trx('credits')
-                .insert({ user_id: req.user.id, balance: bid.amount })
-                .onConflict('user_id')
-                .merge({ balance: db.raw('credits.balance + ?', [bid.amount]) });
-
-            await trx('bids').where({ id: bidId }).update({ status: 'accepted' });
-
-            await trx('transactions').insert({
-                from_user_id: bid.bidder_id,
-                to_user_id: req.user.id,
-                amount: bid.amount,
-                type: 'bid_accepted',
-                description: 'Bid accepted for content'
-            });
-
-            await trx('reputation')
-                .where({ user_id: req.user.id })
-                .increment({
-                    total_bids_accepted: 1,
-                    score: 15,
-                    total_content_sold: bid.amount
-                });
-        });
-
-        res.json({ success: true, message: 'Bid accepted', amount: bid.amount });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Reject bid
-app.post('/api/bids/:id/reject', authenticateToken, async (req, res) => {
-    const bidId = req.params.id;
-
-    try {
-        const bid = await db('bids as b')
-            .join('zines as z', 'b.zine_id', 'z.id')
-            .select('b.*', 'z.user_id as zine_owner_id')
-            .where('b.id', bidId)
-            .first();
-
-        if (!bid) return res.status(404).json({ error: 'Bid not found' });
-        if (bid.zine_owner_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
-
-        await db('bids').where({ id: bidId }).update({ status: 'rejected' });
-        res.json({ success: true, message: 'Bid rejected' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get bids for user's content
-app.get('/api/bids', authenticateToken, async (req, res) => {
-    const { zineId } = req.query;
-    try {
-        let query = db('bids as b')
-            .join('users as u', 'b.bidder_id', 'u.id')
-            .join('zines as z', 'b.zine_id', 'z.id')
-            .select('b.*', 'u.username as bidder_name', 'z.title as zine_title');
-
-        if (zineId) {
-            query = query.where('b.zine_id', zineId);
-        } else {
-            query = query.where(builder => {
-                builder.where('b.bidder_id', req.user.id).orWhere('z.user_id', req.user.id);
-            });
-        }
-
-        const rows = await query.orderBy('b.created_at', 'desc');
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ---- Reputation API ----
-
-// Get user reputation
-app.get('/api/reputation/:userId', async (req, res) => {
-    try {
-        const rep = await db('reputation as r')
-            .join('users as u', 'r.user_id', 'u.id')
-            .select('r.*', 'u.username')
-            .where('r.user_id', req.params.userId)
-            .first();
-
-        if (!rep) {
-            return res.json({
-                user_id: req.params.userId,
-                score: 0,
-                level: 'newcomer',
-                total_tips_received: 0,
-                total_subscribers: 0,
-                total_content_sold: 0,
-                total_bids_accepted: 0
-            });
-        }
-
-        let level = 'newcomer';
-        if (rep.score >= 1000) level = 'legendary';
-        else if (rep.score >= 500) level = 'master';
-        else if (rep.score >= 200) level = 'established';
-        else if (rep.score >= 100) level = 'contributor';
-        else if (rep.score >= 50) level = 'supporter';
-
-        res.json({ ...rep, level });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Update reputation (internal, called after actions)
-app.post('/api/reputation/update', authenticateToken, async (req, res) => {
-    const { action, amount } = req.body;
-
-    try {
-        await db('reputation')
-            .insert({ user_id: req.user.id, score: 0, level: 'newcomer' })
-            .onConflict('user_id')
-            .ignore();
-
-        let scoreIncrease = 0;
-        switch (action) {
-            case 'publish': scoreIncrease = 5; break;
-            case 'subscribe': scoreIncrease = 3; break;
-            case 'tip': scoreIncrease = 2; break;
-            case 'bid_accepted': scoreIncrease = 15; break;
-            case 'content_sold': scoreIncrease = 10; break;
-            default: scoreIncrease = amount || 1;
-        }
-
-        await db('reputation')
-            .where({ user_id: req.user.id })
-            .increment('score', scoreIncrease)
-            .update({ updated_at: db.fn.now() });
-
-        res.json({ success: true, scoreIncrease });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ---- Marketplace API ----
-
-// Get marketplace listings
-app.get('/api/market', async (req, res) => {
-    const { sort } = req.query;
-
-    try {
-        let query = db('tokens as t')
-            .join('users as u', 't.creator_id', 'u.id')
-            .select('t.*', 'u.username as creator_name', db.raw('(t.initial_supply - t.current_supply) as tokens_sold'))
-            .where({ 't.is_active': 1 })
-            .where('t.current_supply', '>', 0);
-
-        switch (sort) {
-            case 'popular': query = query.orderBy('tokens_sold', 'desc'); break;
-            case 'newest': query = query.orderBy('t.created_at', 'desc'); break;
-            case 'price_low': query = query.orderBy('t.price_per_token', 'asc'); break;
-            case 'price_high': query = query.orderBy('t.price_per_token', 'desc'); break;
-            default: query = query.orderBy('tokens_sold', 'desc');
-        }
-
-        const rows = await query;
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get transaction history
-app.get('/api/transactions', authenticateToken, async (req, res) => {
-    const { type } = req.query;
-
-    try {
-        let query = db('transactions as t')
-            .leftJoin('users as from_user', 't.from_user_id', 'from_user.id')
-            .leftJoin('users as to_user', 't.to_user_id', 'to_user.id')
-            .leftJoin('tokens as token', 't.token_id', 'token.id')
-            .select(
-                't.*',
-                'from_user.username as from_username',
-                'to_user.username as to_username',
-                'token.token_name'
-            )
-            .where(builder => {
-                builder.where('t.from_user_id', req.user.id).orWhere('t.to_user_id', req.user.id);
-            });
-
-        if (type) {
-            query = query.where('t.type', type);
-        }
-
-        const rows = await query.orderBy('t.created_at', 'desc').limit(50);
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ---- Zine Tokenization ----
-
-// Set token price for zine (token gating)
-app.post('/api/zines/:id/token-gate', authenticateToken, async (req, res) => {
-    const { tokenPrice, tokenId, isTokenGated } = req.body;
-    const zineId = req.params.id;
-
-    try {
-        const zine = await db('zines').where({ id: zineId, user_id: req.user.id }).first();
-        if (!zine) return res.status(404).json({ error: 'Zine not found or not owned' });
-
-        await db('zines').where({ id: zineId }).update({
-            token_price: tokenPrice || 0,
-            is_token_gated: isTokenGated ? 1 : 0,
-            updated_at: db.fn.now()
-        });
-
-        res.json({ success: true, tokenPrice, isTokenGated: !!isTokenGated });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get zine with token access check
-app.get('/api/zines/:id/access', authenticateToken, async (req, res) => {
-    const zineId = req.params.id;
-
     try {
         const zine = await db('zines').where({ id: zineId }).first();
         if (!zine) return res.status(404).json({ error: 'Not found' });
-
-        if (!zine.is_token_gated || zine.token_price === 0 || zine.user_id === req.user.id) {
-            return res.json({ hasAccess: true });
+        if (zine.monetization_type !== 'crowdfund') {
+            return res.status(409).json({ error: 'This zine is not accepting funding' });
         }
 
-        const sub = await db('subscriptions')
-            .where({ subscriber_id: req.user.id, creator_id: zine.user_id, is_active: 1 })
-            .first();
-        if (sub) return res.json({ hasAccess: true, via: 'subscription' });
-
-        const bid = await db('bids')
-            .where({ bidder_id: req.user.id, zine_id: zineId, status: 'accepted' })
-            .first();
-        if (bid) return res.json({ hasAccess: true, via: 'bid' });
-
-        res.json({
-            hasAccess: false,
-            tokenPrice: zine.token_price,
-            creatorId: zine.user_id
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Static Files
-// Serve root folder, but exclude backend files
-app.use((req, res, next) => {
-    if (req.path.endsWith('.sqlite') || req.path === '/server/' || req.path === '/server.js') {
-        return res.status(403).send('Forbidden');
-    }
-    next();
-});
-app.use(express.static(__dirname));
-
-// PAYMENT ENDPOINTS (SIMULATED WITH REAL DATABASE UPDATES)
-// ═══════════════════════════════════════════════════
-
-// Stripe Checkout Session
-app.post('/api/stripe/create-checkout-session', authenticateToken, async (req, res) => {
-    const { amountUSD } = req.body;
-
-    // Basic validation to prevent tampering
-    if (typeof amountUSD !== 'number' || isNaN(amountUSD) || amountUSD <= 0 || amountUSD > 10000) {
-        return res.status(400).json({ error: 'Invalid amountUSD' });
-    }
-
-    try {
-        const session = await economyService.createCheckoutSession(req.user.id, amountUSD, req.user.email);
-        res.json(session);
-    } catch (error) {
-        console.error('Stripe error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Stripe public config (publishable key) - safe to expose to frontend
-app.get('/api/stripe/config', (req, res) => {
-    try {
-        res.json({ publishableKey: CONFIG.payment.stripePublishableKey || null, enabled: !CONFIG.payment.mockMode });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to read Stripe config' });
-    }
-});
-
-// Confirm Stripe payment after redirect (frontend calls this to finalize credit issuance)
-app.post('/api/stripe/confirm-payment', authenticateToken, async (req, res) => {
-    const { sessionId } = req.body;
-    if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-
-    try {
-        const session = await economyService.retrieveCheckoutSession(sessionId);
-        const paymentStatus = session.payment_status || session.status || 'unknown';
-        const metadata = session.metadata || {};
-
-        if (paymentStatus !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
-        if (!metadata.userId || parseInt(metadata.userId) !== req.user.id) return res.status(403).json({ error: 'Session does not match user' });
-
-        const vpcAmount = metadata.vpcAmount ? parseInt(metadata.vpcAmount) : Math.round((session.amount_total || 0) / 100 * economyService.CREDITS_PER_USD);
-        const result = await economyService.fulfillCreditPurchase(req.user.id, vpcAmount, db);
-        res.json({ success: true, result });
-    } catch (err) {
-        console.error('Confirm payment failed:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Stripe Webhook
-app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
-    const sig = req.headers['stripe-signature'];
-
-    try {
-        const result = await economyService.handleStripeWebhook(sig, req.body, db);
-        res.json(result);
-    } catch (err) {
-        res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-});
-
-// Legacy/Simulated endpoint for dev (mapped to Stripe flow)
-app.post('/api/payment/initiate', authenticateToken, async (req, res) => {
-    const { credits } = req.body;
-    const amountUSD = credits / 100;
-    try {
-        const user = await db('users').where({ id: req.user.id }).first();
-        const session = await economyService.createCheckoutSession(req.user.id, amountUSD, user.email);
-        res.json({
-            sessionId: session.sessionId,
-            paymentUrl: session.url,
-            simulated: session.simulated
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-
-// ---- Contributions API ----
-
-// Create a payment intent for a contribution
-app.post('/api/zines/:id/contribute', authenticateToken, async (req, res) => {
-    const { amount_dollars } = req.body;
-    const { id: zine_id } = req.params;
-    const { id: user_id } = req.user;
-
-    try {
-        const result = await contributionService.createContributionIntent(zine_id, amount_dollars, user_id);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Stripe webhook for payment confirmation
-app.post('/api/stripe-webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
-    try {
-        await contributionService.handleStripeWebhook(req.body, req.headers['stripe-signature']);
-        res.json({ received: true });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-// ============================================
-// Sovereign Token API Endpoints
-// ============================================
-
-// Create a new sovereign token
-app.post('/api/sovereign/create-token', authenticateToken, async (req, res) => {
-    const { identity, claims } = req.body;
-
-    try {
-        const result = await sovereignService.createToken(db, req.user.id, identity, claims);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get user's sovereign tokens
-app.get('/api/sovereign/tokens', authenticateToken, async (req, res) => {
-    try {
-        const tokens = await sovereignService.getUserTokens(db, req.user.id);
-        res.json(tokens);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Verify a sovereign token
-app.post('/api/sovereign/verify', async (req, res) => {
-    const { tokenData } = req.body;
-
-    try {
-        const result = await sovereignService.verifyToken(db, tokenData);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Seal content with a token gate
-app.post('/api/sovereign/seal', authenticateToken, async (req, res) => {
-    const { zineId, tokenId, content } = req.body;
-
-    if (!zineId || !tokenId || !content) {
-        return res.status(400).json({ error: 'zineId, tokenId, and content are required' });
-    }
-
-    try {
-        const result = await sovereignService.sealContent(db, zineId, tokenId, content);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Unlock content with a token
-app.post('/api/sovereign/unlock', async (req, res) => {
-    const { gateId, tokenData } = req.body;
-
-    if (!gateId || !tokenData) {
-        return res.status(400).json({ error: 'gateId and tokenData are required' });
-    }
-
-    try {
-        const result = await sovereignService.unlockContent(db, gateId, tokenData);
-        res.json(result);
-    } catch (error) {
-        res.status(403).json({ error: error.message });
-    }
-});
-
-// Create a delegated token
-app.post('/api/sovereign/delegate', authenticateToken, async (req, res) => {
-    const { tokenId, userId, purpose, ttl } = req.body;
-
-    if (!tokenId || !purpose) {
-        return res.status(400).json({ error: 'tokenId and purpose are required' });
-    }
-
-    try {
-        const result = await sovereignService.createDelegation(db, tokenId, userId || req.user.id, purpose, ttl);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get gate info (public - no content revealed)
-app.get('/api/gates/:gateId', async (req, res) => {
-    try {
-        const gate = await sovereignService.getGateInfo(db, req.params.gateId);
-        if (!gate) {
-            return res.status(404).json({ error: 'Gate not found' });
-        }
-        res.json(gate);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Check access to a zine
-app.get('/api/zines/:id/access', authenticateToken, async (req, res) => {
-    try {
-        const result = await sovereignService.checkAccess(db, req.params.id, req.user.id);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ============================================
-// Crowdfunding API Endpoints
-// ============================================
-
-// Get zine funding status
-app.get('/api/zines/:id/funding', async (req, res) => {
-    try {
-        const zine = await db('zines').where({ id: req.params.id }).first();
-        if (!zine) {
-            return res.status(404).json({ error: 'Zine not found' });
+        const amount = Number(req.body.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ error: 'Enter an amount greater than zero' });
         }
 
-        const isFunded = zine.funding_goal > 0 && zine.amount_raised >= zine.funding_goal;
-
-        res.json({
-            zineId: zine.id,
-            fundingGoal: zine.funding_goal || 0,
-            amountRaised: zine.amount_raised || 0,
-            isFunded: !!isFunded,
-            remaining: zine.funding_goal ? Math.max(0, zine.funding_goal - zine.amount_raised) : null,
-            currency: zine.funding_currency || 'USD',
-            deadline: zine.funding_deadline,
-            contributorCount: await db('contributions').where({ zine_id: zine.id }).count('* as count').first()
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Set funding goal for zine
-app.post('/api/zines/:id/funding', authenticateToken, async (req, res) => {
-    const { fundingGoal, currency, deadline } = req.body;
-    const zineId = req.params.id;
-
-    try {
-        const zine = await db('zines').where({ id: zineId, user_id: req.user.id }).first();
-        if (!zine) {
-            return res.status(404).json({ error: 'Zine not found or not owned' });
+        const goal = Number(zine.funding_goal) || 0;
+        const raised = Number(zine.amount_raised) || 0;
+        if (goal > 0 && raised >= goal) {
+            return res.status(409).json({ error: 'This zine is already fully funded' });
         }
 
-        await db('zines').where({ id: zineId }).update({
-            funding_goal: fundingGoal || null,
-            funding_currency: currency || 'USD',
-            funding_deadline: deadline || null,
-            monetization_type: fundingGoal ? 'crowdfund' : zine.monetization_type
-        });
+        // A contribution from a non-author is a purchase of indefinite
+        // access; a contribution from the author is topping their own pot.
+        const isAuthor = Number(zine.user_id) === Number(req.user.id);
+        const units = Math.round(amount * vault.UNITS_PER_USD);
 
-        res.json({ success: true, fundingGoal, currency: currency || 'USD' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+        if (!isAuthor && units > 0) {
+            await db.transaction(async (trx) => {
+                await vault.transfer({
+                    fromUserId: req.user.id,
+                    toUserId: zine.user_id,
+                    amountUnits: units,
+                    reason: 'contribution',
+                    memo: `Contribution to "${zine.title}"`,
+                    trx
+                });
+            });
+        }
 
-// Get contributors for a zine
-app.get('/api/zines/:id/contributors', async (req, res) => {
-    try {
-        const contributors = await db('contributions as c')
-            .join('users as u', 'c.user_id', 'u.id')
-            .select('c.*', 'u.username')
-            .where('c.zine_id', req.params.id)
-            .orderBy('c.created_at', 'desc');
-
-        res.json(contributors);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get producers (contributors with aggregated data and tiers) for a zine
-app.get('/api/zines/:id/producers', async (req, res) => {
-    try {
-        // Get aggregated producer data - group by user and show their total contribution and tier
-        const producers = await db('contributions as c')
-            .join('users as u', 'c.user_id', 'u.id')
-            .select(
-                'c.user_id',
-                'u.username',
-                db.raw('SUM(c.amount) as total_contributed'),
-                db.raw('MAX(c.credit_tier) as credit_tier'),
-                db.raw('COUNT(*) as contribution_count'),
-                db.raw('MAX(c.created_at) as latest_contribution')
-            )
-            .where('c.zine_id', req.params.id)
-            .groupBy('c.user_id', 'u.username')
-            .orderBy('total_contributed', 'desc');
-
-        // Format the credit tier for display
-        const formattedProducers = producers.map(p => ({
-            user_id: p.user_id,
-            username: p.username,
-            total_contributed: parseFloat(p.total_contributed) || 0,
-            credit_tier: p.credit_tier || 'supporter',
-            tier_display: formatCreditTier(p.credit_tier),
-            contribution_count: p.contribution_count,
-            latest_contribution: p.latest_contribution
-        }));
-
-        res.json(formattedProducers);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Helper function to format credit tier for display
-function formatCreditTier(tier) {
-    if (!tier) return 'Supporter';
-    const tierMap = {
-        'executive_producer': 'Executive Producer',
-        'associate_producer': 'Associate Producer',
-        'supporter': 'Supporter',
-        'contributor': 'Contributor'
-    };
-    return tierMap[tier] || tier.charAt(0).toUpperCase() + tier.slice(1).replace(/_/g, ' ');
-}
-
-// Process crowdfunding payment (after Stripe success)
-app.post('/api/zines/:id/fund', authenticateToken, async (req, res) => {
-    const { amount, paymentIntentId } = req.body;
-    const zineId = req.params.id;
-
-    if (!amount || amount <= 0) {
-        return res.status(400).json({ error: 'Invalid amount' });
-    }
-
-    try {
-        // Verify payment with Stripe (simplified)
-        // In production, verify the payment intent properly
-
-        // Determine credit tier based on contribution
-        const zine = await db('zines').where({ id: zineId }).first();
-        const goal = zine.funding_goal || 0;
-        const creditTier = goal > 0 && (amount / goal) >= 0.2 ? 'executive_producer' : 'associate_producer';
-
-        // Record contribution
-        await db('contributions').insert({
-            user_id: req.user.id,
-            zine_id: zineId,
-            amount,
-            currency: zine.funding_currency || 'USD',
-            stripe_payment_intent: paymentIntentId,
-            credit_tier: creditTier
-        });
-
-        // Update zine amount raised
-        const newRaised = (zine.amount_raised || 0) + amount;
-        const isNowFunded = goal > 0 && newRaised >= goal;
-
+        const newRaised = raised + amount;
+        const funded = goal > 0 && newRaised >= goal;
         await db('zines').where({ id: zineId }).update({
             amount_raised: newRaised,
-            is_funded: isNowFunded ? 1 : 0
+            is_funded: funded ? 1 : 0
         });
 
+        if (!isAuthor) {
+            await db('purchases')
+                .insert({
+                    user_id: req.user.id,
+                    zine_id: zineId,
+                    price_units: units,
+                    currency: zine.funding_currency || 'USD',
+                    source: 'crowdfund_unlock',
+                    created_at: db.fn.now()
+                })
+                .onConflict(['user_id', 'zine_id'])
+                .ignore();
+        }
+
         res.json({
-            success: true,
+            status: 'contributed',
             amountRaised: newRaised,
-            isFunded: isNowFunded,
-            creditTier,
-            message: isNowFunded ? 'Funding goal reached! Content is now free for everyone.' : 'Thank you for your contribution!'
+            goal,
+            isFunded: funded,
+            message: funded
+                ? 'Funding goal reached — this zine is now free for everyone.'
+                : 'Thank you. You have permanent access to this zine.'
         });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch (err) {
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
+app.get('/api/zines/:id/contributors', async (req, res) => {
+    try {
+        const rows = await db('purchases as p')
+            .join('users as u', 'u.id', 'p.user_id')
+            .select('u.username', 'u.display_name', 'p.amount_units', 'p.created_at')
+            .where('p.zine_id', req.params.id)
+            .orderBy('p.created_at', 'desc')
+            .limit(50);
+        res.json(rows.map(row => ({
+            ...row,
+            amount: vault.fromUnits(row.amount_units, { currency: 'USD' })
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 // Serve a packaged frontend when the desktop host provides one.
 if (process.env.APP_DIST) {
     const frontendRoot = path.resolve(process.env.APP_DIST);
@@ -2680,6 +1722,29 @@ if (process.env.APP_DIST) {
     });
 }
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// Seed the demo account once the schema is in place. This gives a populated,
+// fully-spending account on every install, which is what makes the
+// monetization flow testable without a payment provider.
+const boot = async () => {
+    try {
+        await db.migrate.latest();
+        console.log('Database migrations completed');
+
+        const demo = await seedDemoUser(db, bcrypt, vault);
+        console.log(`Demo account ready: ${demo.username} (${DEMO_TOKEN})`);
+    } catch (error) {
+        console.error('Database startup failed:', error);
+    }
+
+    // `server` in CONFIG is the server *settings* object, not an http.Server.
+    // The listener is created here and kept on the module so it can be closed
+    // by tests and the desktop shutdown hook.
+    const listener = app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Payments: ${economyService.isSimulated() ? 'SIMULATED (no Stripe key)' : 'Stripe'}`);
+    });
+    module.exports.listener = listener;
+    return listener;
+};
+
+boot();

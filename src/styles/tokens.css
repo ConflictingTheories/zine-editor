@@ -1,43 +1,237 @@
-/* Design tokens for SVRN — centralized scales and fonts */
+/*
+ * Design tokens — single source of truth for the whole application.
+ *
+ * Colour policy: the editor chrome is strictly achromatic. A hue cast in the
+ * UI shifts the perceived colour of the photograph or artwork the user is
+ * judging, so every chrome colour below is a neutral grey. The only permitted
+ * saturation lives in the reserved "signal" tokens, which mark state the user
+ * must not miss (destructive, positive, attention) and are never decorative.
+ *
+ * Light Table already worked this way; this file promotes that approach to
+ * the app-wide contract so every view reads as one system.
+ */
+
 :root {
-    /* fonts */
+    /* ── Type ─────────────────────────────────────────────────────────── */
     --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-display: 'Cinzel Decorative', 'Cinzel', serif;
     --font-body: 'EB Garamond', 'Crimson Text', serif;
-    --font-mono: 'Roboto Mono', 'Courier New', monospace;
+    --font-mono: 'Roboto Mono', 'SF Mono', 'Courier New', monospace;
 
-    /* type scale */
-    --type-xs: 12px;
-    --type-sm: 14px;
-    --type-md: 16px;
-    --type-lg: 20px;
-    --type-xl: 28px;
-    --type-xxl: 42px;
+    --type-xxs: 10px;
+    --type-xs: 11px;
+    --type-sm: 12px;
+    --type-md: 13px;
+    --type-lg: 15px;
+    --type-xl: 19px;
+    --type-2xl: 26px;
+    --type-3xl: 34px;
 
-    /* spacing */
-    --space-xxs: 4px;
-    --space-xs: 8px;
-    --space-sm: 12px;
-    --space-md: 16px;
-    --space-lg: 24px;
-    --space-xl: 40px;
+    /* ── Spacing — 4px base grid ──────────────────────────────────────── */
+    --space-xxs: 2px;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 24px;
+    --space-2xl: 32px;
+    --space-3xl: 48px;
 
-    /* radii */
-    --radius-sm: 6px;
-    --radius: 10px;
-    --radius-lg: 16px;
+    /* ── Radii ────────────────────────────────────────────────────────── */
+    --radius-xs: 3px;
+    --radius-sm: 5px;
+    --radius-md: 7px;
+    --radius-lg: 10px;
+    --radius-pill: 999px;
 
-    /* panels */
-    --panel-bg: rgba(255, 255, 255, 0.02);
-    --panel-border: 1px solid rgba(0, 0, 0, 0.25);
+    /* ── Motion ───────────────────────────────────────────────────────── */
+    --ease: cubic-bezier(.4, 0, .2, 1);
+    --dur-fast: .1s;
+    --dur: .16s;
+    --dur-slow: .28s;
 
-    /* shared colors (fallbacks kept in styles.css root) */
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    --topnav-h: 48px;
+    --statusbar-h: 24px;
+    --rail-w: 260px;
+    --inspector-w: 300px;
 }
 
-/* small helper utilities for components to consume */
+/* ══════════════════════════════════════════════════════════════════════
+   DARK (default) — neutral greys, no hue
+   ══════════════════════════════════════════════════════════════════════ */
+:root,
+:root[data-ui-theme="dark"] {
+    color-scheme: dark;
+
+    /* Surfaces: 5 steps, evenly spaced in lightness. */
+    --bg: #0f1011;            /* app background           */
+    --surface-0: #131416;     /* panels                   */
+    --surface-1: #17181b;     /* raised panels            */
+    --surface-2: #1d1f22;     /* controls, inputs         */
+    --surface-3: #242629;     /* hover                    */
+    --surface-4: #2c2f33;     /* active / pressed         */
+    --surface-sunken: #0a0b0c;/* wells: canvas, stage     */
+
+    /* Lines: hairlines only. Never use borders to fill space. */
+    --line: #26282c;
+    --line-soft: #1c1e21;
+    --line-strong: #34373c;
+
+    /* Text */
+    --text: #e9eaec;
+    --text-muted: #a1a5ab;
+    --text-dim: #71757c;
+    --text-faint: #4e5258;
+    --text-inverse: #0f1011;
+
+    /* Interactive accent — desaturated steel. Deliberately low chroma so it
+       reads as chrome rather than content. */
+    --accent: #9aa4b1;
+    --accent-hover: #b0b9c4;
+    --accent-active: #c6cdd6;
+    --accent-contrast: #14161a;
+    --accent-quiet: rgba(154, 164, 177, .12);
+    --accent-line: rgba(154, 164, 177, .38);
+
+    /* Signal colours — reserved state only, never decoration. */
+    --positive: #6f9e6f;
+    --positive-quiet: rgba(111, 158, 111, .14);
+    --warning: #a68a5b;
+    --warning-quiet: rgba(166, 138, 91, .14);
+    --danger: #b5706b;
+    --danger-quiet: rgba(181, 112, 107, .14);
+    --info: #7e93a8;
+    --info-quiet: rgba(126, 147, 168, .14);
+
+    /* Depth */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow: 0 4px 14px rgba(0, 0, 0, .42);
+    --shadow-lg: 0 18px 48px rgba(0, 0, 0, .58);
+    --overlay: rgba(8, 9, 10, .68);
+    --glass: rgba(19, 20, 22, .86);
+
+    /* The neutral mid-grey canvas is the reference surface for judging tone,
+       so it is the only large area the app renders in flat grey. */
+    --canvas: #1a1b1d;
+    --reader-bg: #0a0b0c;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIGHT — same structure, inverted lightness ramp
+   ══════════════════════════════════════════════════════════════════════ */
+:root[data-ui-theme="light"] {
+    color-scheme: light;
+
+    --bg: #f4f4f5;
+    --surface-0: #ffffff;
+    --surface-1: #fbfbfb;
+    --surface-2: #f2f2f3;
+    --surface-3: #e8e8ea;
+    --surface-4: #dedee1;
+    --surface-sunken: #e4e4e6;
+
+    --line: #dedee1;
+    --line-soft: #eaeaec;
+    --line-strong: #c8c8cd;
+
+    --text: #1c1d1f;
+    --text-muted: #5c5f64;
+    --text-dim: #83868c;
+    --text-faint: #a9acb1;
+    --text-inverse: #ffffff;
+
+    --accent: #5b6470;
+    --accent-hover: #464e59;
+    --accent-active: #343b44;
+    --accent-contrast: #ffffff;
+    --accent-quiet: rgba(91, 100, 112, .09);
+    --accent-line: rgba(91, 100, 112, .4);
+
+    --positive: #4a7a4a;
+    --positive-quiet: rgba(74, 122, 74, .12);
+    --warning: #8a6f3f;
+    --warning-quiet: rgba(138, 111, 63, .12);
+    --danger: #a34f4a;
+    --danger-quiet: rgba(163, 79, 74, .12);
+    --info: #55697e;
+    --info-quiet: rgba(85, 105, 126, .12);
+
+    --shadow-sm: 0 1px 2px rgba(20, 22, 26, .07);
+    --shadow: 0 4px 14px rgba(20, 22, 26, .1);
+    --shadow-lg: 0 18px 48px rgba(20, 22, 26, .16);
+    --overlay: rgba(24, 25, 28, .42);
+    --glass: rgba(255, 255, 255, .88);
+
+    --canvas: #cfd0d3;
+    --reader-bg: #e6e6e8;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Compatibility aliases
+   Long-standing names kept resolving so the existing stylesheet and its
+   components migrate to the neutral scale without a flag day.
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+    --vp-bg: var(--bg);
+    --vp-surface: var(--surface-0);
+    --vp-surface2: var(--surface-2);
+    --vp-surface-elevated: var(--surface-1);
+    --vp-border: var(--line);
+    --vp-text: var(--text);
+    --vp-text-dim: var(--text-dim);
+    --vp-accent: var(--accent);
+    --vp-accent2: var(--accent);
+    --vp-danger: var(--danger);
+    --vp-success: var(--positive);
+    --vp-info: var(--info);
+    --vp-canvas-area: var(--canvas);
+    --vp-reader-bg: var(--reader-bg);
+    --vp-glass-bg: var(--glass);
+    --vp-modal-overlay: var(--overlay);
+    --vp-modal-shadow: var(--shadow-lg);
+    --vp-media-accent: var(--accent);
+    --vp-gold: var(--accent);
+    --vp-crimson: var(--danger);
+    --radius: var(--radius-md);
+
+    /* Panel primitives */
+    --panel-bg: var(--surface-0);
+    --panel-border: 1px solid var(--line);
+    --divider: 1px solid var(--line-soft);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Shared primitives
+   ══════════════════════════════════════════════════════════════════════ */
 .svrn-panel {
-    background: var(--panel-bg);
-    border-radius: var(--radius);
-    border: var(--panel-border);
-    padding: var(--space-md);
+    background: var(--surface-0);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    padding: var(--space-lg);
+}
+
+/* Consistent panel header — editor rail, dashboard, light table. */
+.svrn-panel-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-height: 36px;
+    padding: 0 var(--space-md);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-0);
+}
+
+.svrn-panel-title {
+    font-size: var(--type-sm);
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+/* Tabular numerals wherever numbers change in place (prices, counts, time). */
+.svrn-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
 }

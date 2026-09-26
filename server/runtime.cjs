@@ -7,6 +7,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const knexConfig = require('./knexfile.cjs');
 const CONFIG = require('./config.cjs');
+const { DEMO_TOKEN, DEMO_USER } = require('./demoAccount.cjs');
 
 const { server, jwt: jwtConfig, cors: corsConfig, database } = CONFIG;
 const app = express();
@@ -32,9 +33,9 @@ const db = knex({
     connection: { filename: database.getPath() },
 });
 
-db.migrate.latest()
-    .then(() => console.log('Database migrations completed'))
-    .catch(error => console.error('Database migration failed:', error));
+// Migrations and demo seeding run once, in server.cjs, after this module has
+// finished loading. Running them here as well meant two concurrent
+// `migrate.latest()` calls racing to alter the same tables on boot.
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -47,9 +48,27 @@ const authenticateToken = (req, res, next) => {
         });
     }
 
-    if (token === 'local_offline_token') {
-        req.user = { id: 1, username: 'Local_Creator' };
-        return next();
+    // The demo token and the legacy offline token both resolve to the seeded
+    // demo user, so every account-scoped route works while signed in as the
+    // demo account without a server round trip.
+    if (token === DEMO_TOKEN || token === 'local_offline_token') {
+        db('users')
+            .where({ email: DEMO_USER.email })
+            .first()
+            .then((user) => {
+                if (!user) {
+                    return res.status(401).json({ error: 'Demo account unavailable' });
+                }
+                req.user = {
+                    id: user.id,
+                    username: user.username,
+                    is_demo: true
+                };
+                req.isDemo = true;
+                next();
+            })
+            .catch(() => res.status(500).json({ error: 'Demo lookup failed' }));
+        return;
     }
 
     jwt.verify(token, jwtConfig.secret, (error, user) => {

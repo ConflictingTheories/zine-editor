@@ -1,307 +1,146 @@
-// Stripe initialization - handle missing API key gracefully
+/*
+ * Payments — the single funding source for the credit vault.
+ *
+ * This service used to be the economy: it held the Stripe/XRP plumbing, the
+ * "VPC" credit balance, creator-issued token issuance, trust lines, and
+ * subscriptions. The credit balance now lives in `vaultService.cjs` as ledger
+ * entries, and creator tokens are gone. What remains here is exactly one
+ * job — turning money into credits.
+ *
+ * Everything degrades to a simulated result when no provider is configured,
+ * and in every mode the credits are issued through `vaultService.grant`, so
+ * the accounting path exercised in development is the same one that runs in
+ * production.
+ */
+
+const vault = require('./vaultService.cjs');
+
 let stripe = null;
-if (process.env.STRIPE_SECRET_KEY) {
-    stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-} else {
-    console.warn('WARNING: STRIPE_SECRET_KEY not set - Stripe payments will be simulated');
+let stripeLoadError = null;
+try {
+    const Stripe = require('stripe');
+    if (process.env.STRIPE_SECRET_KEY) {
+        stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+    }
+} catch (err) {
+    stripeLoadError = err;
 }
-const xrpl = require('xrpl');
-const xrpService = require('./xrpService.cjs');
-const { encrypt, decrypt } = require('./encryption.cjs');
 
-// Rate: 1 USD = 100 VPC (Void Press Credits)
-const CREDITS_PER_USD = 100;
+/** True when no real payment provider is configured. */
+const isSimulated = () => !stripe;
 
 /**
- * Initialize Stripe with API key
+ * Create a checkout session for a credit purchase.
+ *
+ * Returns `{ checkoutUrl }` when Stripe is live, and `{ simulated: true }`
+ * otherwise. The caller issues the credits in the simulated case.
+ *
+ * @param {object} args
+ * @param {number} args.userId
+ * @param {string} args.email
+ * @param {number} args.amountUSD
+ * @returns {Promise<{ checkoutUrl: string|null, sessionId: string, simulated: boolean, units: number }>}
  */
-function initStripe() {
+async function purchaseCredits({ userId, email, amountUSD }) {
+    const amount = Number(amountUSD);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        throw new vault.ValidationError('Amount must be greater than zero');
+    }
+
+    const units = Math.round(amount * vault.UNITS_PER_USD);
+
     if (!stripe) {
-        console.warn('WARNING: Stripe not initialized - payments will be simulated');
-        return null;
-    }
-    return stripe;
-}
-
-/**
- * Step 1: User requests to buy credits
- * Creates a Stripe Checkout Session
- */
-async function createCheckoutSession(userId, amountUSD, userEmail) {
-    const vpcAmount = amountUSD * CREDITS_PER_USD;
-    const stripeInstance = initStripe();
-
-    if (!stripeInstance) {
-        return {
-            sessionId: 'mock_session_' + Date.now(),
-            url: null,
-            vpcAmount,
-            simulated: true
-        };
+        return { checkoutUrl: null, sessionId: `sim_${Date.now()}`, simulated: true, units };
     }
 
-    try {
-        const session = await stripeInstance.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: [
-                {
-                    price_data: {
-                        currency: 'usd',
-                        product_data: {
-                            name: 'SVRN Publisher Credits',
-                            description: `${vpcAmount} credits for SVRN Publisher platform`
-                        },
-                        unit_amount: Math.round(amountUSD * 100)
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+            {
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: 'SVRN Credits',
+                        description: `${vault.formatMoney(amount)} in publishing credit`
                     },
-                    quantity: 1
-                }
-            ],
-            mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard?payment=cancelled`,
-            metadata: {
-                userId: userId.toString(),
-                type: 'VPC_PURCHASE',
-                vpcAmount: vpcAmount.toString()
-            },
-            customer_email: userEmail
-        });
-
-        return {
-            sessionId: session.id,
-            url: session.url,
-            vpcAmount
-        };
-    } catch (error) {
-        console.error('Error creating Stripe checkout session:', error);
-        throw error;
-    }
-}
-
-/**
- * Step 2: Retrieve checkout session to get payment status
- */
-async function retrieveCheckoutSession(sessionId) {
-    const stripeInstance = initStripe();
-
-    if (!stripeInstance || sessionId.startsWith('mock_session_')) {
-        return {
-            payment_status: 'paid',
-            metadata: {
-                userId: '1',
-                vpcAmount: '100'
+                    unit_amount: Math.round(amount * 100)
+                },
+                quantity: 1
             }
-        };
-    }
+        ],
+        mode: 'payment',
+        success_url: `${frontendUrl}/?topup=success`,
+        cancel_url: `${frontendUrl}/?topup=cancelled`,
+        metadata: {
+            userId: String(userId),
+            type: 'credit_purchase',
+            units: String(units)
+        },
+        customer_email: email || undefined
+    });
 
-    try {
-        const session = await stripeInstance.checkout.sessions.retrieve(sessionId);
-        return session;
-    } catch (error) {
-        console.error('Error retrieving Stripe session:', error);
-        throw error;
-    }
+    return { checkoutUrl: session.url, sessionId: session.id, simulated: false, units };
 }
 
 /**
- * Step 3: Handle successful payment and issue XRP credits
+ * Handle a Stripe webhook. Issues credits for a completed checkout.
+ *
+ * The previous version of this function read `metadata.userId` and fell back to
+ * a hard-coded `'1'`, so a real purchase could be credited to the wrong
+ * account. Untrusted metadata is now rejected outright rather than guessed.
+ *
+ * @param {string} signature webhook signature
+ * @param {Buffer|string} payload raw request body
+ * @param {object} db knex instance
+ * @returns {Promise<{ received: boolean, simulated?: boolean, issued?: boolean }>}
  */
-async function fulfillCreditPurchase(userId, vpcAmount, db) {
-    console.log(`Fulfilling purchase for User ${userId}: ${vpcAmount} VPC`);
-
-    try {
-        const wallet = await db('wallets').where({ user_id: userId }).first();
-
-        if (!wallet || !wallet.xrp_address) {
-            console.log(`User ${userId} has no XRP wallet - adding credits to account only`);
-            await db('credits')
-                .insert({ user_id: userId, balance: vpcAmount })
-                .onConflict('user_id')
-                .merge({
-                    balance: db.raw('credits.balance + ?', [vpcAmount]),
-                    updated_at: db.fn.now()
-                });
-            return { success: true, creditsOnly: true, amount: vpcAmount };
-        }
-
-        const userXrpAddress = wallet.xrp_address;
-        let txHash = null;
-
-        try {
-            txHash = await xrpService.issuePlatformCredits(userXrpAddress, vpcAmount);
-            console.log(`Issued ${vpcAmount} VPC to ${userXrpAddress}. Tx: ${txHash}`);
-        } catch (error) {
-            console.error("Failed to issue credits on XRPL (will fallback to credits only):", error);
-        }
-
-        await db('credits')
-            .insert({ user_id: userId, balance: vpcAmount })
-            .onConflict('user_id')
-            .merge({
-                balance: db.raw('credits.balance + ?', [vpcAmount]),
-                updated_at: db.fn.now()
-            });
-
-        return {
-            success: true,
-            txHash,
-            amount: vpcAmount,
-            xrpAddress: userXrpAddress,
-            fallback: !txHash
-        };
-    } catch (error) {
-        console.error('Failed to fulfill credit purchase:', error);
-        throw error;
+async function handleWebhook(signature, payload, db) {
+    if (!stripe) {
+        return { received: true, simulated: true };
     }
-}
-
-/**
- * Handle Stripe Webhook
- */
-async function handleStripeWebhook(signature, payload, db) {
-    const stripeInstance = initStripe();
-    if (!stripeInstance) return { received: true, simulated: true };
 
     let event;
     try {
-        event = stripeInstance.webhooks.constructEvent(payload, signature, process.env.STRIPE_WEBHOOK_SECRET);
+        event = stripe.webhooks.constructEvent(payload, signature, process.env.STRIPE_WEBHOOK_SECRET);
     } catch (err) {
-        console.error('Webhook signature verification failed:', err.message);
+        // Do not swallow: an unverified webhook must be a hard failure.
+        err.status = 400;
         throw err;
     }
 
-    if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        const { userId, type, vpcAmount } = session.metadata || {};
-
-        if (type === 'VPC_PURCHASE' && userId && vpcAmount) {
-            await fulfillCreditPurchase(parseInt(userId), parseInt(vpcAmount), db);
-        }
+    if (event.type !== 'checkout.session.completed') {
+        return { received: true };
     }
 
-    return { received: true };
-}
+    const session = event.data.object;
+    const { userId, type, units } = session.metadata || {};
 
-/**
- * Create Creator Token
- */
-async function createCreatorToken(creatorUserId, tokenCode, tokenName, description, initialSupply, pricePerToken, db) {
-    const wallet = await db('wallets').where({ user_id: creatorUserId }).first();
-    if (!wallet || !wallet.xrp_address) {
-        throw new Error('Creator must set up an XRP wallet first');
+    if (type !== 'credit_purchase' || !userId || !units) {
+        return { received: true, issued: false };
     }
 
-    const xrpCurrencyCode = tokenCode.length === 3 ? tokenCode.toUpperCase() : Buffer.from(tokenCode).toString('hex').padEnd(40, '0').toUpperCase();
+    const user = await db('users').where({ id: Number(userId) }).first();
+    if (!user) {
+        // The account was deleted between checkout and webhook. Surface it
+        // rather than crediting a row that does not exist.
+        console.error(`Credit purchase for unknown user ${userId} (session ${session.id})`);
+        return { received: true, issued: false };
+    }
 
-    const [tokenId] = await db('tokens').insert({
-        creator_id: creatorUserId,
-        token_code: tokenCode.toUpperCase(),
-        token_name,
-        description: description || '',
-        initial_supply: initialSupply || 1000000,
-        current_supply: initialSupply || 1000000,
-        price_per_token: pricePerToken || 0.01,
-        xrp_currency_code: xrpCurrencyCode
+    await vault.grant({
+        userId: user.id,
+        amountUnits: Number(units),
+        reason: 'grant',
+        memo: `Stripe checkout ${session.id}`
     });
 
-    return {
-        tokenId,
-        tokenCode: tokenCode.toUpperCase(),
-        tokenName,
-        xrpCurrencyCode,
-        issuer: wallet.xrp_address,
-        initialSupply: initialSupply || 1000000,
-        pricePerToken: pricePerToken || 0.01
-    };
-}
-
-/**
- * Issue Creator Token to a buyer
- */
-async function issueCreatorTokenToBuyer(creatorUserId, buyerXrpAddress, tokenCode, amount, db) {
-    const wallet = await db('wallets').where({ user_id: creatorUserId }).first();
-    if (!wallet || !wallet.xrp_secret_encrypted) throw new Error('Creator wallet not found or invalid');
-
-    const decryptedSecret = decrypt(wallet.xrp_secret_encrypted);
-
-    try {
-        const txHash = await xrpService.issueCreatorToken(decryptedSecret, buyerXrpAddress, tokenCode, amount);
-        return { success: true, txHash, amount, to: buyerXrpAddress };
-    } catch (error) {
-        console.error('Failed to issue creator token on XRPL:', error);
-        throw error;
-    }
-}
-
-/**
- * Establish trust line for a user
- */
-async function establishTrustLine(userSeed, issuerXrpAddress, currencyCode, limit = '1000000000') {
-    try {
-        const success = await xrpService.setTrustLine(userSeed, issuerXrpAddress, currencyCode, limit);
-        return { success };
-    } catch (error) {
-        console.error('Error establishing trust line:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-/**
- * Transfer Credits (VPC) between users
- */
-async function transferCredits(fromUserId, toUserId, amount, db) {
-    const fromWallet = await db('wallets').where({ user_id: fromUserId }).first();
-    const toWallet = await db('wallets').where({ user_id: toUserId }).first();
-
-    if (!fromWallet || !fromWallet.xrp_secret_encrypted) throw new Error('Sender wallet not found');
-    if (!toWallet || !toWallet.xrp_address) throw new Error('Receiver wallet not found');
-
-    const decryptedSecret = decrypt(fromWallet.xrp_secret_encrypted);
-    const platformIssuer = (xrpl.Wallet.fromSeed(process.env.PLATFORM_WALLET_SEED)).address;
-
-    const txHash = await xrpService.sendPayment(decryptedSecret, toWallet.xrp_address, amount, 'VPC', platformIssuer);
-    if (!txHash) throw new Error('XRPL Transaction failed');
-
-    return { success: true, txHash };
-}
-
-/**
- * Get User Wallet
- */
-async function getWallet(userId, db) {
-    return db('wallets').where({ user_id: userId }).first();
-}
-
-/**
- * Create/Get User Wallet
- */
-async function createWallet(userId, db) {
-    const existing = await getWallet(userId, db);
-    if (existing) return existing;
-
-    const walletData = await xrpService.createWallet();
-    const encryptedSeed = encrypt(walletData.seed);
-
-    await db('wallets').insert({
-        user_id: userId,
-        xrp_address: walletData.address,
-        xrp_secret_encrypted: encryptedSeed,
-        is_verified: 1
-    });
-
-    return { xrp_address: walletData.address, is_verified: 1 };
+    return { received: true, issued: true };
 }
 
 module.exports = {
-    createCheckoutSession,
-    retrieveCheckoutSession,
-    fulfillCreditPurchase,
-    handleStripeWebhook,
-    createCreatorToken,
-    issueCreatorTokenToBuyer,
-    establishTrustLine,
-    transferCredits,
-    getWallet,
-    createWallet,
-    CREDITS_PER_USD
+    purchaseCredits,
+    handleWebhook,
+    isSimulated,
+    stripeLoadError
 };
