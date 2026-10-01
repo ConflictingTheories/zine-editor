@@ -594,6 +594,12 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
 }
 
 // Helper function — keep defaults aligned with ElementContent / Reader
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
 const BALLOON_EXPORT = {
     dialog: 'background:#fff;border:2px solid #000;border-radius:20px;padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;',
     thought: 'background:#fff;border:2px solid #000;border-radius:50%;padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;',
@@ -635,8 +641,39 @@ const elementToHTML = (el, isExport = true) => {
         content = `<img src="${el.src}" style="width:100%;height:100%;object-fit:${fit};display:block;${radius}${recipe}" alt="">`
     }
     if (el.type === 'photo-frame') {
-        s += `padding:${el.frameWidth || 18}px;background:${el.frameColor || '#f7f5f0'};box-shadow:${el.frameShadow || '0 10px 22px rgba(0,0,0,.28)'};`
-        content = el.src ? `<img src="${el.src}" style="width:100%;height:100%;display:block;object-fit:${el.imageFit || 'cover'}" alt="">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#777">Choose an image from the library</div>'
+        // Mirrors PhotoFrameSurface so a published spread matches the editor.
+        const mode = el.frameStyle || 'mat'
+        const matTop = el.frameWidth ?? 18
+        const matBottom = el.frameWidthBottom ?? matTop
+        const bare = mode === 'bleed' || mode === 'none'
+        const padTop = bare ? 0 : matTop
+        const padBottom = bare ? 0 : matTop
+        const showCaptionRail = !bare && (el.caption || matBottom > matTop)
+        const railHeight = showCaptionRail ? Math.max(matBottom - matTop, 0) : 0
+        s += `padding:${padTop}px ${padTop}px ${padBottom}px ${padTop}px;`
+        s += bare ? 'background:transparent;' : `background:${el.frameColor || '#faf8f4'};`
+        if (el.frameBorderWidth) s += `border:${el.frameBorderWidth}px solid ${el.frameBorderColor || '#000000'};box-sizing:border-box;`
+        if (el.frameRadius) s += `border-radius:${el.frameRadius}px;`
+        if (el.frameShadow) s += `box-shadow:${el.frameShadow};`
+        s += 'display:flex;flex-direction:column;'
+
+        const windowStyle = `flex:1;min-height:0;overflow:hidden;background:${el.frameWindowColor || '#111111'};`
+            + (mode === 'inset' && el.frameBorderWidth
+                ? `border:${el.frameBorderWidth}px solid ${el.frameBorderColor || '#1a1a1a'};box-sizing:border-box;`
+                : '')
+
+        const recipe = el.lightTableRecipe?.params
+            ? `filter:brightness(${Math.pow(2, el.lightTableRecipe.params.exposure || 0)}) contrast(${el.lightTableRecipe.params.contrast || 1}) saturate(${el.lightTableRecipe.params.saturation || 1});`
+            : ''
+
+        const windowContent = el.src
+            ? `<img src="${el.src}" style="width:100%;height:100%;display:block;object-fit:${el.imageFit || 'cover'};object-position:${el.imagePosition || 'center'};${recipe}" alt="${escapeHtml(el.assetName || '')}">`
+            : '<div style="width:100%;height:100%;display:grid;place-items:center;color:#8b8f96;font-size:10px;letter-spacing:.08em">EMPTY FRAME</div>'
+
+        content = `<div style="${windowStyle}">${windowContent}</div>`
+        if (showCaptionRail) {
+            content += `<div style="height:${railHeight}px;padding-top:6px;display:flex;align-items:flex-start;justify-content:center;color:#6f6a60;font-family:'DM Sans',sans-serif;font-size:8px;letter-spacing:.1em;text-align:center;overflow:hidden">${escapeHtml(el.caption || '')}</div>`
+        }
     }
     if (el.type === 'video') content = '<video src="' + (el.src || '') + '" controls style="width:100%;height:100%;object-fit:' + (el.objectFit || 'contain') + '"></video>'
     if (el.type === 'audio-log') {

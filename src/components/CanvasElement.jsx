@@ -38,7 +38,7 @@ const getElementStyle = (el) => ({
     borderRadius: el.borderRadius ? `${el.borderRadius}px` : '0'
 })
 
-const CanvasElement = ({ el, pageIdx, isSelected, handlers }) => {
+const CanvasElement = ({ el, pageIdx, isSelected, handlers, onRequestImage, onDropAsset }) => {
     const { startDrag, startResize, startRotate, handleElementClick, handleContextMenu, updateElement } = handlers
 
     const style = getElementStyle(el)
@@ -59,7 +59,13 @@ const CanvasElement = ({ el, pageIdx, isSelected, handlers }) => {
             onClick={(e) => handleElementClick(e, el.id)}
             onContextMenu={(e) => handleContextMenu(e, el)}
         >
-            <ElementContent el={el} pageIdx={pageIdx} updateElement={updateElement} />
+            <ElementContent
+                el={el}
+                pageIdx={pageIdx}
+                updateElement={updateElement}
+                onRequestImage={onRequestImage}
+                onDropAsset={onDropAsset}
+            />
             {isSelected && !el.locked && (
                 <ResizeHandles el={el} pageIdx={pageIdx} startResize={startResize} startRotate={startRotate} />
             )}

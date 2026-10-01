@@ -225,7 +225,106 @@ const EditableText = ({ el, pageIdx, updateElement, styleClass, styleProps }) =>
     )
 }
 
-const ElementContent = ({ el, pageIdx, updateElement }) => {
+/**
+ * The portfolio's primary placement primitive. A frame is a mat, a window and
+ * a caption rail — not a bare image box — so a book reads as a book without
+ * the photographer hand-tuning borders on every spread.
+ */
+export const PhotoFrameSurface = ({ el, onRequestImage, onDropAsset, onContextMenu }) => {
+    const mode = el.frameStyle || 'mat'
+    const matTop = el.frameWidth ?? 18
+    const matBottom = el.frameWidthBottom ?? matTop
+    const matRight = el.frameWidthRight ?? matTop
+    const hasImage = Boolean(el.src)
+
+    const padding = mode === 'bleed' || mode === 'none'
+        ? 0
+        : mode === 'inset'
+            ? `${matTop}px ${matRight}px ${matBottom}px ${matTop}px`
+            : `${matTop}px ${matRight}px ${matBottom}px ${matTop}px`
+
+    const captionSpace = Math.max(matBottom - matTop, 0)
+    const sideSpace = Math.max(matRight - matTop, 0)
+
+    return (
+        <div
+            className={`el-photo-frame frame-${mode} ${hasImage ? '' : 'is-empty'}`}
+            style={{
+                width: '100%',
+                height: '100%',
+                padding: mode === 'bleed' || mode === 'none' ? 0 : undefined,
+                paddingTop: mode === 'bleed' || mode === 'none' ? 0 : `${matTop}px`,
+                paddingRight: mode === 'bleed' || mode === 'none' ? 0 : `${matRight}px`,
+                paddingLeft: mode === 'bleed' || mode === 'none' ? 0 : `${matTop}px`,
+                paddingBottom: 0,
+                boxSizing: 'border-box',
+                background: mode === 'bleed' || mode === 'none' ? 'transparent' : (el.frameColor || '#faf8f4'),
+                border: el.frameBorderWidth
+                    ? `${el.frameBorderWidth}px solid ${el.frameBorderColor || '#000000'}`
+                    : 'none',
+                borderRadius: el.frameRadius ? `${el.frameRadius}px` : 0,
+                boxShadow: el.frameShadow || 'none',
+                display: 'flex',
+                // A frame with a pillar rail puts the caption beside the image,
+                // so the two live in a row; every other frame is a column.
+                flexDirection: sideSpace > captionSpace && sideSpace > 0 ? 'row' : 'column'
+            }}
+        >
+            <div
+                className="el-photo-frame-window"
+                style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    minHeight: 0,
+                    background: el.frameWindowColor || '#111111',
+                    border: mode === 'inset' && el.frameBorderWidth
+                        ? `${el.frameBorderWidth}px solid ${el.frameBorderColor || '#1a1a1a'}`
+                        : 'none',
+                    outline: mode === 'bleed' ? 'none' : undefined
+                }}
+                onClick={hasImage ? undefined : (e) => { e.stopPropagation(); onRequestImage?.(el) }}
+                onDragOver={e => { if (!hasImage) e.preventDefault() }}
+                onDrop={e => { if (!hasImage) { e.preventDefault(); onDropAsset?.(el, e) } }}
+            >
+                {hasImage ? (
+                    <img
+                        src={el.src}
+                        alt={el.alt || el.assetName || ''}
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                            objectFit: el.imageFit || 'cover',
+                            objectPosition: el.imagePosition || 'center',
+                            filter: lightTableFilter(el.lightTableRecipe)
+                        }}
+                    />
+                ) : (
+                    <div className="el-photo-frame-empty">
+                        <span className="el-photo-frame-plus">+</span>
+                        <span>{onRequestImage ? 'Click to add a photo' : 'Drop a photo here'}</span>
+                    </div>
+                )}
+            </div>
+            {mode !== 'bleed' && mode !== 'none' && (el.caption || captionSpace > 0 || sideSpace > 0) && (
+                <div
+                    className="el-photo-frame-caption"
+                    style={{
+                        height: captionSpace > 0 ? captionSpace : 'auto',
+                        width: sideSpace > 0 ? sideSpace : 'auto',
+                        // A pillar rail sits beside the image, so it reads top
+                        // to bottom rather than left to right.
+                        writingMode: sideSpace > captionSpace ? 'vertical-rl' : 'horizontal-tb'
+                    }}
+                >
+                    {el.caption || <span className="el-photo-frame-caption-hint">Caption</span>}
+                </div>
+            )}
+        </div>
+    )
+}
+
+const ElementContent = ({ el, pageIdx, updateElement, onRequestImage, onDropAsset }) => {
     switch (el.type) {
         case 'text':
             // Render unicode/emoji symbols and SFX text as static, non-editable so they stay freely draggable on the canvas
@@ -254,11 +353,7 @@ const ElementContent = ({ el, pageIdx, updateElement }) => {
                 </div>
             )
         case 'photo-frame':
-            return <div className="el-photo-frame" style={{ width: '100%', height: '100%', padding: el.frameWidth || 18, boxSizing: 'border-box', background: el.frameColor || '#f7f5f0', boxShadow: el.frameShadow || '0 10px 22px rgba(0,0,0,.28)' }}>
-                <div className="el-photo-frame-window" style={{ overflow: 'hidden', width: '100%', height: '100%', background: '#777' }}>
-                    {el.src ? <img src={el.src} alt={el.alt || ''} style={{ width: '100%', height: '100%', display: 'block', objectFit: el.imageFit || 'cover', filter: lightTableFilter(el.lightTableRecipe) }} /> : <div className="el-photo-frame-empty">Choose an image from the library</div>}
-                </div>
-            </div>
+            return <PhotoFrameSurface el={el} />
         case 'panel':
             return <div className="el-panel" style={styles.panel(el)} />
         case 'shape':

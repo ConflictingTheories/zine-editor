@@ -70,33 +70,33 @@ function Dashboard() {
                 </div>
             </div>
             <div className="zine-grid">
-                <div className="zine-card create-card" onClick={handleCreateZine}>
-                    <div className="zine-card-cover">
-                        <div className="cover-icon">+</div>
-                    </div>
-                    <div className="zine-card-body">
-                        <h3>Create New Zine</h3>
-                        <p>Start a new interactive project</p>
-                    </div>
-                </div>
-                <div className="zine-card create-card" onClick={handleCreatePortfolio}>
-                    <div className="zine-card-cover">
-                        <div className="cover-icon">📷</div>
-                    </div>
-                    <div className="zine-card-body">
-                        <h3>Create Portfolio Book</h3>
-                        <p>Start a new photo-centric project</p>
-                    </div>
-                </div>
-                <div className="zine-card create-card" onClick={() => updateVpState({ currentView: 'lighttable' })}>
-                    <div className="zine-card-cover">
-                        <div className="cover-icon" style={{ filter: 'invert(1)' }}>💡</div>
-                    </div>
-                    <div className="zine-card-body">
-                        <h3>Light Table</h3>
-                        <p>Process library images natively</p>
-                    </div>
-                </div>
+                <button type="button" className="zine-card create-card" onClick={handleCreateZine}>
+                    <span className="zine-card-cover">
+                        <span className="cover-icon">+</span>
+                    </span>
+                    <span className="zine-card-body">
+                        <span className="zine-card-title">Create New Zine</span>
+                        <span className="zine-card-sub">Start a new interactive project</span>
+                    </span>
+                </button>
+                <button type="button" className="zine-card create-card" onClick={handleCreatePortfolio}>
+                    <span className="zine-card-cover">
+                        <span className="cover-icon">📷</span>
+                    </span>
+                    <span className="zine-card-body">
+                        <span className="zine-card-title">Create Portfolio Book</span>
+                        <span className="zine-card-sub">Start a new photo-centric project</span>
+                    </span>
+                </button>
+                <button type="button" className="zine-card create-card" onClick={() => updateVpState({ currentView: 'lighttable' })}>
+                    <span className="zine-card-cover">
+                        <span className="cover-icon" style={{ filter: 'invert(1)' }}>💡</span>
+                    </span>
+                    <span className="zine-card-body">
+                        <span className="zine-card-title">Light Table</span>
+                        <span className="zine-card-sub">Process library images natively</span>
+                    </span>
+                </button>
                 {projects.map((project, index) => {
                     const isPub = project._published || false
                     const badge = isPub ? 'badge-published' : 'badge-draft'

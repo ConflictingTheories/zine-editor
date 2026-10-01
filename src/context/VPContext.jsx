@@ -8,7 +8,9 @@ import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID, DEFAULT_ZINE
 import { getAdditionalDefaultZines } from '../data/defaultZines.js'
 import { BUILT_IN_TEMPLATES, createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
 import { EDITOR_MODE_PHOTO_PORTFOLIO, EDITOR_MODE_ZINE, defaultThemeForMode } from '../data/editorModes.js'
+import { getPortfolioLayout, createLayoutPage } from '../data/portfolioTemplates.js'
 import { packSvrn } from '../../packages/svrn-format/src/index.js'
+import { getPhotoBlob, putPhoto, deletePhotos, storedPhotoIds, makeThumbnail } from '../lib/photoStore.js'
 
 /**
  * VPContext
@@ -47,6 +49,37 @@ const readAssetLibrary = () => {
     }
 }
 
+/**
+ * Photograph bytes live in IndexedDB, not localStorage — see lib/photoStore.
+ * A metadata record therefore carries no `src`: just the id, the dimensions,
+ * a small thumbnail for the grid, flags and the Light Table recipe. The
+ * readable `src` handed to the UI is an ephemeral object URL minted here and
+ * deliberately never written to disk, so a library can hold thousands of
+ * photographs without approaching the localStorage quota.
+ */
+const toStoredRecord = (asset) => {
+    if (!asset?.id) return asset
+    const { src, ...rest } = asset
+    return { ...rest, thumb: asset.thumb || null, width: asset.width, height: asset.height }
+}
+
+/**
+ * Mint a readable `src` for a record. The bytes are always fetched from the
+ * blob store when they are there, even if the record still carries an inline
+ * `data:` src — that inline value is legacy state on its way out, and reusing
+ * it would keep base64 alive forever.
+ */
+const resolveAssetSrc = async (asset) => {
+    if (!asset?.id) return asset
+    const blob = await getPhotoBlob(asset.id)
+    if (!blob) {
+        // No bytes on disk. Keep whatever the record had so a partially
+        // failed migration never turns into a library of broken images.
+        return asset
+    }
+    return { ...asset, src: URL.createObjectURL(blob) }
+}
+
 const VPProvider = ({ children }) => {
     const [vpState, setVpState] = useState({
         projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
@@ -83,6 +116,55 @@ const VPProvider = ({ children }) => {
     const historyTimerRef = useRef(null)
 
     /**
+     * Rehydrate the library on boot: mint object URLs for every photo whose
+     * bytes are in IndexedDB, and migrate any legacy inline `data:` src into
+     * the blob store so the next write is already free of base64. Runs once.
+     */
+    useEffect(() => {
+        let cancelled = false
+        const hydrate = async () => {
+            const stored = (vpState.library?.imported || [])
+            const legacy = stored.filter(asset => typeof asset.src === 'string' && asset.src.startsWith('data:'))
+            const orphaned = stored.filter(asset => !asset.src)
+            if (!legacy.length && !orphaned.length) return
+            try {
+                // Legacy records first: park the bytes before slimming, or the
+                // base64 is deleted from disk before it has been copied to it.
+                if (legacy.length) {
+                    await Promise.all(legacy.map(asset => putPhoto(asset.id, asset.src)))
+                }
+                // Re-read the key list *after* writing — reading it beforehand
+                // would miss everything just imported and leave them unresolved.
+                const onDisk = new Set(await storedPhotoIds())
+
+                const resolved = await Promise.all(stored.map(asset => {
+                    if (typeof asset.src === 'string' && asset.src && !asset.src.startsWith('data:')) return asset
+                    return onDisk.has(asset.id) ? resolveAssetSrc(asset) : asset
+                }))
+                if (cancelled) return
+
+                // Grid thumbnails are generated here, once, so a library that
+                // predates the blob store still gets fast scrolling.
+                const withThumbs = await Promise.all(resolved.map(asset =>
+                    (asset?.thumb || !asset?.src) ? asset : makeThumbnail(asset.src).then(thumb => (thumb ? { ...asset, thumb } : asset))))
+
+                // Anything still holding base64 failed to reach the blob store;
+                // keep it exactly as it is so a full disk never loses photos.
+                const stillInline = new Set(withThumbs.filter(a => a?.src?.startsWith('data:')).map(a => a.id))
+                const slim = withThumbs.map(asset => (stillInline.has(asset.id) ? asset : toStoredRecord(asset)))
+
+                setVpState(prev => ({ ...prev, library: { ...prev.library, imported: withThumbs } }))
+                try {
+                    localStorage.setItem('vp_asset_library', JSON.stringify({ ...vpState.library, imported: slim }))
+                } catch { /* out of quota: keep the session in memory */ }
+            } catch { /* leave the library as-is; it still renders from thumbs */ }
+        }
+        hydrate()
+        return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    /**
      * Merge-updater for `vpState`.
      * @param {object} updates Partial state updates to shallow-merge into vpState
      */
@@ -94,12 +176,43 @@ const VPProvider = ({ children }) => {
         setVpState(prev => {
             const library = { ...prev.library, ...update }
             try {
-                localStorage.setItem('vp_asset_library', JSON.stringify(library))
+                localStorage.setItem('vp_asset_library', JSON.stringify({
+                    ...library,
+                    imported: (library.imported || []).map(toStoredRecord)
+                }))
             } catch {
                 // Keep the current session usable when a large asset exceeds browser storage.
             }
             return { ...prev, library }
         })
+    }
+
+    /**
+     * Persist the library. Photo bytes are already in IndexedDB, so this only
+     * ever writes small metadata records — which is what makes favouriting a
+     * photo in a 2000-image library instantaneous instead of a multi-megabyte
+     * JSON serialisation.
+     */
+    const persistLibrary = (library) => {
+        try {
+            localStorage.setItem('vp_asset_library', JSON.stringify({
+                ...library,
+                imported: (library.imported || []).map(toStoredRecord)
+            }))
+        } catch {
+            // Out of quota: drop the in-memory thumbnails for the oldest
+            // entries and try once more rather than losing the whole library.
+            try {
+                localStorage.setItem('vp_asset_library', JSON.stringify({
+                    ...library,
+                    imported: (library.imported || []).map(asset => {
+                        const record = toStoredRecord(asset)
+                        delete record.thumb
+                        return record
+                    })
+                }))
+            } catch { /* keep the session usable in memory */ }
+        }
     }
 
     const rememberColor = (color) => {
@@ -123,14 +236,86 @@ const VPProvider = ({ children }) => {
                 const collection = asset.kind === 'audio' ? 'audio' : 'imported'
                 library[collection] = [asset, ...(library[collection] || []).filter(value => value.id !== asset.id)].slice(0, 60)
             })
-            try {
-                localStorage.setItem('vp_asset_library', JSON.stringify(library))
-            } catch { }
+            persistLibrary(library)
             return { ...prev, library }
         })
     }
 
     const addImportedAsset = (asset) => addImportedAssets([asset])
+
+    /**
+     * Library cap. Photographers routinely import whole shoots, so the
+     * photography workspace keeps far more than the 60-asset zine cap and
+     * drops the oldest entries only once the limit is genuinely exceeded.
+     */
+    const LIBRARY_LIMITS = { imported: 600, audio: 60 }
+
+    const addImportedAssetsWithRoom = (assets) => {
+        const validAssets = (assets || []).filter(asset => asset?.src)
+        if (!validAssets.length) return []
+        const limit = LIBRARY_LIMITS.imported
+        if (validAssets.length > limit) {
+            toast(`Only the most recent ${limit} photos are kept in the library`, 'info')
+        }
+        setVpState(prev => {
+            const library = { ...prev.library }
+            validAssets.forEach(asset => {
+                const collection = asset.kind === 'audio' ? 'audio' : 'imported'
+                const kept = (library[collection] || []).filter(value => value.id !== asset.id)
+                library[collection] = [...validAssets.filter(a => (a.kind === 'audio' ? 'audio' : 'imported') === collection), ...kept]
+                    .slice(0, collection === 'audio' ? LIBRARY_LIMITS.audio : limit)
+            })
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+        return validAssets
+    }
+
+    /**
+     * Patch a library asset in place — used for captions, favourites, usage
+     * flags and to store a Light Table recipe against the original file so
+     * edits are never lost by re-opening the photo.
+     */
+    const updateImportedAsset = (assetId, updates) => {
+        if (!assetId) return
+        setVpState(prev => {
+            const library = { ...prev.library }
+            const next = {}
+            ;['imported', 'audio'].forEach(collection => {
+                next[collection] = (library[collection] || []).map(asset =>
+                    asset.id === assetId ? { ...asset, ...updates } : asset)
+            })
+            library.imported = next.imported
+            library.audio = next.audio
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+    }
+
+    const toggleAssetFlag = (assetId, flag) =>
+        setVpState(prev => {
+            const library = { ...prev.library }
+            library.imported = (library.imported || []).map(asset =>
+                asset.id === assetId ? { ...asset, [flag]: !asset[flag] } : asset)
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+
+    const removeImportedAssets = (assetIds) => {
+        const ids = new Set(Array.isArray(assetIds) ? assetIds : [assetIds])
+        if (!ids.size) return
+        setVpState(prev => {
+            const library = { ...prev.library }
+            library.imported = (library.imported || []).filter(asset => !ids.has(asset.id))
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+        // Reclaim the pixels too, not just the metadata row.
+        deletePhotos([...ids])
+    }
+
+    const getAssetById = (assetId) =>
+        (vpState.library?.imported || []).find(asset => asset.id === assetId) || null
 
     /**
      * Push the provided `project` snapshot into the in-memory history stack.
@@ -472,10 +657,13 @@ const VPProvider = ({ children }) => {
 
     const createProject = (themeKey, editorMode = 'zine') => {
         const theme = themeKey || vpState.selectedTheme
-        const portfolioPages = ['cover-photo', 'photo-grid']
-            .map(id => BUILT_IN_TEMPLATES.find(template => template.id === id))
-            .filter(Boolean)
-            .map(template => createTemplatePage(template, theme))
+        const isPortfolio = editorMode === EDITOR_MODE_PHOTO_PORTFOLIO
+        // Portfolios start from real photographic layouts, not zine themes —
+        // a title page and a blank spread the user fills from the library.
+        const portfolioPages = isPortfolio
+            ? [getPortfolioLayout('pf-title-page'), getPortfolioLayout('pf-blank-spread')]
+                .map(layout => createLayoutPage(layout, { background: '#ffffff' }))
+            : []
         const project = {
             id: Date.now(),
             title: 'Untitled ' + (editorMode === 'photo-portfolio' ? 'Portfolio' : 'Zine'),
@@ -703,6 +891,144 @@ const VPProvider = ({ children }) => {
         return true
     }
     const addPage = () => addPageFromTemplate(null)
+
+    /**
+     * Append a photography layout as a new spread and optionally fill its
+     * empty frames straight from the library — the fastest path from "I have
+     * 800 photos" to "I have a composed book".
+     */
+    const addPageFromPortfolioLayout = (layout, { fillWith = null, background = '#ffffff' } = {}) => {
+        if (!vpState.currentProject) {
+            toast('Open a portfolio before adding a layout', 'error')
+            return false
+        }
+        if (vpState.currentProject.pages.length >= 64) {
+            toast('A book is limited to 64 spreads', 'error')
+            return false
+        }
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const page = createLayoutPage(layout, { background })
+        const pool = (fillWith || []).filter(asset => asset?.src)
+        if (pool.length) {
+            const frames = page.elements.filter(el => el.type === 'photo-frame')
+            frames.forEach((frameElement, index) => {
+                const asset = pool[index % pool.length]
+                if (!asset) return
+                frameElement.src = asset.src
+                frameElement.assetId = asset.id
+                frameElement.assetName = asset.name || asset.id
+                frameElement.lightTableRecipe = asset.recipe || null
+            })
+        }
+        project.pages = [...(project.pages || []), page]
+        const pageIdx = project.pages.length - 1
+        setVpState(prev => ({ ...prev, currentProject: project, selection: { type: 'page', id: page.id, pageIdx } }))
+        pushHistory(project)
+        saveLocal(project)
+        toast(pool.length
+            ? `${layout?.name || 'Layout'} added with ${Math.min(pool.length, page.elements.filter(el => el.type === 'photo-frame').length)} photos`
+            : `${layout?.name || 'Layout'} added`, 'success')
+        return true
+    }
+
+    /**
+     * Open the Light Table on a specific photo *without* leaving the book.
+     * `target` describes where the developed recipe should land when the user
+     * is done, so grading never destroys the layout they were working on.
+     */
+    const openLightTableFor = ({ assetId = null, src = null, name = null, target = null } = {}) => {
+        const asset = assetId ? getAssetById(assetId) : null
+        const pseudoAsset = asset || (src ? { id: `inline-${Date.now()}`, src, name: name || 'Untitled' } : null)
+        setVpState(prev => ({
+            ...prev,
+            currentView: 'lighttable',
+            lightTableReturnView: prev.currentView === 'lighttable' ? 'editor' : prev.currentView,
+            lightTableAsset: pseudoAsset,
+            // Remembers page/element so "Apply" can write the recipe back.
+            lightTableTarget: target
+        }))
+    }
+
+    /**
+     * Apply a developed recipe to a photo frame or image element in place.
+     * Position, size, frame styling and every other property are preserved —
+     * only the image source and recipe are updated.
+     */
+    const applyRecipeToElement = (target, { src, recipe, name } = {}) => {
+        if (!target?.elementId) return false
+        const element = findElement(target.pageIdx, target.elementId)
+        if (!element) return false
+        const updates = { lightTableRecipe: recipe || null }
+        if (src) updates.src = src
+        if (name) updates.assetName = name
+        updateElement(target.pageIdx, target.elementId, updates)
+        return true
+    }
+
+    /** Locate an element in the current project without mutating state. */
+    const findElement = (pageIdx, elementId) =>
+        vpState.currentProject?.pages?.[pageIdx]?.elements?.find(element => element.id === elementId) || null
+
+    /**
+     * Swap the photograph inside a frame or image while keeping geometry,
+     * mats, captions and layer order untouched. Used by the context menu's
+     * "Replace image" and by the library picker.
+     */
+    const replaceElementImage = (pageIdx, elementId, asset) => {
+        if (!asset?.src) return false
+        const element = findElement(pageIdx, elementId)
+        if (!element) return false
+        const updates = { src: asset.src, assetId: asset.id, assetName: asset.name || asset.id }
+        if (asset.recipe) updates.lightTableRecipe = asset.recipe
+        updateElement(pageIdx, elementId, updates)
+        return true
+    }
+
+    /**
+     * Fill every empty photo frame on a page from the library in one action.
+     * Returns the number of frames filled so the caller can report it.
+     */
+    const fillEmptyFrames = (pageIdx, assets = []) => {
+        const page = vpState.currentProject?.pages?.[pageIdx]
+        if (!page || !assets.length) return 0
+        const empties = (page.elements || [])
+            .filter(el => el.type === 'photo-frame' && !el.src)
+            .sort((a, b) => (a.y || 0) - (b.y || 0) || (a.x || 0) - (b.x || 0))
+        if (!empties.length) return 0
+        const updates = {}
+        empties.slice(0, assets.length).forEach((frameElement, index) => {
+            const asset = assets[index]
+            updates[frameElement.id] = {
+                src: asset.src,
+                assetId: asset.id,
+                assetName: asset.name || asset.id,
+                lightTableRecipe: asset.recipe || null
+            }
+        })
+        updateElements(pageIdx, updates)
+        return Math.min(empties.length, assets.length)
+    }
+
+    /** Batch element update — one history entry instead of one per frame. */
+    const updateElements = (pageIdx, updatesById) => {
+        const ids = Object.keys(updatesById || {})
+        if (!ids.length) return
+        setVpState(prev => {
+            if (!prev.currentProject) return prev
+            const project = JSON.parse(JSON.stringify(prev.currentProject))
+            const page = project.pages[pageIdx]
+            if (!page) return prev
+            page.elements = (page.elements || []).map(el =>
+                updatesById[el.id] ? { ...el, ...updatesById[el.id] } : el)
+            const projIdx = prev.projects.findIndex(p => p.id === project.id)
+            const projects = projIdx >= 0
+                ? prev.projects.map((p, i) => i === projIdx ? { ...project, _dirty: true } : p)
+                : prev.projects
+            return { ...prev, currentProject: project, projects }
+        })
+        pushHistory(vpState.currentProject, { immediate: false })
+    }
+
     const savePageAsTemplate = (name, pageIdx = vpState.selection?.pageIdx || 0) => {
         const page = vpState.currentProject?.pages?.[pageIdx]
         if (!page || !name?.trim()) return false
@@ -1491,6 +1817,18 @@ const VPProvider = ({ children }) => {
         rememberFont,
         addImportedAsset,
         addImportedAssets,
+        addImportedAssetsWithRoom,
+        updateImportedAsset,
+        toggleAssetFlag,
+        removeImportedAssets,
+        getAssetById,
+        openLightTableFor,
+        applyRecipeToElement,
+        replaceElementImage,
+        fillEmptyFrames,
+        updateElements,
+        findElement,
+        addPageFromPortfolioLayout,
         publishZine,
         publishToNode,
         themes,

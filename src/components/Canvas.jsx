@@ -21,6 +21,11 @@ import { resolvePublicationAsset } from '../utils/assets.js'
  * - page: the page object containing `elements`, `background`, `texture`, etc.
  * - pageIdx: index of the page within the project
  * - snapOn, gridOn, zoom: visual/editor flags
+ * - renderContextMenu: optional override for the right-click menu. The
+ *   photography workspace passes its own menu here, because replacing an
+ *   image or changing how it fills is not an action the zine editor offers —
+ *   without this, right-clicking a photograph in a portfolio would silently
+ *   fall back to zine-only tools.
  */
 
 const styles = {
@@ -30,7 +35,7 @@ const styles = {
     }
 }
 
-function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, importFiles }) {
+function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, importFiles, onRequestImage, onDropAsset, renderContextMenu }) {
     const { vpState, updateVpState, addImportedAsset, setPageAudio } = useVP()
     const { selection } = vpState
     const { startDrag, startResize, startRotate, updateElement } = useEditor(zoom, snapOn)
@@ -70,6 +75,9 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
         else updateVpState({ selection: { type: 'page', id: page.id, pageIdx } })
         const rect = canvasRef.current.getBoundingClientRect()
         const scale = Math.max(0.01, zoom / 100)
+        // Visible in the DOM so a test can assert the handler ran, rather than
+        // relying on console output the QA harness does not surface.
+        canvasRef.current?.setAttribute('data-ctx-fires', String((Number(canvasRef.current.getAttribute('data-ctx-fires')) || 0) + 1))
         setCtxMenu({
             visible: true,
             x: (e.clientX - rect.left) / scale,
@@ -99,6 +107,8 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
                             el={el}
                             pageIdx={pageIdx}
                             isSelected={selection.type === 'element' && selection.id === el.id}
+                            onRequestImage={onRequestImage}
+                            onDropAsset={onDropAsset}
                             handlers={{
                                 startDrag,
                                 startResize,
@@ -110,17 +120,26 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
                         />
                     ))}
             </div>
-            <ContextMenu
-                x={ctxMenu.x}
-                y={ctxMenu.y}
-                visible={ctxMenu.visible}
-                onClose={() => setCtxMenu(prev => ({ ...prev, visible: false }))}
-                selection={selection}
-                pageIdx={pageIdx}
-                selectedElement={ctxMenu.element}
-            />
+            {renderContextMenu ? renderContextMenu({
+                x: ctxMenu.x,
+                y: ctxMenu.y,
+                visible: ctxMenu.visible,
+                element: ctxMenu.element,
+                pageIdx,
+                page,
+                onClose: () => setCtxMenu(prev => ({ ...prev, visible: false }))
+            }) : (
+                <ContextMenu
+                    x={ctxMenu.x}
+                    y={ctxMenu.y}
+                    visible={ctxMenu.visible}
+                    onClose={() => setCtxMenu(prev => ({ ...prev, visible: false }))}
+                    selection={selection}
+                    pageIdx={pageIdx}
+                    selectedElement={ctxMenu.element}
+                />
+            )}
         </>
     )
 }
-
 export default Canvas

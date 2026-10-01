@@ -1,0 +1,1507 @@
+/*
+ * Portfolio workspace
+ * ---------------------------------------------------------------------------
+ * Chrome is strictly achromatic (see tokens.css): a hue cast in the UI shifts
+ * the perceived colour of the photograph being judged. The only warm tones in
+ * this file are inside generated artwork previews, never on controls.
+ *
+ * The layout follows the photographer's loop:
+ *   Library → Spread → Frame inspector
+ * so the library never collapses and the spread is always the largest surface.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Shell
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-workspace {
+    display: grid;
+    grid-template-rows: 48px minmax(0, 1fr) 26px;
+    height: calc(100vh - var(--topnav-h));
+    min-height: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--type-md);
+}
+
+.pf-body {
+    display: grid;
+    /* A wider library than the zine editor: browsing a shoot is the primary
+       task, and a 240px rail only ever shows six thumbnails. */
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(260px, 300px);
+    min-height: 0;
+}
+
+.pf-left,
+.pf-right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface-0);
+}
+
+.pf-left {
+    border-right: 1px solid var(--line);
+}
+
+.pf-right {
+    border-left: 1px solid var(--line);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Top bar
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: 0 var(--space-md);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-0);
+}
+
+.pf-topbar-left,
+.pf-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex: 1 1 0;
+}
+
+.pf-topbar-right {
+    justify-content: flex-end;
+}
+
+.pf-topbar-center {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-size: var(--type-xs);
+    color: var(--text-dim);
+}
+
+.pf-topbar-divider,
+.pf-frame-strip-divider {
+    width: 1px;
+    height: 18px;
+    margin-inline: var(--space-sm);
+    background: var(--line);
+    flex: 0 0 auto;
+}
+
+/* Type presets sit inline with the add buttons. They are secondary to
+   "Frame" — most of a book is photographs — so they carry no chrome of
+   their own and are separated by a single hairline. */
+.pf-text-menu {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: var(--space-xs);
+    padding-left: var(--space-sm);
+    border-left: 1px solid var(--line);
+}
+
+.pf-text-menu .pf-btn {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-dim);
+    padding-inline: 6px;
+}
+
+.pf-text-menu .pf-btn:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+/* The focal-point picker in the inspector mirrors the context-menu control so
+   the two read as the same idea in two places. */
+.pf-focal-row {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.pf-focal {
+    flex: 1 1 0;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease);
+}
+
+.pf-focal:hover {
+    border-color: var(--line-strong);
+}
+
+.pf-focal.active {
+    border-color: var(--accent);
+    background: var(--surface-3);
+}
+
+.pf-spread-label {
+    white-space: nowrap;
+}
+
+.pf-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.pf-btn:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--line-strong);
+}
+
+.pf-btn:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.pf-btn.ghost {
+    background: transparent;
+}
+
+.pf-btn.ghost:hover:not(:disabled) {
+    background: var(--surface-2);
+}
+
+.pf-btn.active {
+    background: var(--accent-quiet);
+    border-color: var(--accent-line);
+    color: var(--text);
+}
+
+.pf-btn.primary {
+    background: var(--surface-4);
+    border-color: var(--line-strong);
+    font-weight: 600;
+}
+
+.pf-btn.danger {
+    color: var(--danger);
+    border-color: var(--danger-quiet);
+}
+
+.pf-btn.danger:hover:not(:disabled) {
+    background: var(--danger-quiet);
+}
+
+.pf-spacer {
+    flex: 1 1 auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tabs
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-0);
+}
+
+.pf-tab {
+    flex: 1 1 0;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--type-sm);
+    font-weight: 500;
+    letter-spacing: .04em;
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.pf-tab:hover {
+    color: var(--text-muted);
+}
+
+.pf-tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Library
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-library {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+    position: relative;
+}
+
+.pf-library.drop-active::after {
+    content: 'Drop photographs to import';
+    position: absolute;
+    inset: var(--space-sm);
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--accent-line);
+    border-radius: var(--radius-md);
+    background: var(--accent-quiet);
+    color: var(--text);
+    font-size: var(--type-sm);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.pf-library-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.pf-library-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.pf-library-title h4 {
+    margin: 0;
+    font-size: var(--type-xs);
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.pf-library-count {
+    font-size: var(--type-xs);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-library-search {
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 9px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-sm);
+}
+
+.pf-library-search::placeholder {
+    color: var(--text-faint);
+}
+
+.pf-library-search:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: -1px;
+}
+
+.pf-library-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.pf-select {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.pf-select span {
+    font-size: var(--type-xxs);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.pf-select select {
+    width: 100%;
+    min-height: 28px;
+    padding: 3px 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-sm);
+    cursor: pointer;
+}
+
+.pf-library-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.pf-library-hint {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--accent-quiet);
+    color: var(--text-muted);
+    font-size: var(--type-xs);
+    line-height: 1.45;
+}
+
+/* Grid — dense, uniform, and scroll-fast for hundreds of photographs.
+   Explicit row height: an `aspect-ratio` thumb inside an auto-sized grid row
+   forms a circular dependency with the intrinsic image size, which collapses
+   multi-megapixel photographs to a sliver. */
+.pf-library-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb-min, 104px), 1fr));
+    /* Rows are sized from the same token as the columns so the cells stay
+       square-ish whatever density is selected. */
+    grid-auto-rows: calc(var(--thumb-min, 104px) * 0.86);
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md) var(--space-2xl);
+    align-content: start;
+}
+
+.pf-thumb {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease);
+}
+
+.pf-thumb:hover {
+    border-color: var(--line-strong);
+}
+
+.pf-thumb.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* The keyboard review cursor: a bright ring that reads even on a white
+   photograph, unlike a selection border which can disappear into highlights. */
+.pf-thumb.cursor {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pf-library-grid:focus-visible {
+    outline: 1px solid var(--line-strong);
+    outline-offset: -1px;
+}
+
+.pf-thumb img {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+}
+
+.pf-thumb-meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 14px 6px 4px;
+    background: linear-gradient(to top, rgba(0, 0, 0, .82), transparent);
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease);
+    pointer-events: none;
+}
+
+.pf-thumb:hover .pf-thumb-meta {
+    opacity: 1;
+}
+
+.pf-thumb-name {
+    font-size: var(--type-xxs);
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf-thumb-dims {
+    font-size: 9px;
+    color: rgba(255, 255, 255, .6);
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-thumb-badges {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    display: flex;
+    gap: 3px;
+    font-size: 10px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.pf-thumb-badges span {
+    padding: 2px 4px;
+    border-radius: var(--radius-xs);
+    background: rgba(0, 0, 0, .62);
+    color: #fff;
+}
+
+.pf-thumb-badges .pf-used {
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-thumb-tools {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease);
+}
+
+.pf-thumb:hover .pf-thumb-tools,
+.pf-thumb.selected .pf-thumb-tools {
+    opacity: 1;
+}
+
+.pf-thumb-tools button {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: rgba(0, 0, 0, .68);
+    color: #fff;
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.pf-thumb-tools button:hover {
+    background: var(--surface-4);
+}
+
+/* Rating controls. The pick star is the one a photographer uses constantly,
+   so it is the only one that carries colour when active. */
+.pf-thumb-tools .pf-rate.is-pick {
+    background: var(--accent);
+    color: #fff;
+}
+
+.pf-pick-badge {
+    background: var(--accent) !important;
+    color: #fff !important;
+}
+
+.pf-reject-badge {
+    opacity: .7;
+}
+
+/* Density switch. Three squares of increasing count is the conventional
+   metaphor for thumbnail size and needs no label. */
+.pf-density {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.pf-density-btn {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    cursor: pointer;
+}
+
+.pf-density-btn:hover {
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.pf-density-btn.active {
+    background: var(--surface-3);
+    border-color: var(--line-strong);
+}
+
+.pf-density-glyph {
+    display: block;
+    background: var(--text-dim);
+}
+
+.pf-density-btn.active .pf-density-glyph {
+    background: var(--text);
+}
+
+.pf-density-glyph.is-comfortable {
+    width: 12px;
+    height: 12px;
+}
+
+.pf-density-glyph.is-default {
+    width: 9px;
+    height: 9px;
+}
+
+.pf-density-glyph.is-compact {
+    width: 6px;
+    height: 6px;
+}
+
+.pf-library-empty {
+    grid-column: 1 / -1;
+    padding: var(--space-2xl) var(--space-lg);
+    text-align: center;
+    color: var(--text-dim);
+    font-size: var(--type-sm);
+    line-height: 1.5;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-md);
+}
+
+/* The bounded-render notice. It occupies a whole row and reads as a status
+   line rather than a photo, so it must not sit in the grid's fixed row height. */
+.pf-library-more {
+    grid-column: 1 / -1;
+    padding: var(--space-sm) 0 var(--space-md);
+    text-align: center;
+    color: var(--text-dim);
+    font-size: var(--type-xxs);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard affordances. Kept on one line and dimmed: it is a reminder, not
+   a control, and it must never compete with the thumbnails for attention. */
+.pf-library-legend {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: var(--space-xs) var(--space-md);
+    border-top: 1px solid var(--line);
+    background: var(--surface-0);
+    color: var(--text-dim);
+    font-size: var(--type-xxs);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Layouts gallery
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-layouts {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.pf-layouts-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.pf-layouts-categories {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.pf-chip {
+    padding: 3px 9px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--type-xxs);
+    letter-spacing: .04em;
+    cursor: pointer;
+}
+
+.pf-chip:hover {
+    color: var(--text);
+    border-color: var(--line-strong);
+}
+
+.pf-chip.active {
+    background: var(--accent-quiet);
+    border-color: var(--accent-line);
+    color: var(--text);
+}
+
+.pf-fill-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--type-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.pf-fill-toggle input {
+    accent-color: var(--accent);
+}
+
+.pf-layout-confirm {
+    margin: var(--space-sm) var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius-md);
+    background: var(--accent-quiet);
+}
+
+.pf-layout-confirm p {
+    margin: 0 0 var(--space-sm);
+    font-size: var(--type-xs);
+    line-height: 1.5;
+}
+
+.pf-layout-confirm-actions {
+    display: flex;
+    gap: var(--space-xs);
+    justify-content: flex-end;
+}
+
+.pf-layout-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-md) var(--space-2xl);
+    align-content: start;
+}
+
+.pf-layout-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.pf-layout-card:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-2);
+}
+
+.pf-layout-preview {
+    display: grid;
+    place-items: center;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+}
+
+.pf-layout-canvas {
+    position: relative;
+    display: block;
+}
+
+.pf-layout-frame {
+    position: absolute;
+    box-sizing: border-box;
+    display: block;
+}
+
+.pf-layout-window {
+    position: absolute;
+    inset: 8%;
+    display: block;
+    background: rgba(255, 255, 255, .07);
+}
+
+.pf-layout-text {
+    position: absolute;
+    display: block;
+    border-radius: 1px;
+}
+
+.pf-layout-rule {
+    position: absolute;
+    height: 1px;
+    display: block;
+}
+
+.pf-layout-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pf-layout-meta strong {
+    font-size: var(--type-sm);
+    font-weight: 600;
+}
+
+.pf-layout-meta span {
+    font-size: var(--type-xxs);
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+
+.pf-layout-meta em {
+    font-size: 9px;
+    font-style: normal;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Spreads list
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-spreads {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+.pf-spreads-actions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.pf-spread-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-sm);
+}
+
+.pf-spread-item {
+    display: grid;
+    grid-template-columns: 26px 1fr auto;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: 8px var(--space-sm);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-sm);
+    text-align: left;
+    cursor: pointer;
+}
+
+.pf-spread-item:hover {
+    background: var(--surface-2);
+}
+
+.pf-spread-item.active {
+    background: var(--accent-quiet);
+    border-color: var(--accent-line);
+}
+
+.pf-spread-num {
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-spread-meta {
+    font-size: var(--type-xxs);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Canvas
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-canvas-area {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--surface-sunken);
+}
+
+.pf-canvas-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: grid;
+    place-items: center;
+    padding: var(--space-2xl);
+}
+
+.pf-canvas-zoom {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.pf-zoombar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: 5px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-0);
+    font-size: var(--type-xs);
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-zoombar button {
+    min-width: 26px;
+    min-height: 22px;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-xs);
+    cursor: pointer;
+}
+
+.pf-zoombar button:hover {
+    background: var(--surface-3);
+}
+
+/* Quick mount strip above the spread — the most common frame change is a
+   single click, so it never has to live in a menu.
+   There are enough treatments that they cannot always fit beside the canvas,
+   so the strip scrolls rather than wrapping or clipping: a hidden preset is a
+   preset nobody discovers. */
+.pf-frame-strip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex: 0 0 auto;
+    padding: 6px var(--space-md);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-0);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.pf-frame-strip::-webkit-scrollbar {
+    display: none;
+}
+
+/* Chips keep their size while the strip scrolls, so a long list of mounts
+   scrolls rather than each one squashing to fit. */
+.pf-frame-strip>* {
+    flex: 0 0 auto;
+}
+
+.pf-frame-strip-label {
+    font-size: var(--type-xxs);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-right: var(--space-xs);
+}
+
+.pf-frame-chip {
+    width: 26px;
+    height: 26px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xs);
+    background: transparent;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.pf-frame-chip:hover {
+    border-color: var(--line-strong);
+}
+
+.pf-frame-chip.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pf-frame-chip-swatch {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 1px;
+}
+
+.pf-fit-chip {
+    padding: 4px 9px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--type-xxs);
+    white-space: nowrap;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.pf-fit-chip:hover {
+    color: var(--text);
+}
+
+.pf-fit-chip.active {
+    background: var(--accent-quiet);
+    border-color: var(--accent-line);
+    color: var(--text);
+}
+
+.pf-frame-more {
+    margin-left: auto;
+    min-width: 24px;
+    min-height: 24px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Inspector
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-inspector {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.pf-inspector h4 {
+    margin: 0;
+    font-size: var(--type-xs);
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.pf-inspector-empty {
+    justify-content: flex-start;
+    gap: var(--space-lg);
+}
+
+.pf-inspector-row {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.pf-inspector-source {
+    margin: 0;
+    font-size: var(--type-xs);
+    color: var(--text-dim);
+}
+
+.pf-inspector-source strong {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.pf-inspector-badge {
+    margin: 0;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--positive-quiet);
+    color: var(--positive);
+    font-size: var(--type-xxs);
+}
+
+.pf-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pf-field label {
+    font-size: var(--type-xxs);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.pf-field input[type="text"],
+.pf-field input[type="number"],
+.pf-field select {
+    width: 100%;
+    min-height: 28px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-sm);
+}
+
+.pf-field input[type="color"] {
+    width: 100%;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    cursor: pointer;
+}
+
+.pf-field input[type="range"] {
+    accent-color: var(--accent);
+}
+
+.pf-field-value {
+    font-size: var(--type-xxs);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-input-group {
+    display: grid;
+    grid-template-columns: 1fr 44px;
+    gap: var(--space-xs);
+}
+
+.pf-preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.pf-layers {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pf-layers h4 {
+    margin: 0 0 var(--space-sm);
+    font-size: var(--type-xs);
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.pf-layer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 5px var(--space-sm);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--type-sm);
+}
+
+.pf-layer:hover {
+    background: var(--surface-2);
+}
+
+.pf-layer.active {
+    background: var(--accent-quiet);
+}
+
+.pf-layer-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf-layer-btn {
+    border: 0;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: var(--type-xs);
+}
+
+.pf-layer-btn:hover {
+    color: var(--text);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Status bar
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pf-statusbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    padding: 0 var(--space-md);
+    border-top: 1px solid var(--line);
+    background: var(--surface-0);
+    font-size: var(--type-xxs);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.pf-statusbar .spacer {
+    flex: 1 1 auto;
+}
+
+/* Light Table return banner */
+.lt-return-hint {
+    margin: 0;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--accent-line);
+    background: var(--accent-quiet);
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: var(--type-xs);
+    line-height: 1.5;
+}
+
+.lt-return-hint strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Frame surface (canvas rendering)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.el-photo-frame {
+    position: relative;
+}
+
+.el-photo-frame-empty {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: repeating-linear-gradient(45deg, #1a1a1c 0 8px, #202023 8px 16px);
+    color: #8b8f96;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    text-align: center;
+    cursor: pointer;
+}
+
+.el-photo-frame-empty:hover {
+    background: repeating-linear-gradient(45deg, #222226 0 8px, #28282d 8px 16px);
+    color: var(--text-muted);
+}
+
+.el-photo-frame-plus {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    opacity: .7;
+}
+
+.el-photo-frame-caption {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 6px;
+    color: #6f6a60;
+    font-family: 'DM Sans', var(--font-ui);
+    font-size: 8px;
+    letter-spacing: .1em;
+    text-align: center;
+    overflow: hidden;
+}
+
+.el-photo-frame-caption-hint {
+    opacity: .35;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Context menu additions
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.portfolio-ctx {
+    min-width: 232px;
+    max-width: 280px;
+}
+
+.ctx-menu-label {
+    padding: 5px 12px 3px;
+    font-size: var(--type-xxs);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.ctx-menu-sub {
+    margin: 2px 0 4px;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.ctx-menu-item.active {
+    color: var(--text);
+    background: var(--accent-quiet);
+}
+
+.ctx-menu-empty {
+    margin: 0;
+    padding: 8px;
+    font-size: var(--type-xxs);
+    color: var(--text-dim);
+}
+
+.ctx-library-item {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* A menu entry that is currently unavailable. It stays visible so the user
+   learns the action exists, but it cannot be activated. */
+.ctx-menu-item.is-disabled {
+    opacity: .4;
+    cursor: default;
+    pointer-events: none;
+}
+
+.ctx-library-item img {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    border-radius: var(--radius-xs);
+    background: var(--surface-sunken);
+}
+
+.ctx-library-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--type-xs);
+}
+
+/* The "already developed" marker on a library row. Dimmed so it reads as
+   status rather than as another control. */
+.ctx-library-item em {
+    font-style: normal;
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+/* A row of equal-width controls inside a submenu (the focal-point picker). */
+.ctx-menu-row {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+}
+
+.ctx-focal {
+    flex: 1 1 0;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+    cursor: pointer;
+}
+
+.ctx-focal:hover {
+    border-color: var(--line-strong);
+}
+
+.ctx-focal.active {
+    border-color: var(--accent);
+    background: var(--surface-3);
+}
+
+/* A miniature of the frame with the dot at the chosen corner or edge — the
+   position is far easier to recognise than to read from a word. */
+.ctx-focal-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-dim);
+}
+
+.ctx-focal.active .ctx-focal-dot {
+    background: var(--accent);
+}
+
+.ctx-focal-dot.is-top {
+    align-self: start;
+    margin-top: 4px;
+}
+
+.ctx-focal-dot.is-bottom {
+    align-self: end;
+    margin-bottom: 4px;
+}
+
+.ctx-focal-dot.is-left {
+    justify-self: start;
+    margin-left: 4px;
+}
+
+.ctx-focal-dot.is-right {
+    justify-self: end;
+    margin-right: 4px;
+}
+
+.ctx-menu-swatches {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 2px;
+}
+
+.ctx-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 9px;
+    cursor: pointer;
+}
+
+.ctx-swatch:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.ctx-swatch.active {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.ctx-swatch-chip {
+    display: block;
+    width: 100%;
+    height: 26px;
+    border-radius: 2px;
+}
+
+.ctx-swatch-label {
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Narrow viewports — the library and inspector fold away so the spread keeps
+   the majority of the screen rather than being squeezed to nothing.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1180px) {
+    .pf-body {
+        grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+    }
+
+    .pf-right {
+        display: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .pf-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pf-left {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .pf-thumb,
+    .pf-thumb-meta,
+    .pf-thumb-tools,
+    .pf-btn,
+    .pf-tab {
+        transition: none;
+    }
+}

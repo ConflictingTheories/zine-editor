@@ -558,6 +558,24 @@ textarea {
     position: relative;
 }
 
+/* The create cards are real <button> elements so they are reachable by
+   keyboard and exposed to assistive tech. Native button chrome is reset, but
+   the focus ring is deliberately kept visible. */
+button.zine-card {
+    display: block;
+    width: 100%;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    appearance: none;
+}
+
+button.zine-card:focus-visible {
+    outline: 2px solid var(--vp-accent);
+    outline-offset: 2px;
+}
+
 .zine-card:hover {
     transform: translateY(-2px);
     border-color: var(--vp-accent);
@@ -582,7 +600,9 @@ textarea {
     padding: 16px;
 }
 
-.zine-card-body h3 {
+.zine-card-body h3,
+.zine-card-title {
+    display: block;
     font-size: 1em;
     font-weight: 600;
     margin-bottom: 4px;
@@ -591,7 +611,10 @@ textarea {
     text-overflow: ellipsis;
 }
 
-.zine-card-body p {
+.zine-card-body p,
+.zine-card-sub {
+    display: block;
+    margin: 0;
     font-size: 0.8em;
     color: var(--vp-text-dim);
 }

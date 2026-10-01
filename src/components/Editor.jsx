@@ -9,6 +9,7 @@ import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 import ElementContent from './ElementContent.jsx'
 import { BUILT_IN_TEMPLATES } from '../data/pageTemplates.js'
+import PortfolioWorkspace from './portfolio/PortfolioWorkspace.jsx'
 import { PAGE_W, PAGE_H } from '../constants.js'
 
 /**
@@ -160,7 +161,14 @@ function Editor() {
     }, [pages.length, pageIdx, safePageIdx])
 
     if (!project || !pages.length) {
-        return <div className="editor-empty">No project selected. Create or open a zine from the Dashboard.</div>
+        return <div className="editor-empty">No project selected. Create or open a book from the Dashboard.</div>
+    }
+
+    // Portfolio projects get a photography-native workspace. Sharing the zine
+    // editor's chrome and toolbar was the core mismatch: the flows are
+    // genuinely different, not the same tool with fewer buttons.
+    if (isPortfolio) {
+        return <PortfolioWorkspace project={project} pageIdx={pageIdx} />
     }
 
     const handleAddText = () => {

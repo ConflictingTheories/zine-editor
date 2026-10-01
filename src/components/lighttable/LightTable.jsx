@@ -49,7 +49,7 @@ const ASPECTS = [
 ]
 
 function LightTable() {
-    const { vpState, updateVpState, addImportedAssets, addElement, toast } = useVP()
+    const { vpState, updateVpState, addImportedAssets, addElement, updateImportedAsset, applyRecipeToElement, toast } = useVP()
 
     const gallery = vpState.library?.imported || []
 
@@ -304,10 +304,18 @@ function LightTable() {
         if (!selectedAsset || !vpState.currentProject) return
         const pageIdx = vpState.selection?.pageIdx || 0
         addElement(pageIdx, {
-            type: 'image',
+            type: 'photo-frame',
             src: selectedAsset.src,
+            assetId: selectedAsset.id,
+            assetName: selectedAsset.name,
             x: 80, y: 80, width: 320, height: 240,
-            objectFit: 'cover',
+            imageFit: 'cover',
+            frameStyle: 'mat',
+            frameWidth: 20,
+            frameColor: '#faf8f4',
+            frameBorderWidth: 0,
+            frameBorderColor: '#111111',
+            frameShadow: '0 6px 18px rgba(0,0,0,.18)',
             lightTableRecipe: serialiseRecipe(recipeRef.current)
         })
         toast('Placed on the current spread with the live recipe attached', 'success')
@@ -371,6 +379,66 @@ function LightTable() {
         lightTableAsset: null,
         lightTableReturnView: null
     })
+
+    // ── Non-destructive return to the book ─────────────────────────────────
+    // When the Light Table was opened from a frame, "Apply" writes the recipe
+    // back to that exact element. Nothing is re-imported, the frame keeps its
+    // size, mat and caption, and the user lands exactly where they left off.
+    const returnTarget = vpState.lightTableTarget
+
+    const commitRecipe = useCallback(({ bake = false } = {}) => {
+        if (!selectedAsset) return
+        const serialised = serialiseRecipe(recipeRef.current)
+        const clearDraft = () => setDrafts(prev => {
+            const next = { ...prev }
+            delete next[selectedId]
+            return next
+        })
+
+        if (bake) {
+            // Flatten into pixels — the frame keeps its geometry, but the
+            // grade now lives in the image itself.
+            const img = imageRef.current
+            if (img) {
+                const out = document.createElement('canvas')
+                renderRecipe(img, out, recipeRef.current, { maxWidth: 2400, maxHeight: 2400 })
+                if (applyToTarget({ src: out.toDataURL('image/jpeg', 0.94), recipe: serialised })) {
+                    clearDraft()
+                    return
+                }
+            }
+        }
+
+        // Store the recipe against the library asset so the edit is permanent
+        // and survives re-opening the photo, then mirror it onto the frame.
+        updateImportedAsset(selectedAsset.id, { recipe: serialised })
+        if (applyToTarget({ recipe: serialised })) {
+            clearDraft()
+            return
+        }
+        toast('Recipe saved to the library — open it again any time to keep adjusting', 'success')
+    }, [selectedAsset, applyToTarget, updateImportedAsset, toast])
+
+    const applyToTarget = useCallback(({ src, recipe, name }) => {
+        if (!returnTarget?.elementId) return false
+        const applied = applyRecipeToElement(returnTarget, {
+            src,
+            recipe,
+            name: name || selectedAsset?.name
+        })
+        if (applied) {
+            updateVpState({
+                currentView: 'editor',
+                lightTableAsset: null,
+                lightTableTarget: null,
+                lightTableReturnView: null,
+                selection: { type: 'element', id: returnTarget.elementId, pageIdx: returnTarget.pageIdx }
+            })
+            toast('Developed — your frame is updated in place', 'success')
+        }
+        return applied
+    }, [returnTarget, applyRecipeToElement, selectedAsset, updateVpState, toast])
+
 
     // ── Keyboard shortcuts ───────────────────────────────────────────────
     useEffect(() => {
@@ -462,6 +530,26 @@ function LightTable() {
                     </button>
                     {vpState.currentProject && (
                         <button className="lt-btn" onClick={placeOnSpread} disabled={!selectedAsset}>Place</button>
+                    )}
+                    {returnTarget && (
+                        <>
+                            <button
+                                className="lt-btn primary"
+                                onClick={() => commitRecipe({ bake: false })}
+                                disabled={!selectedAsset}
+                                title="Write this grade back onto the frame you came from — non-destructive"
+                            >
+                                Apply to frame
+                            </button>
+                            <button
+                                className="lt-btn"
+                                onClick={() => commitRecipe({ bake: true })}
+                                disabled={!selectedAsset}
+                                title="Flatten the grade into pixels and swap the frame's image"
+                            >
+                                Bake &amp; apply
+                            </button>
+                        </>
                     )}
                     <button className="lt-btn primary" onClick={saveToLibrary} disabled={!selectedAsset}>Save</button>
                     <button className="lt-btn" onClick={downloadImage} disabled={!selectedAsset} title="Download a full-resolution JPEG">↓</button>
@@ -612,6 +700,13 @@ function LightTable() {
                         ))}
                     </div>
                 </div>
+
+                {returnTarget && (
+                    <p className="lt-return-hint">
+                        Developing for a frame in your book. <strong>Apply to frame</strong> keeps the
+                        image as a live recipe — you can keep adjusting it later.
+                    </p>
+                )}
 
                 <div className="lt-inspector-body">
                     {/* ── Develop ─────────────────────────────────── */}
