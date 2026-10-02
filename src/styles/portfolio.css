@@ -94,6 +94,75 @@
     color: var(--text-dim);
 }
 
+/* Page / spread stepper. The book is a list of pages; this moves through it
+   one visible group at a time. */
+.pf-page-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.pf-page-nav button {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+}
+
+.pf-page-nav button:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.pf-page-nav button:disabled {
+    opacity: .3;
+    cursor: default;
+}
+
+.pf-spread-label {
+    min-width: 92px;
+    text-align: center;
+}
+
+/* One page or two. A cover or back cover cannot be two pages, so the control
+   shows a single active state rather than pretending both are available. */
+.pf-view-toggle {
+    display: flex;
+    padding: 1px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.pf-view-toggle button {
+    padding: 3px 8px;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pf-view-toggle button.active {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
 /* Trim size. Not a settings-pane field: it is the one choice that changes
    every measurement on the canvas, so it belongs next to the spread number. */
 .pf-paper-picker {
@@ -790,13 +859,14 @@
 
 .pf-layout-preview {
     display: grid;
-    place-items: center;
+    /* The canvas is exactly the size of the box, so centring it inside the
+       padding is a no-op visually but shifts every absolutely-positioned frame
+       by the padding, which made the leftmost margin look larger than the right
+       one. */
+    place-items: start;
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
     background: var(--surface-sunken);
-    /* The preview is a fixed-size miniature scaled from a full page, so a
-       portrait layout is much narrower than its 108px-tall box. Without this
-       the widest frame in a wide layout paints outside the card. */
     overflow: hidden;
 }
 
@@ -949,16 +1019,38 @@
     flex: 0 0 auto;
 }
 
-/* The page is laid out at its true trim size and scaled to fit the zoom box.
-   Because the transform is on this element, every child — elements, guides,
-   handles — scales together and keeps its page-pixel coordinates, which is what
-   lets the drag maths stay in page space regardless of zoom. */
 .pf-page {
     position: absolute;
     top: 0;
     left: 0;
     transform-origin: top left;
     will-change: transform;
+}
+
+/* A spread is two real page canvases with the binding gutter between them.
+   Each keeps its own elements and its own page index, so dragging across the
+   gutter edits two different pages. */
+.pf-sheet {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+}
+
+.pf-sheet-page {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.pf-gutter {
+    flex: 0 0 auto;
+    /* The gutter is where the binding eats into the sheet. It is drawn as a
+       shadowed crease rather than paper, so it never reads as part of a page. */
+    background:
+        linear-gradient(90deg,
+            rgba(0, 0, 0, .16) 0%,
+            rgba(0, 0, 0, .05) 45%,
+            rgba(0, 0, 0, .05) 55%,
+            rgba(0, 0, 0, .16) 100%);
 }
 
 .pf-zoombar {
@@ -1317,11 +1409,9 @@
    from the general safe area. */
 .pf-guide-gutter {
     position: absolute;
-    background: repeating-linear-gradient(
-        45deg,
-        color-mix(in srgb, var(--accent) 12%, transparent) 0 4px,
-        transparent 4px 8px
-    );
+    background: repeating-linear-gradient(45deg,
+            color-mix(in srgb, var(--accent) 12%, transparent) 0 4px,
+            transparent 4px 8px);
     border-right: 1px solid var(--accent-line);
 }
 

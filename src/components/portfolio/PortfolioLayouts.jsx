@@ -23,6 +23,7 @@ import { useVP } from '../../context/VPContext.jsx'
  * not the arrangement they got. Preview and reality are now the same call.
  */
 const PREVIEW_H = 120
+const PREVIEW_MAX_W = 140
 
 const LayoutPreview = ({ layout, paperSize }) => {
     // A landscape layout needs landscape geometry. Reusing the *current page's*
@@ -46,8 +47,13 @@ const LayoutPreview = ({ layout, paperSize }) => {
 
     const width = trim.width
     const height = trim.height
-    const scale = PREVIEW_H / height
-    const boxW = Math.min(140, Math.round(width * scale))
+    // Fit the whole page into the thumbnail, capped on width. A landscape page
+    // is wider than it is tall, so scaling to a fixed 120px *height* alone made
+    // its canvas wider than the box and every frame overflowed to the right.
+    // Scale by whichever axis is tighter.
+    const scale = Math.min(PREVIEW_H / height, PREVIEW_MAX_W / width)
+    const boxW = Math.round(width * scale)
+    const boxH = Math.round(height * scale)
 
     const frames = useMemo(
         () => (page?.elements || []).filter(el => el.type === 'photo-frame'),
@@ -58,13 +64,13 @@ const LayoutPreview = ({ layout, paperSize }) => {
         [page]
     )
 
-    if (!page) return <span className="pf-layout-preview" style={{ width: boxW, height: PREVIEW_H }} />
+    if (!page) return <span className="pf-layout-preview" style={{ width: boxW, height: boxH }} />
 
     return (
-        <span className="pf-layout-preview" style={{ width: boxW, height: PREVIEW_H }}>
+        <span className="pf-layout-preview" style={{ width: boxW, height: boxH }}>
             <span
                 className="pf-layout-canvas"
-                style={{ width: `${boxW}px`, height: `${PREVIEW_H}px` }}
+                style={{ width: `${boxW}px`, height: `${boxH}px` }}
             >
                 {frames.map((el, index) => {
                     const preset = getFramePreset(el.framePreset || 'mat')

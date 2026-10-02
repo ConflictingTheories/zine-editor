@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
+import { filesToAssets, commitAssets, measureAssets } from '../utils/photoImport.js'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 import ElementContent from './ElementContent.jsx'
@@ -226,28 +227,24 @@ function Editor() {
         input.click()
     }
 
-    const importFiles = (files) => {
-        const imageFiles = Array.from(files || []).filter(file => file.type.startsWith('image/'))
-        const reads = imageFiles.map(file => new Promise(resolve => {
-            const reader = new FileReader()
-            reader.onload = event => resolve({ file, src: event.target.result })
-            reader.onerror = () => resolve(null)
-            reader.readAsDataURL(file)
-        }))
-        Promise.all(reads).then(results => {
-            const imported = results.filter(Boolean).map(({ file, src }, index) => ({
-                id: `imported-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-                name: file.name,
-                src,
-                addedAt: new Date().toISOString()
-            }))
-            if (!imported.length) return
-            // Bulk import is library-first. Dropping a whole shoot onto the
-            // active page made the editor unusable and contradicted the media
-            // library workflow; images can be intentionally placed from it.
-            addImportedAssets(imported)
-            toast(`${imported.length} image${imported.length === 1 ? '' : 's'} added to the library`, 'success')
-        })
+    /**
+     * Bulk image import, through the shared photo pipeline.
+     *
+     * This built library records with a base64 `src` and handed them to
+     * `addImportedAssets`. The record is written to localStorage with `src`
+     * stripped, on the understanding the bytes are in IndexedDB — and nothing
+     * here ever put them there, so every bulk-imported photo was listed after a
+     * reload but rendered as a broken image. `commitAssets` is what writes the
+     * bytes, and the Portfolio has always called it.
+     */
+    const importFiles = async (files) => {
+        const created = await filesToAssets(files)
+        if (!created.length) return
+        addImportedAssets(created)
+        measureAssets(created)
+        const settled = await commitAssets(created)
+        addImportedAssets(settled)
+        toast(`${settled.length} image${settled.length === 1 ? '' : 's'} stored in the library`, 'success')
     }
 
     const importAudioFiles = (files) => {

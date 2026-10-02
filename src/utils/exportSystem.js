@@ -1,7 +1,7 @@
 // Adapted from old version's editor.js export methods
 import MCPClient from './mcpClient.js'
 import { PAGE_W, PAGE_H } from '../constants.js'
-import { bookGeometry } from '../lib/bookGeometry.js'
+import { bookGeometry, legacyPageSize } from '../lib/bookGeometry.js'
 import { resolvePublicationAsset } from './assets.js'
 import { printElements } from './publication.js'
 import { packSvrn, unpackSvrn } from '../../packages/svrn-format/src/index.js'
@@ -84,24 +84,105 @@ const MINI_MUSHU = `
     };
 })();`;
 
-export const exportToHTML = (project, embedAssets = false) => {
+const toAssetDataUrl = async (source) => {
+    const response = await fetch(source)
+    if (!response.ok) throw new Error(`Asset request failed (${response.status})`)
+    const blob = await response.blob()
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    let binary = ''
+    for (let offset = 0; offset < bytes.length; offset += 32768) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
+    }
+    return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`
+}
+
+const prepareHtmlExport = async (sourceProject, embedAssets) => {
+    const missingAssets = new Set()
+    const cache = new Map()
+    let embeddedAssets = 0
+    const sourceUrl = (source) => {
+        const resolved = resolvePublicationAsset(source)
+        if (!resolved || /^(data:|gen:|#)/i.test(resolved)) return resolved
+        try { return new URL(resolved, window.location.href).href } catch { return resolved }
+    }
+    const prepareAsset = async (source) => {
+        if (!source || /^(data:|gen:|#)/i.test(source)) return source
+        const url = sourceUrl(source)
+        if (!embedAssets) return url
+        if (!cache.has(url)) {
+            cache.set(url, (async () => {
+                try {
+                    const dataUrl = await toAssetDataUrl(url)
+                    embeddedAssets++
+                    return dataUrl
+                } catch {
+                    missingAssets.add(source)
+                    return url
+                }
+            })())
+        }
+        return cache.get(url)
+    }
+
+    const pages = await Promise.all((sourceProject.pages || []).map(async page => ({
+        ...page,
+        texture: await prepareAsset(page.texture),
+        bgm: await prepareAsset(page.bgm),
+        elements: await Promise.all((page.elements || []).map(async element => ({
+            ...element,
+            src: await prepareAsset(element.src),
+            shaderImage: await prepareAsset(element.shaderImage)
+        })))
+    })))
+
+    let fontsMarkup = `<link rel="stylesheet" href="${new URL('/fonts/fonts.css', window.location.href).href}">`
+    if (embedAssets) {
+        try {
+            const response = await fetch(new URL('/fonts/fonts.css', window.location.href).href)
+            if (!response.ok) throw new Error(`Font stylesheet request failed (${response.status})`)
+            let css = await response.text()
+            const urlPattern = /url\((['"]?)([^)'"\s]+)\1\)/g
+            const urls = [...new Set([...css.matchAll(urlPattern)].map(match => match[2]))]
+            const replacements = new Map(await Promise.all(urls.map(async url => [url, await prepareAsset(url)])))
+            css = css.replace(urlPattern, (_match, _quote, url) => `url("${replacements.get(url) || url}")`)
+            fontsMarkup = `<style>${css}</style>`
+        } catch {
+            missingAssets.add('/fonts/fonts.css')
+            fontsMarkup = ''
+        }
+    }
+
+    return {
+        project: { ...sourceProject, pages },
+        fontsMarkup,
+        embeddedAssets,
+        missingAssets: [...missingAssets]
+    }
+}
+
+export const exportToHTML = async (sourceProject, embedAssets = false) => {
     const ld = document.createElement('div');
     ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
-    ld.innerHTML = '<div>Loading...</div>';
+    ld.innerHTML = '<div>Preparing standalone HTML...</div>';
     document.body.appendChild(ld);
 
-    setTimeout(() => {
-        let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SVRN Publishing Zine</title>
-        <link rel="stylesheet" href="/fonts/fonts.css">
+    try {
+        const { project, fontsMarkup, embeddedAssets, missingAssets } = await prepareHtmlExport(sourceProject, embedAssets)
+        const isPortfolio = project.editorMode === 'photo-portfolio'
+        const pageSizes = project.pages.map(page => isPortfolio
+            ? bookGeometry(project, page)
+            : legacyPageSize(page.orientation === 'landscape'))
+        let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${escapeHtml(project.title || (isPortfolio ? 'Portfolio Book' : 'Zine'))}</title>
+        ${fontsMarkup}
         <style>
-            body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:var(--font-ui, 'Helvetica Neue',Helvetica,Arial,sans-serif);height:100vh;display:flex;flex-direction:column;overflow:hidden}
-            .reader-header{padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
+            body{margin:0;padding:0;background:#121212;color:#e0e0e0;font-family:var(--font-ui, 'Helvetica Neue',Helvetica,Arial,sans-serif);height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+            .reader-header{flex:0 0 auto;padding:15px 20px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;z-index:10}
             .reader-title{font-weight:700;letter-spacing:1px;color:#d4af37;font-size:1.1em}
-            .reader-main{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
-            .page-wrap{width:${PAGE_W}px;height:${PAGE_H}px;background:#fff;box-shadow:0 0 50px rgba(0,0,0,0.6);position:absolute;top:50%;left:50%;margin-top:-${PAGE_H / 2}px;margin-left:-${PAGE_W / 2}px;display:none;transform-origin:center;overflow:hidden}
-            .page-wrap.active{display:block;animation:fadeIn 0.4s cubic-bezier(0.25, 1, 0.5, 1)}
-            @keyframes fadeIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
-            .reader-controls{padding:20px;background:#1a1a1a;border-top:1px solid #333;display:flex;justify-content:center;gap:20px;align-items:center;z-index:10}
+            .reader-main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
+            .page-wrap{width:var(--page-width);height:var(--page-height);background:#fff;box-shadow:0 0 50px rgba(0,0,0,0.6);position:absolute;top:50%;left:50%;display:none;transform:translate(-50%,-50%) scale(var(--page-scale,1));transform-origin:center;overflow:hidden}
+            .page-wrap.active{display:block;animation:fadeIn 0.25s ease}
+            @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+            .reader-controls{flex:0 0 auto;padding:12px;background:#1a1a1a;border-top:1px solid #333;display:flex;justify-content:center;gap:20px;align-items:center;z-index:10}
             .btn{background:transparent;border:1px solid #444;color:#aaa;padding:8px 20px;border-radius:4px;cursor:pointer;transition:all 0.2s;font-size:0.9em;text-transform:uppercase;letter-spacing:0.5px}
             .btn:hover{border-color:#d4af37;color:#d4af37;background:rgba(212,175,55,0.05)}
             .btn:active{transform:translateY(1px)}
@@ -124,20 +205,21 @@ export const exportToHTML = (project, embedAssets = false) => {
             .btn-audio:hover{background:#d4af37;color:#000}
         </style></head><body>`;
 
-        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:var(--font-ui, sans-serif);letter-spacing:4px">SVRN PUBLISHING</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">SOVEREIGN INTERACTIVE ZINE READER</div><button class="start-btn" onclick="startZine()">ENTER REALITY</button></div>`;
+        html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:var(--font-ui, sans-serif);letter-spacing:4px">${escapeHtml(project.title || 'SVRN PUBLISHING')}</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">${isPortfolio ? 'PORTFOLIO BOOK' : 'INTERACTIVE ZINE'}</div><button class="start-btn" onclick="startZine()">Open ${isPortfolio ? 'book' : 'zine'}</button></div>`;
 
         html += `<div class="reader-header">
-            <div class="reader-title">${project.title || 'UNTITLED ZINE'}</div>
+            <div class="reader-title">${escapeHtml(project.title || (isPortfolio ? 'Untitled Portfolio' : 'Untitled Zine'))}</div>
             <button id="vp-mute" class="mute-btn" onclick="toggleMute()" title="Toggle Audio">♪</button>
         </div>`;
 
         html += `<div class="reader-main">`;
 
         project.pages.forEach((p, i) => {
-            html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-bgm="${p.bgm || ''}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${p.password || ''}" style="background:${p.background}">`;
-            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>`;
+            const { width, height } = pageSizes[i]
+            html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-width="${width}" data-height="${height}" data-bgm="${escapeHtml(p.bgm || '')}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${escapeHtml(p.password || '')}" style="--page-width:${width}px;--page-height:${height}px;background:${p.background || '#ffffff'}">`;
+            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>`;
             p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
-            html += `</div></div>`;
+            html += `</div>`;
         });
 
         html += `</div>`; // End reader-main
@@ -177,7 +259,7 @@ export const exportToHTML = (project, embedAssets = false) => {
         };
         window.startZine = () => {
             const ov = document.getElementById('vp-overlay'); ov.style.opacity = 0;
-            setTimeout(() => { ov.remove(); Gen.init(); show(0); }, 500);
+            setTimeout(() => { ov.remove(); fitPages(); Gen.init(); show(0); }, 500);
         };
         let curLog=null, vizCtx=null, vizRaf=null;
         window.playAudioLog = (btn) => {
@@ -235,9 +317,20 @@ export const exportToHTML = (project, embedAssets = false) => {
             if(!url || muted)return;
             if(url.startsWith('gen:')){ Gen.play(url.split(':')[1]); } else { au=new Audio(url); au.loop=true; au.play().catch(e=>console.warn(e)); }
         }
+        function fitPages(){
+            const stage=document.querySelector('.reader-main');
+            if(!stage)return;
+            const availableW=Math.max(1,stage.clientWidth-48), availableH=Math.max(1,stage.clientHeight-48);
+            document.querySelectorAll('.page-wrap').forEach(page=>{
+                const scale=Math.min(1,availableW/Number(page.dataset.width),availableH/Number(page.dataset.height));
+                page.style.setProperty('--page-scale',Math.max(0.01,scale));
+            });
+        }
+        window.addEventListener('resize',fitPages,{passive:true});
         function show(n){
             if(n<0||n>=t)return; c=n;
             for(let i=0;i<t;i++){ const e=document.getElementById('p'+i); e.className='page-wrap'+(i===n?' active':''); }
+            fitPages();
             document.getElementById('pg').textContent=(n+1)+'/'+t;
             P(document.getElementById('p'+n).dataset.bgm);
         }
@@ -269,9 +362,20 @@ export const exportToHTML = (project, embedAssets = false) => {
         html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
         html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
 
-        const blob = new Blob([html], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'svrn-zine.html'; a.click();
-        ld.remove();
-    }, 300);
+        const fileBase = (project.title || (isPortfolio ? 'portfolio-book' : 'svrn-zine'))
+            .replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'svrn-publication'
+        const fileName = `${fileBase}.html`
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+        return { fileName, embeddedAssets, missingAssets }
+    } finally {
+        ld.remove()
+    }
 }
 
 export const exportToInteractive = async (project, embedAssets = false) => {
@@ -425,13 +529,15 @@ export const exportToPDF = async (project, embedAssets = false) => {
         // out at 5.5x8.5in by the accident that CSS px is 96dpi — so any other
         // paper size was impossible, and a printer received a page of the wrong
         // physical size with no indication anything was wrong.
+        // Every page has the same trim, so the document is one fixed page size.
+        // There is no "landscape page" any more: a two-page layout is two PDF
+        // pages, which is what a printer expects for a bound book.
         const firstPage = project.pages[0] || null
         const geo0 = bookGeometry(project, firstPage)
         const pdf = new jsPDF({
             orientation: geo0.landscape ? 'landscape' : 'portrait',
             unit: 'in',
             format: [geo0.inchW, geo0.inchH],
-            // Trim marks are what a print shop needs to cut the bleed off.
             precision: 2
         });
 

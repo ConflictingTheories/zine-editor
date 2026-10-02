@@ -28,7 +28,23 @@ const caption = (x, y, width, content) =>
 const hairline = (x, y, width, color = '#d8d3c8') =>
     ({ __shape: true, shape: 'line_h', x, y, width, height: 1, fill: color })
 
-export const PORTFOLIO_LAYOUTS = [
+/**
+ * Normalise a layout to declare how many PAGES it occupies.
+ *
+ * `pageCount: 2` means "two pages, shown side by side". `pageCount: 1` is a
+ * single-page composition. Anything that used to say
+ * `orientation: 'landscape'` was really a two-page layout, so that is mapped
+ * here rather than requiring every template to be rewritten by hand.
+ */
+const withPageCount = layout => ({
+    ...layout,
+    pageCount: layout.pageCount ?? (layout.orientation === 'landscape' ? 2 : 1),
+    // A page is never itself landscape. Kept only so the old field cannot be
+    // read as page geometry anywhere.
+    orientation: 'portrait'
+})
+
+const RAW_PORTFOLIO_LAYOUTS = [
     {
         id: 'pf-full-bleed',
         name: 'Full Bleed',
@@ -375,50 +391,105 @@ const buildShapeElement = (descriptor, index) => ({
     hidden: false
 })
 
+/** Every layout, normalised to declare how many pages it occupies. */
+export const PORTFOLIO_LAYOUTS = RAW_PORTFOLIO_LAYOUTS.map(withPageCount)
+
 /**
- * Instantiate a portfolio layout into a page object. Frames are created as
- * empty photo frames so the user can fill them by clicking, or in one go via
- * "Fill frames with library photos".
+ * Instantiate a layout into one or more PAGE objects.
  *
- * `pageSize` scales the layout into the book's actual trim. The templates are
- * authored against the legacy 528x816 page, so applying one to a 10x10 square
- * book used to put every frame in the wrong place and off the paper. Descriptors
- * are treated as fractions of the page and remapped, which means a layout keeps
- * its composition at any trim size.
+ * Templates are authored in *sheet* space: for a two-page layout that is the two
+ * pages side by side separated by a nominal gutter, which is what the old
+ * landscape templates were written against. This maps that sheet onto the book's
+ * real page size and slices it into the individual pages the book stores.
+ *
+ * Splitting on the gutter rather than a midpoint is what lets a two-page layout
+ * survive a trim change: a layout authored against 528x816 pages lands on an A4
+ * book with each page 595px wide, and every frame follows its own page.
+ *
+ * @returns {Array<object>} one page per page the layout occupies.
  */
-export const createLayoutPage = (layout, { background = '#ffffff', pageSize = null } = {}) => {
+export const createLayoutPages = (layout, { background = '#ffffff', pageSize = null, gutter = 0 } = {}) => {
     const descriptors = (layout?.build?.() || []).filter(Boolean)
-    const landscape = (layout?.orientation || 'portrait') === 'landscape'
-    // The legacy page the descriptors were authored against.
-    const baseW = landscape ? PAGE_H : PAGE_W
-    const baseH = landscape ? PAGE_W : PAGE_H
-    const targetW = pageSize?.width || baseW
-    const targetH = pageSize?.height || baseH
+    const pageCount = Math.max(1, Math.min(2, layout?.pageCount ?? 1))
+
+    // The authoring sheet. 24px is the nominal gutter the two-page templates
+    // were laid out around.
+    const NOMINAL_GUTTER = 24
+    const basePageW = PAGE_W
+    const basePageH = PAGE_H
+    const baseW = basePageW * pageCount + NOMINAL_GUTTER * (pageCount - 1)
+    const baseH = basePageH
+
+    const targetPageW = pageSize?.width || basePageW
+    const targetPageH = pageSize?.height || basePageH
+    const targetGutter = pageCount > 1 ? (gutter || NOMINAL_GUTTER) : 0
+    const targetW = targetPageW * pageCount + targetGutter * (pageCount - 1)
+
+    // Per-axis scale, so a layout fills the page exactly as authored rather than
+    // being letterboxed. The paper decides the proportions; the arrangement is
+    // preserved.
     const scaleX = targetW / baseW
-    const scaleY = targetH / baseH
+    const scaleY = targetPageH / baseH
+    const remap = value => Math.round(value * scaleX)
+    const remapY = value => Math.round(value * scaleY)
 
-    // Uniform scale keeps the composition's proportions instead of stretching
-    // the frames when the target page is not the same aspect as the template.
-    const scale = Math.min(scaleX, scaleY)
-    const remap = (value, base, target) => Math.round(value * scale + (target - base * scale) / 2)
+    /** Clamp a box so it lies entirely within the sheet. */
+    const clampBox = (x, y, width, height) => {
+        const nx = Math.max(0, Math.min(x, targetW - 1))
+        const ny = Math.max(0, Math.min(y, targetPageH - 1))
+        return {
+            x: nx,
+            y: ny,
+            width: Math.max(1, Math.min(width, targetW - nx)),
+            height: Math.max(1, Math.min(height, targetPageH - ny))
+        }
+    }
 
-    const page = {
-        id: Date.now() + Math.random(),
-        orientation: layout?.orientation || 'portrait',
+    /** Scale a text/shape descriptor's geometry into the target page. */
+    const remapDescriptor = d => {
+        if (!d) return d
+        const out = { ...d }
+        if (typeof d.x === 'number') out.x = remap(d.x)
+        if (typeof d.y === 'number') out.y = remapY(d.y)
+        if (typeof d.width === 'number') out.width = remap(d.width)
+        if (typeof d.height === 'number') out.height = remapY(d.height)
+        if (typeof d.fontSize === 'number') out.fontSize = Math.round(d.fontSize * Math.min(scaleX, scaleY))
+        return out
+    }
+
+    const stride = targetPageW + targetGutter
+    /** Which page of the sheet a horizontal position falls on. */
+    const pageOf = x => (pageCount === 1 ? 0 : (x < targetPageW + targetGutter / 2 ? 0 : 1))
+    /** Re-base a sheet x into page-local coordinates. */
+    const toLocalX = (x, pageIdx) => x - pageIdx * stride
+
+    // One blank page per slot. An empty verso is still a real page in a book, so
+    // a slot the template leaves empty is kept rather than dropped.
+    const pages = Array.from({ length: pageCount }, (_, i) => ({
+        id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}`,
+        pageKind: null, // assigned by the caller against the whole book
         background: layout?.background || background,
         texture: null,
         elements: []
-    }
-    const elements = descriptors.map((descriptor, index) => {
+    }))
+
+    descriptors.forEach((descriptor, index) => {
+        let element
         if (descriptor.__frame) {
             const preset = getFramePreset(descriptor.preset)
-            return {
+            const box = clampBox(
+                remap(descriptor.x),
+                remapY(descriptor.y),
+                remap(descriptor.width),
+                remapY(descriptor.height)
+            )
+            element = {
                 id: uid('el'),
                 type: 'photo-frame',
-                x: remap(descriptor.x, baseW, targetW),
-                y: remap(descriptor.y, baseH, targetH),
-                width: Math.round(descriptor.width * scale),
-                height: Math.round(descriptor.height * scale),
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height,
                 rotation: 0,
                 opacity: 1,
                 zIndex: index,
@@ -432,21 +503,40 @@ export const createLayoutPage = (layout, { background = '#ffffff', pageSize = nu
                 frameWidthRight: descriptor.frameWidthRight ?? preset.style.frameWidthRight,
                 frameColor: preset.style.frameColor,
                 frameBorderWidth: descriptor.frameBorderWidth ?? preset.style.frameBorderWidth,
-                frameBorderColor: descriptor.frameBorderColor ?? preset.style.frameBorderColor,
+                frameBorderColor: preset.style.frameBorderColor,
                 frameShadow: descriptor.frameShadow ?? preset.style.frameShadow,
                 frameRadius: descriptor.frameRadius ?? preset.style.frameRadius,
-                frameWindowColor: descriptor.frameWindowColor ?? preset.style.frameWindowColor,
+                frameWindowColor: preset.style.frameWindowColor,
                 caption: descriptor.caption || ''
             }
+        } else if (descriptor.__text) {
+            element = buildTextElement(remapDescriptor(descriptor), index)
+        } else if (descriptor.__shape) {
+            element = buildShapeElement(remapDescriptor(descriptor), index)
+        } else {
+            element = { ...descriptor, id: uid('el'), zIndex: index }
         }
-        if (descriptor.__text) return buildTextElement(descriptor, index)
-        if (descriptor.__shape) return buildShapeElement(descriptor, index)
-        return { ...descriptor, id: uid('el'), zIndex: index }
+
+        // Route the element to the page its position falls on, then re-base into
+        // page-local coordinates. An element starting on the left page but
+        // overhanging the gutter stays on the left, so a full-bleed frame is
+        // never split across two pages.
+        const pageIdx = pageOf(element.x)
+        const localX = toLocalX(element.x, pageIdx)
+        if (localX < 0 || localX + element.width > targetPageW) {
+            element.x = Math.max(0, Math.min(localX, targetPageW - 1))
+            element.width = Math.max(1, Math.min(element.width, targetPageW - element.x))
+        } else {
+            element.x = localX
+        }
+        pages[pageIdx].elements.push(element)
     })
 
-    page.elements = elements
-    return page
+    return pages
 }
+
+/** Back-compat single-page wrapper, for callers that only want one page. */
+export const createLayoutPage = (layout, opts = {}) => createLayoutPages(layout, opts)[0]
 
 export const PORTFOLIO_LAYOUT_CATEGORIES = (() => {
     const seen = []

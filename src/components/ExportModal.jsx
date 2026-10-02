@@ -37,10 +37,18 @@ function ExportModal({ onClose }) {
     const heading = isPortfolio ? 'Export Portfolio Book' : 'Export Zine'
     const pageWord = isPortfolio ? 'spread' : 'page'
 
-    const handleExportHTML = () => {
-        if (currentProject) {
-            exportToHTML(currentProject, embedAssets)
+    const handleExportHTML = async () => {
+        if (!currentProject) return
+        try {
+            const result = await exportToHTML(currentProject, embedAssets)
+            if (result.missingAssets.length) {
+                toast(`HTML exported with ${result.missingAssets.length} asset${result.missingAssets.length === 1 ? '' : 's'} still linked online`, 'info')
+            } else {
+                toast('Standalone HTML exported', 'success')
+            }
             onClose()
+        } catch (error) {
+            toast(error.message || 'HTML export failed', 'error')
         }
     }
 

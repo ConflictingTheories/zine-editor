@@ -13,10 +13,14 @@ import PhotoLibrary from './PhotoLibrary.jsx'
 import PortfolioContextMenu from './PortfolioContextMenu.jsx'
 import PortfolioLayouts from './PortfolioLayouts.jsx'
 import Canvas from '../Canvas.jsx'
+import PropertyPanel from '../PropertyPanel.jsx'
 import { FRAME_PRESETS, FIT_MODES, IMAGE_POSITIONS, createPhotoFrame, findFreeSlot } from '../../lib/photoLibrary.js'
 import { filesToAssets, commitAssets } from '../../utils/photoImport.js'
 import { PAPER_SIZES } from '../../constants.js'
-import { bookGeometry, formatTrim } from '../../lib/bookGeometry.js'
+import {
+    bookGeometry, formatTrim, spreadGeometry,
+    buildNavigation, pageKind, PAGE_KIND
+} from '../../lib/bookGeometry.js'
 
 /** Quick frame styles rendered as a compact strip above the canvas. */
 const FrameStrip = ({ element, onApply, onOpenMenu }) => {
@@ -337,23 +341,36 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     const geo = useMemo(() => bookGeometry(project, page), [project, page])
     const pageWidth = geo.width
     const pageHeight = geo.height
-
     // Photographers work spread-by-spread: the next question is almost always
     // "what's on the next page", not "what's in the library". The library is one
     // click away, so defaulting to Spreads puts the commonest action first.
     const [leftTab, setLeftTab] = useState('spreads')
     const [rightTab, setRightTab] = useState('frame')
     const [zoom, setZoom] = useState(70)
-    const [snapOn, setSnapOn] = useState(true)
+    const [snapOn, setSnapOn] = useState(project?.portfolioSnapOn ?? true)
     // On by default: a book is trimmed, so knowing where the trim falls is not
     // an edge case, it is the thing that decides whether a composition prints.
-    const [guides, setGuides] = useState(true)
+    const [guides, setGuides] = useState(project?.portfolioShowGuides ?? true)
+    // How many pages are shown at once. A book is read one page at a time or as
+    // a two-page spread; a cover or back cover is always a single page because
+    // that is how it is bound.
+    const [viewMode, setViewMode] = useState(project?.portfolioViewMode || 'spread')
     const [ctxMenu, setCtxMenu] = useState({ visible: false, x: 0, y: 0, element: null })
 
     const selection = vpState.selection
     const selectedElement = selection?.type === 'element'
         ? (page.elements || []).find(el => el.id === selection.id) || null
         : null
+
+    useEffect(() => {
+        if (selectedElement) setRightTab(selectedElement.type === 'photo-frame' ? 'frame' : 'design')
+    }, [selectedElement?.id, selectedElement?.type])
+
+    useEffect(() => {
+        setSnapOn(project?.portfolioSnapOn ?? true)
+        setGuides(project?.portfolioShowGuides ?? true)
+        setViewMode(project?.portfolioViewMode || 'spread')
+    }, [project?.id])
 
     const assets = vpState.library?.imported || []
 
@@ -372,6 +389,97 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
         })
         return usage
     }, [pages, assets])
+
+    /* ── Page & spread navigation ────────────────────────────────────────
+       The book is a list of pages. What the canvas shows is a *group*: one page
+       (a cover, a back cover, or any page when the user is reading
+       single-page) or two adjacent body pages shown as a spread. */
+    const nav = useMemo(
+        () => buildNavigation(pages, viewMode, safeIdx),
+        [pages, viewMode, safeIdx]
+    )
+    /** The group containing the current page. `nav` is ordered with that group
+        first, but reading `nav[0]` blindly would show the wrong pages whenever
+        the user is on a cover or the back cover. */
+    const currentGroup = useMemo(
+        () => nav.find(g => g.indices.includes(safeIdx)) || nav[0] || { kind: 'single', indices: [safeIdx] },
+        [nav, safeIdx]
+    )
+    /** The pages currently on the canvas: one or two indices. */
+    const visibleIndices = currentGroup.indices?.length ? currentGroup.indices : [safeIdx]
+    const isSpread = visibleIndices.length > 1
+    const leftIdx = visibleIndices[0]
+    const rightIdx = visibleIndices.length > 1 ? visibleIndices[1] : null
+    const leftPage = pages[leftIdx] || page
+    const rightPage = rightIdx != null ? pages[rightIdx] : null
+    // Resolve only after the active group is known; calling useMemo before this
+    // value existed read `isSpread` in its temporal dead zone during render.
+    const shownWidth = isSpread ? pageWidth * 2 + geo.gutter : pageWidth
+
+    // What the status readout calls the thing on screen.
+    const viewLabel = useMemo(() => {
+        if (!isSpread) {
+            const kind = pageKind(page, safeIdx, pages.length)
+            if (kind === PAGE_KIND.COVER) return 'Front cover'
+            if (kind === PAGE_KIND.BACK) return 'Back cover'
+            return `Page ${safeIdx + 1}`
+        }
+        return `Pages ${leftIdx + 1}–${rightIdx + 1}`
+    }, [isSpread, page, safeIdx, pages.length, leftIdx, rightIdx])
+
+    const gotoPage = (idx) => updateVpState({
+        selection: { type: 'page', id: pages[idx]?.id, pageIdx: idx }
+    })
+    /**
+     * Fit what is on screen. A two-page spread is roughly twice as wide as one
+     * page, so switching view modes at the current zoom pushes half the spread
+     * off the right edge. Re-fitting on the change keeps the whole opening
+     * visible, which is the only reason to switch to it.
+     */
+    const fitToView = useCallback(() => {
+        const wrap = document.getElementById('canvasWrap')
+        if (!wrap) return
+        const scale = Math.min(
+            (wrap.clientWidth - 80) / shownWidth,
+            (wrap.clientHeight - 80) / pageHeight,
+            1
+        )
+        if (scale > 0) setZoom(Math.round(scale * 100))
+    }, [shownWidth, pageHeight])
+
+    useEffect(() => {
+        let secondFrame = 0
+        const firstFrame = requestAnimationFrame(() => {
+            secondFrame = requestAnimationFrame(fitToView)
+        })
+        return () => {
+            cancelAnimationFrame(firstFrame)
+            if (secondFrame) cancelAnimationFrame(secondFrame)
+        }
+    }, [fitToView])
+
+    const changeViewMode = (mode) => {
+        setViewMode(mode)
+        updateProjectSettings({ portfolioViewMode: mode })
+        // The layout updates on the next render, so fit after it.
+        requestAnimationFrame(() => requestAnimationFrame(fitToView))
+    }
+
+    const changeSnap = (enabled) => {
+        setSnapOn(enabled)
+        updateProjectSettings({ portfolioSnapOn: enabled })
+    }
+
+    const changeGuides = (enabled) => {
+        setGuides(enabled)
+        updateProjectSettings({ portfolioShowGuides: enabled })
+    }
+
+    const step = (delta) => {
+        const at = nav.findIndex(g => g.indices.includes(safeIdx))
+        const next = nav[at + delta]
+        if (next) gotoPage(next.indices[0])
+    }
 
     // ── Placement shortcuts ─────────────────────────────────────────────────
     const addFrame = useCallback((presetId = 'mat', asset = null) => {
@@ -409,6 +517,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
             rotation: 0,
             opacity: 1
         })
+        setRightTab('design')
     }, [safeIdx, addElement])
 
     /** A small set of type placements a photographer actually reaches for. */
@@ -541,8 +650,9 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
         const suggested = project?.title ? `${project.title} layout` : 'Custom layout'
         const name = prompt('Name this layout:', suggested)
         if (name === null) return
-        saveCurrentSpreadAsLayout(name)
-    }, [project, saveCurrentSpreadAsLayout])
+        // Save what is on screen: one page, or the two-page spread.
+        saveCurrentSpreadAsLayout(name, visibleIndices)
+    }, [project, saveCurrentSpreadAsLayout, visibleIndices])
 
     /**
      * Change the book's paper. Every dimension on the canvas is derived from it,
@@ -588,10 +698,42 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                         ⤓ Fill {emptyFrames || ''} empty
                     </button>
                     <span className="pf-topbar-divider" />
-                    <button type="button" className={`pf-btn ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(v => !v)} title="Snap to grid">Snap</button>
+                    <button type="button" className={`pf-btn ${snapOn ? 'active' : ''}`} onClick={() => changeSnap(!snapOn)} title="Snap to grid">Snap</button>
                 </div>
                 <div className="pf-spreadbar-center">
-                    <span className="pf-spread-label">Spread {safeIdx + 1} / {pages.length}</span>
+                    <div className="pf-page-nav">
+                        <button
+                            type="button"
+                            onClick={() => step(-1)}
+                            disabled={nav.findIndex(g => g.indices.includes(safeIdx)) <= 0}
+                            aria-label="Previous page"
+                            title="Previous (←)"
+                        >‹</button>                        <span className="pf-spread-label">{viewLabel}</span>
+                        <button
+                            type="button"
+                            onClick={() => step(1)}
+                            disabled={nav.findIndex(g => g.indices.includes(safeIdx)) >= nav.length - 1}
+                            aria-label="Next page"
+                            title="Next (→)"
+                        >›</button>
+                    </div>
+                    {/* One page or two. A cover or back cover ignores this: they
+                        are physically single pages however you are reading the
+                        rest of the book, and the control reflects that. */}
+                    <div className="pf-view-toggle" role="group" aria-label="Pages shown">
+                        <button
+                            type="button"
+                            className={!isSpread ? 'active' : ''}
+                            onClick={() => changeViewMode('single')}
+                            title="Single page"
+                        >1 page</button>
+                        <button
+                            type="button"
+                            className={isSpread ? 'active' : ''}
+                            onClick={() => changeViewMode('spread')}
+                            title="Two-page spread"
+                        >2 pages</button>
+                    </div>
                     {/* Trim size lives here rather than in a settings pane: a book
                         is a physical object, and choosing the paper is the first
                         decision that changes every measurement on screen. */}
@@ -632,7 +774,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                 {/* ── Library / layouts ──────────────────────────────── */}
                 <aside className="pf-left">
                     <div className="pf-tabs" role="tablist">
-                        {[['library', 'Library'], ['layouts', 'Layouts'], ['spreads', 'Spreads']].map(([id, label]) => (
+                        {[['library', 'Library'], ['layouts', 'Layouts'], ['spreads', 'Pages']].map(([id, label]) => (
                             <button
                                 key={id}
                                 type="button"
@@ -660,26 +802,38 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                     {leftTab === 'spreads' && (
                         <div className="pf-spreads">
                             <div className="pf-spreads-actions">
-                                <button type="button" className="pf-btn" onClick={addPage}>+ Blank spread</button>
+                                <button type="button" className="pf-btn" onClick={addPage}>+ Blank page</button>
                                 <button type="button" className="pf-btn ghost" onClick={duplicatePage}>Duplicate</button>
                                 <button type="button" className="pf-btn danger ghost" onClick={deletePage}>Delete</button>
                             </div>
                             <div className="pf-spread-list">
+                                {/* The list is of PAGES, not spreads. In two-page
+                                    view a spread is just two adjacent rows, and
+                                    saying so is more useful than a synthetic
+                                    "Wide spread" row that is not a page at all. */}
                                 {pages.map((p, i) => {
-                                    const frameCount = (p.elements || []).filter(el => el.type === 'photo-frame').length
-                                    const filled = (p.elements || []).filter(el => el.type === 'photo-frame' && el.src).length
+                                    const frames = (p.elements || []).filter(el => el.type === 'photo-frame')
+                                    const filled = frames.filter(el => el.src).length
+                                    const kind = pageKind(p, i, pages.length)
+                                    const kindLabel =
+                                        kind === PAGE_KIND.COVER ? 'Front cover'
+                                            : kind === PAGE_KIND.BACK ? 'Back cover'
+                                                : `Page ${i + 1}`
+                                    // In spread view, odd/even pairs share a number so
+                                    // the two rows read as one opening.
+                                    const pairing = viewMode === 'spread' && kind === PAGE_KIND.BODY
+                                        ? `${Math.floor((i - 1) / 2) + 1}`
+                                        : null
                                     return (
                                         <button
                                             key={p.id}
                                             type="button"
-                                            className={`pf-spread-item ${i === safeIdx ? 'active' : ''}`}
-                                            onClick={() => setPage(i)}
+                                            className={`pf-spread-item ${visibleIndices.includes(i) ? 'active' : ''} kind-${kind}`}
+                                            onClick={() => gotoPage(i)}
                                         >
-                                            <span className="pf-spread-num">{i + 1}</span>
-                                            <span className="pf-spread-name">
-                                                {p.orientation === 'landscape' ? 'Wide' : 'Portrait'} spread
-                                            </span>
-                                            <span className="pf-spread-meta">{filled}/{frameCount} filled</span>
+                                            <span className="pf-spread-num">{pairing || i + 1}</span>
+                                            <span className="pf-spread-name">{kindLabel}</span>
+                                            <span className="pf-spread-meta">{filled}/{frames.length} filled</span>
                                         </button>
                                     )
                                 })}
@@ -704,89 +858,112 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                         <div
                             className="pf-canvas-zoom"
                             style={{
-                                // The box occupies the page's *visual* size, and
-                                // the page inside is laid out at full size then
-                                // scaled to match. Previously the box was sized
-                                // down but nothing scaled the contents, so
-                                // zooming just cropped a fixed-size page — the
-                                // "zoom is messed up" symptom.
-                                width: `${pageWidth * zoom / 100}px`,
+                                // The box occupies the *visual* size of what is on
+                                // screen — one page, or two with the gutter between —
+                                // and the pages inside are laid out at true trim size
+                                // then scaled to match.
+                                width: `${shownWidth * zoom / 100}px`,
                                 height: `${pageHeight * zoom / 100}px`
                             }}
                         >
                             <div
                                 className="pf-page"
                                 style={{
-                                    width: `${pageWidth}px`,
+                                    width: `${shownWidth}px`,
                                     height: `${pageHeight}px`,
                                     transform: `scale(${zoom / 100})`
                                 }}
                             >
-                                <Canvas
-                                    page={page}
-                                    pageIdx={safeIdx}
-                                    pageSize={{ width: pageWidth, height: pageHeight }}
-                                    snapOn={snapOn}
-                                    zoom={zoom}
-                                    importFiles={handleImport}
-                                    onRequestImage={handleRequestImage}
-                                    onDropAsset={handleDropAsset}
-                                    renderContextMenu={props => (
-                                        <PortfolioContextMenu
-                                            {...props}
-                                            bookSize={{ width: pageWidth, height: pageHeight }}
-                                            onPageAction={handlePageAction}
-                                        />
-                                    )}
-                                />
-                                {/* Trim and safe-area guides. They live inside the
-                                    scaled page layer so their offsets are page
-                                    pixels: as a sibling of it they laid out against
-                                    the scroll container, which put the gutter stripe
-                                    down the far left of the window, not the page. */}
-                                {guides && (
-                                    <div className="pf-guides" aria-hidden="true">
-                                        <div className="pf-guide-safe" style={{ inset: `${geo.bleed}px` }} />
-                                        <div
-                                            className="pf-guide-gutter"
-                                            style={{
-                                                left: `${geo.gutter}px`,
-                                                width: `${Math.max(1, geo.gutter - geo.bleed)}px`
-                                            }}
+                                {/* A spread is literally two page canvases with the
+                                    binding gutter between them. Each keeps its own
+                                    elements and its own page index, so editing across
+                                    the gutter edits two real pages. */}
+                                <div className="pf-sheet">
+                                    <div className="pf-sheet-page">
+                                        <Canvas
+                                            page={leftPage}
+                                            pageIdx={leftIdx}
+                                            pageSize={{ width: pageWidth, height: pageHeight }}
+                                            snapOn={snapOn}
+                                            zoom={zoom}
+                                            importFiles={handleImport}
+                                            onRequestImage={handleRequestImage}
+                                            onDropAsset={handleDropAsset}
+                                            renderContextMenu={props => (
+                                                <PortfolioContextMenu
+                                                    {...props}
+                                                    bookSize={{ width: pageWidth, height: pageHeight }}
+                                                    onPageAction={handlePageAction}
+                                                />
+                                            )}
                                         />
                                     </div>
-                                )}
+                                    {rightPage && (
+                                        <>
+                                            <div
+                                                className="pf-gutter"
+                                                style={{ width: `${geo.gutter}px` }}
+                                                aria-hidden="true"
+                                            />
+                                            <div className="pf-sheet-page">
+                                                <Canvas
+                                                    page={rightPage}
+                                                    pageIdx={rightIdx}
+                                                    pageSize={{ width: pageWidth, height: pageHeight }}
+                                                    snapOn={snapOn}
+                                                    zoom={zoom}
+                                                    importFiles={handleImport}
+                                                    onRequestImage={handleRequestImage}
+                                                    onDropAsset={handleDropAsset}
+                                                    renderContextMenu={props => (
+                                                        <PortfolioContextMenu
+                                                            {...props}
+                                                            bookSize={{ width: pageWidth, height: pageHeight }}
+                                                            onPageAction={handlePageAction}
+                                                        />
+                                                    )}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                {/* Trim guides. The safe area is per-page, so one
+                                    dashed box is drawn over each sheet page; the
+                                    binding gutter is now real layout, not an
+                                    overlay, so it needs no guide of its own. */}
+                                {guides && visibleIndices.map(idx => {
+                                    const left = idx * (pageWidth + geo.gutter)
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="pf-guide-safe"
+                                            style={{ inset: `${geo.bleed}px`, left: `${left + geo.bleed}px` }}
+                                        />
+                                    )
+                                })}
                             </div>
                         </div>
-                        <div className="pf-zoombar">
-                            <button type="button" onClick={() => setZoom(z => Math.max(20, z - 10))}>−</button>
-                            <span>{zoom}%</span>
-                            <button type="button" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
-                            <button
-                                type="button"
-                                className={guides ? 'active' : ''}
-                                onClick={() => setGuides(v => !v)}
-                                title="Show trim and safe-area guides"
-                            >
-                                Guides
-                            </button>
-                            <button type="button" onClick={() => {
-                                const wrap = document.getElementById('canvasWrap')
-                                if (!wrap) return
-                                const scale = Math.min(
-                                    (wrap.clientWidth - 80) / pageWidth,
-                                    (wrap.clientHeight - 80) / pageHeight,
-                                    1)
-                                setZoom(Math.round(scale * 100))
-                            }}>Fit</button>
-                        </div>
+                    </div>
+                    <div className="pf-zoombar">
+                        <button type="button" onClick={() => setZoom(z => Math.max(20, z - 10))}>−</button>
+                        <span>{zoom}%</span>
+                        <button type="button" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
+                        <button
+                            type="button"
+                            className={guides ? 'active' : ''}
+                            onClick={() => changeGuides(!guides)}
+                            title="Show trim and safe-area guides"
+                        >
+                            Guides
+                        </button>
+                        <button type="button" onClick={fitToView} title="Fit the page(s) to the window">Fit</button>
                     </div>
                 </main>
 
                 {/* ── Inspector ──────────────────────────────────────── */}
                 <aside className="pf-right">
                     <div className="pf-tabs" role="tablist">
-                        {[['frame', 'Frame'], ['layers', 'Layers']].map(([id, label]) => (
+                        {[['frame', 'Frame'], ['design', 'Design'], ['layers', 'Layers'], ['settings', 'Settings']].map(([id, label]) => (
                             <button
                                 key={id}
                                 type="button"
@@ -800,54 +977,105 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                         ))}
                     </div>
 
-                    {rightTab === 'frame' && (
-                        <FrameInspector
-                            element={selectedElement}
-                            pageIdx={safeIdx}
-                            usage={selectedElement ? usageIndex[selectedElement.assetId] : null}
-                            onChange={updates => selectedElement && updateElement(safeIdx, selectedElement.id, updates)}
-                            onDevelop={() => selectedElement && openLightTableFor({
-                                assetId: selectedElement.assetId || null,
-                                src: selectedElement.src,
-                                name: selectedElement.assetName,
-                                target: { pageIdx: safeIdx, elementId: selectedElement.id }
-                            })}
-                            onReplace={() => selectedElement && openReplacePicker(selectedElement)}
-                            onDelete={() => selectedElement && deleteElement()}
-                            onFillEmpty={handleFillEmpty}
-                        />
-                    )}
+                    {
+                        rightTab === 'frame' && (
+                            <FrameInspector
+                                element={selectedElement}
+                                pageIdx={safeIdx}
+                                usage={selectedElement ? usageIndex[selectedElement.assetId] : null}
+                                onChange={updates => selectedElement && updateElement(safeIdx, selectedElement.id, updates)}
+                                onDevelop={() => selectedElement && openLightTableFor({
+                                    assetId: selectedElement.assetId || null,
+                                    src: selectedElement.src,
+                                    name: selectedElement.assetName,
+                                    target: { pageIdx: safeIdx, elementId: selectedElement.id }
+                                })}
+                                onReplace={() => selectedElement && openReplacePicker(selectedElement)}
+                                onDelete={() => selectedElement && deleteElement()}
+                                onFillEmpty={handleFillEmpty}
+                            />
+                        )
+                    }
 
-                    {rightTab === 'layers' && (
-                        <div className="pf-layers">
-                            <h4>Layers <span>{(page.elements || []).length}</span></h4>
-                            {[...(page.elements || [])].reverse().map(el => (
-                                <div
-                                    key={el.id}
-                                    className={`pf-layer ${selection?.id === el.id ? 'active' : ''}`}
-                                    onClick={() => updateVpState({ selection: { type: 'element', id: el.id, pageIdx: safeIdx } })}
-                                >
-                                    <span className="pf-layer-name">
-                                        {el.type === 'photo-frame'
-                                            ? (el.assetName || (el.src ? 'Photo' : 'Empty frame'))
-                                            : el.type === 'text'
-                                                ? (typeof el.content === 'string' ? el.content.slice(0, 22) : 'Text')
-                                                : el.type}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        className="pf-layer-btn"
-                                        onClick={(e) => { e.stopPropagation(); updateElement(safeIdx, el.id, { hidden: !el.hidden }) }}
-                                        title="Toggle visibility"
-                                    >
-                                        {el.hidden ? '◌' : '◉'}
-                                    </button>
+                    {
+                        rightTab === 'design' && <PropertyPanel activeTab="props" />
+                    }
+
+                    {
+                        rightTab === 'settings' && (
+                            <div className="pf-inspector pf-book-settings">
+                                <h4>Book settings</h4>
+                                <div className="pf-field">
+                                    <label htmlFor="pf-book-title">Book title</label>
+                                    <input
+                                        id="pf-book-title"
+                                        type="text"
+                                        value={project?.title || ''}
+                                        onChange={event => updateProjectSettings({ title: event.target.value })}
+                                    />
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </aside>
-            </div>
+                                <div className="pf-field">
+                                    <label htmlFor="pf-book-paper">Trim size</label>
+                                    <select id="pf-book-paper" value={geo.key} onChange={event => handlePaperChange(event.target.value)}>
+                                        {Object.entries(PAPER_SIZES).map(([id, size]) => (
+                                            <option key={id} value={id}>{size.label} · {size.w} × {size.h} in</option>
+                                        ))}
+                                    </select>
+                                    <p className="prop-hint">{formatTrim(geo)} · {pageWidth} × {pageHeight} px at {geo.dpi} DPI</p>
+                                </div>
+                                <div className="pf-field">
+                                    <label>Workspace view</label>
+                                    <div className="pf-view-toggle" role="group" aria-label="Default workspace view">
+                                        <button type="button" className={viewMode === 'single' ? 'active' : ''} onClick={() => changeViewMode('single')}>1 page</button>
+                                        <button type="button" className={viewMode === 'spread' ? 'active' : ''} onClick={() => changeViewMode('spread')}>2 pages</button>
+                                    </div>
+                                </div>
+                                <div className="pf-field">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <input type="checkbox" checked={guides} onChange={event => changeGuides(event.target.checked)} style={{ width: 'auto' }} />
+                                        Trim and safe-area guides
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <input type="checkbox" checked={snapOn} onChange={event => changeSnap(event.target.checked)} style={{ width: 'auto' }} />
+                                        Snap objects to page
+                                    </label>
+                                </div>
+                            </div>
+                        )
+                    }
+
+                    {
+                        rightTab === 'layers' && (
+                            <div className="pf-layers">
+                                <h4>Layers <span>{(page.elements || []).length}</span></h4>
+                                {[...(page.elements || [])].reverse().map(el => (
+                                    <div
+                                        key={el.id}
+                                        className={`pf-layer ${selection?.id === el.id ? 'active' : ''}`}
+                                        onClick={() => updateVpState({ selection: { type: 'element', id: el.id, pageIdx: safeIdx } })}
+                                    >
+                                        <span className="pf-layer-name">
+                                            {el.type === 'photo-frame'
+                                                ? (el.assetName || (el.src ? 'Photo' : 'Empty frame'))
+                                                : el.type === 'text'
+                                                    ? (typeof el.content === 'string' ? el.content.slice(0, 22) : 'Text')
+                                                    : el.type}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="pf-layer-btn"
+                                            onClick={(e) => { e.stopPropagation(); updateElement(safeIdx, el.id, { hidden: !el.hidden }) }}
+                                            title="Toggle visibility"
+                                        >
+                                            {el.hidden ? '◌' : '◉'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )
+                    }
+                </aside >
+            </div >
 
             <footer className="pf-statusbar">
                 <span>{assets.length} in library</span>
@@ -855,9 +1083,10 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                 <span className="pf-status-paper" title={`Trim ${formatTrim(geo)} · working at ${geo.dpi} DPI · ${geo.bleed / geo.dpi}" bleed`}>
                     {geo.label} · {formatTrim(geo)}
                 </span>
-                <span>{pageWidth} × {pageHeight} px · {page.orientation || 'portrait'}</span>
+                <span>{pageWidth} × {pageHeight} px per page</span>
+                <span>{pages.length} page{pages.length === 1 ? '' : 's'} in book</span>
                 <span className="spacer" />
-                <span>F frame · T text · R frame options · double-click a photo to place</span>
+                <span>F frame · T text · R frame options · ← → page · double-click a photo to place</span>
             </footer>
 
             <PortfolioContextMenu
@@ -869,6 +1098,6 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                 pageIdx={safeIdx}
                 onClose={() => setCtxMenu(prev => ({ ...prev, visible: false }))}
             />
-        </div>
+        </div >
     )
 }

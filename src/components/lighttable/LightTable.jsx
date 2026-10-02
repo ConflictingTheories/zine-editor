@@ -25,6 +25,7 @@ import {
     centreCrop
 } from '../../lib/lightTableEngine.js'
 import { LtRenderer } from './ltRenderer.js'
+import { filesToAssets, commitAssets, measureAssets } from '../../utils/photoImport.js'
 import LtSlider from './LtSlider.jsx'
 import LtHistogram from './LtHistogram.jsx'
 import LtCurveEditor from './LtCurveEditor.jsx'
@@ -245,8 +246,24 @@ function LightTable() {
         const img = imageRef.current
         if (!canvas || !img?.naturalWidth) return
         const [ow, oh] = outputSize(img.naturalWidth, img.naturalHeight, recipeRef.current.geometry)
-        const maxW = rendererMode === 'gpu' ? 1600 : 1400
-        const maxH = rendererMode === 'gpu' ? 1100 : 1000
+        const stage = canvas.closest('.lt-stage')
+        if (stage) {
+            const displayScale = Math.min(
+                1,
+                Math.max(1, stage.clientWidth - 48) / ow,
+                Math.max(1, stage.clientHeight - 48) / oh
+            )
+            const displayWidth = `${Math.max(1, Math.round(ow * displayScale))}px`
+            const displayHeight = `${Math.max(1, Math.round(oh * displayScale))}px`
+            if (canvas.style.width !== displayWidth) canvas.style.width = displayWidth
+            if (canvas.style.height !== displayHeight) canvas.style.height = displayHeight
+        }
+        const maxW = adjusting
+            ? (rendererMode === 'gpu' ? 640 : 480)
+            : (rendererMode === 'gpu' ? 1600 : 1400)
+        const maxH = adjusting
+            ? (rendererMode === 'gpu' ? 480 : 320)
+            : (rendererMode === 'gpu' ? 1100 : 1000)
         const scale = Math.min(1, maxW / ow, maxH / oh)
         const w = Math.max(1, Math.round(ow * scale))
         const h = Math.max(1, Math.round(oh * scale))
@@ -254,7 +271,7 @@ function LightTable() {
             canvas.width = w
             canvas.height = h
         }
-    }, [rendererMode])
+    }, [adjusting, rendererMode])
 
     const draw = useCallback((time = 0) => {
         const renderer = rendererRef.current
@@ -294,24 +311,28 @@ function LightTable() {
     }, [recipe, compare, draw, needsAnimation])
 
     // ── Import ───────────────────────────────────────────────────────────
+    /**
+     * Import through the shared photo pipeline, exactly as the Portfolio does.
+     *
+     * This used to read each file straight to a data URL and add it to the
+     * library. That put the bytes nowhere: `toStoredRecord` deliberately strips
+     * `src` from the record it writes to localStorage on the assumption the
+     * pixels are already in IndexedDB — and this path never put them there. The
+     * result was a library that looked full and listed its assets after a
+     * reload, then rendered broken images, because the record survived and the
+     * bytes did not. `commitAssets` is what actually writes them.
+     */
     const importFiles = useCallback(async (files) => {
-        const list = Array.from(files || []).filter(f => f.type.startsWith('image/'))
-        if (!list.length) return
-        const assets = await Promise.all(list.map(file => new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve({
-                id: `imported-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                name: file.name,
-                src: reader.result,
-                kind: 'image',
-                addedAt: new Date().toISOString()
-            })
-            reader.onerror = reject
-            reader.readAsDataURL(file)
-        })))
-        addImportedAssets(assets)
-        if (assets[0]) setSelectedId(assets[0].id)
-        toast(`${assets.length} image${assets.length === 1 ? '' : 's'} imported`, 'success')
+        const created = await filesToAssets(files)
+        if (!created.length) return
+        // Render immediately from the data URLs already in hand…
+        addImportedAssets(created)
+        if (created[0]) setSelectedId(created[0].id)
+        // …then commit the bytes to IndexedDB and patch in the object URLs.
+        measureAssets(created)
+        const settled = await commitAssets(created)
+        addImportedAssets(settled)
+        toast(`${settled.length} image${settled.length === 1 ? '' : 's'} stored in the library`, 'success')
     }, [addImportedAssets, toast])
 
     const onPickFiles = () => fileInputRef.current?.click()

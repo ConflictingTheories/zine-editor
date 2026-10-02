@@ -8,13 +8,35 @@ import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID, DEFAULT_ZINE
 import { getAdditionalDefaultZines } from '../data/defaultZines.js'
 import { BUILT_IN_TEMPLATES, createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
 import { EDITOR_MODE_PHOTO_PORTFOLIO, EDITOR_MODE_ZINE, defaultThemeForMode } from '../data/editorModes.js'
-import { getPortfolioLayout, createLayoutPage } from '../data/portfolioTemplates.js'
-import { bookGeometry } from '../lib/bookGeometry.js'
+import { getPortfolioLayout, createLayoutPages } from '../data/portfolioTemplates.js'
+import { bookGeometry, pageKind, PAGE_KIND } from '../lib/bookGeometry.js'
+import { DEFAULT_PAPER } from '../constants.js'
 import { packSvrn } from '../../packages/svrn-format/src/index.js'
 import { getPhotoBlob, putPhoto, deletePhotos, storedPhotoIds, makeThumbnail } from '../lib/photoStore.js'
 
 /** Element and layout ids share one generator so they can never collide. */
 const uid = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+/**
+ * Stamp cover/body/back kinds onto a page list, purely from position.
+ *
+ * The stamps are re-derived from scratch every time, which is the only thing
+ * that works: an earlier version preserved existing non-null kinds, so appending
+ * a page left the previous back cover still stamped "back" and a four-page book
+ * reported three back covers. Position is the truth; the stamp is a cache of it.
+ */
+const markPageKinds = (pages) => {
+    const total = (pages || []).length
+    pages.forEach((p, i) => {
+        // Clear first — a stale stamp from a shorter book must not survive.
+        p.pageKind = null
+    })
+    if (total > 1) {
+        pages[0].pageKind = PAGE_KIND.COVER
+        pages[total - 1].pageKind = PAGE_KIND.BACK
+    }
+    return pages
+}
 
 /**
  * VPContext
@@ -243,31 +265,40 @@ const VPProvider = ({ children }) => {
     }, [])
 
     /**
-     * Rehydrate the library on boot: mint object URLs for every photo whose
-     * bytes are in IndexedDB, and migrate any legacy inline `data:` src into
-     * the blob store so the next write is already free of base64. Runs once.
+     * Rehydrate the library on boot.
+     *
+     * Three jobs, in order:
+     *   1. park any legacy inline `data:` bytes into the blob store
+     *   2. drop records whose pixels are on neither disk nor inline — those are
+     *      unrecoverable and would otherwise render as broken images forever
+     *   3. mint an object URL for everything that does still have bytes
+     *
+     * Step 2 is what stops a half-written library from looking complete. A
+     * record without bytes is worse than a missing record: it occupies a slot
+     * in the filmstrip, counts toward "N in library", and renders an empty box.
      */
     useEffect(() => {
         let cancelled = false
         const hydrate = async () => {
             const stored = (vpState.library?.imported || [])
+            if (!stored.length) return
             const legacy = stored.filter(asset => typeof asset.src === 'string' && asset.src.startsWith('data:'))
-            const orphaned = stored.filter(asset => !asset.src)
-            if (!legacy.length && !orphaned.length) return
             try {
                 // Legacy records first: park the bytes before slimming, or the
                 // base64 is deleted from disk before it has been copied to it.
                 if (legacy.length) {
                     await Promise.all(legacy.map(asset => putPhoto(asset.id, asset.src)))
                 }
-                // Re-read the key list *after* writing — reading it beforehand
-                // would miss everything just imported and leave them unresolved.
+                // Read the key list *after* writing — reading it beforehand
+                // would miss everything just imported and leave it unresolved.
                 const onDisk = new Set(await storedPhotoIds())
 
-                const resolved = await Promise.all(stored.map(asset => {
-                    if (typeof asset.src === 'string' && asset.src && !asset.src.startsWith('data:')) return asset
-                    return onDisk.has(asset.id) ? resolveAssetSrc(asset) : asset
-                }))
+                const recoverable = stored.filter(asset =>
+                    onDisk.has(asset.id) || (typeof asset.src === 'string' && asset.src.length > 0))
+                const lost = stored.length - recoverable.length
+
+                const resolved = await Promise.all(recoverable.map(asset =>
+                    onDisk.has(asset.id) ? resolveAssetSrc(asset) : asset))
                 if (cancelled) return
 
                 // Grid thumbnails are generated here, once, so a library that
@@ -285,6 +316,9 @@ const VPProvider = ({ children }) => {
                 // copy of the library: anything imported while hydration was
                 // awaiting IndexedDB must survive this write.
                 await updateLibraryPersisted(stored => ({ ...stored, imported: slim }))
+                if (lost > 0) {
+                    console.warn(`[SVRN] ${lost} library record(s) had no recoverable image data and were removed`)
+                }
             } catch { /* leave the library as-is; it still renders from thumbs */ }
         }
         hydrate()
@@ -873,20 +907,38 @@ const VPProvider = ({ children }) => {
     const createProject = (themeKey, editorMode = 'zine') => {
         const theme = themeKey || vpState.selectedTheme
         const isPortfolio = editorMode === EDITOR_MODE_PHOTO_PORTFOLIO
-        // Portfolios start from real photographic layouts, not zine themes —
-        // a title page and a blank spread the user fills from the library.
-        const portfolioPages = isPortfolio
-            ? [getPortfolioLayout('pf-title-page'), getPortfolioLayout('pf-blank-spread')]
-                .map(layout => createLayoutPage(layout, { background: '#ffffff' }))
-            : []
+        let pages
+        if (isPortfolio) {
+            // A new book starts as cover + one body page, so the very first
+            // screen shows a real book structure rather than two arbitrary
+            // templates. Both are built against the book's own trim.
+            const geo = bookGeometry({ paperSize: DEFAULT_PAPER })
+            const titleLayout = getPortfolioLayout('pf-title-page')
+            pages = createLayoutPages(titleLayout, {
+                background: '#ffffff',
+                pageSize: { width: geo.width, height: geo.height },
+                gutter: geo.gutter
+            })
+            pages.push({
+                id: uid('page'),
+                pageKind: null,
+                background: '#ffffff',
+                texture: null,
+                elements: []
+            })
+            markPageKinds(pages)
+        } else {
+            pages = [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }]
+        }
         const project = {
             id: Date.now(),
-            title: 'Untitled ' + (editorMode === 'photo-portfolio' ? 'Portfolio' : 'Zine'),
+            title: 'Untitled ' + (isPortfolio ? 'Book' : 'Zine'),
             theme,
             editorMode,
-            pages: editorMode === EDITOR_MODE_PHOTO_PORTFOLIO
-                ? portfolioPages
-                : [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
+            // The paper is chosen per book, but it has to exist from the first
+            // frame or the canvas has no trim to lay out against.
+            paperSize: isPortfolio ? DEFAULT_PAPER : undefined,
+            pages,
             created: new Date().toISOString(),
             // `updatedAt` is what the hub's "Recent edits" sorts on. It was
             // never being written, so that section could never render and the
@@ -899,7 +951,10 @@ const VPProvider = ({ children }) => {
             ...prev,
             projects: [project, ...prev.projects],
             currentProject: project,
-            currentView: 'editor',
+            // A book opens in the Portfolio workspace, not the zine editor. Both
+            // keys render <Editor />, which dispatches on editorMode, but
+            // setting the correct key keeps the breadcrumb honest.
+            currentView: isPortfolio ? 'portfolio' : 'editor',
             selection: { type: 'page', id: project.pages[0].id, pageIdx: 0 },
             history: [JSON.parse(JSON.stringify(project))],
             historyIdx: 0
@@ -907,7 +962,7 @@ const VPProvider = ({ children }) => {
         saveLocal()
         closeModal('themePickerModal')
         closeModal('themePicker')
-        toast(editorMode === EDITOR_MODE_PHOTO_PORTFOLIO ? 'Portfolio book created!' : 'New zine created!', 'success')
+        toast(isPortfolio ? 'New book created' : 'New zine created!', 'success')
     }
 
     const openProject = (idx) => {
@@ -1128,6 +1183,9 @@ const VPProvider = ({ children }) => {
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
         const newPage = template ? createTemplatePage(template, project.theme || 'classic') : createTemplatePage(null)
         project.pages = [...(project.pages || []), newPage]
+        // Appending past the end means the previous back cover is now a body
+        // page, so the book needs a new one.
+        markPageKinds(project.pages)
         const pageIdx = project.pages.length - 1
         setVpState(prev => ({ ...prev, currentProject: project, selection: { type: 'page', id: newPage.id, pageIdx } }))
         pushHistory(project)
@@ -1138,26 +1196,40 @@ const VPProvider = ({ children }) => {
     const addPage = () => addPageFromTemplate(null)
 
     /**
-     * Append a photography layout as a new spread and optionally fill its
-     * empty frames straight from the library — the fastest path from "I have
-     * 800 photos" to "I have a composed book".
+     * Append a photography layout and optionally fill its empty frames straight
+     * from the library — the fastest path from "I have 800 photos" to "I have a
+     * composed book".
+     *
+     * A layout occupies one or two PAGES. Both are appended, so a two-page
+     * layout genuinely adds two pages to the book rather than adding one page
+     * that pretends to be wide. Page kinds are re-derived afterwards because
+     * inserting at the end can change which page is the back cover.
      */
     const addPageFromPortfolioLayout = (layout, { fillWith = null, background = '#ffffff' } = {}) => {
         if (!vpState.currentProject) {
             toast('Open a portfolio before adding a layout', 'error')
             return false
         }
-        if (vpState.currentProject.pages.length >= 64) {
-            toast('A book is limited to 64 spreads', 'error')
+        const pageCount = Math.max(1, Math.min(2, layout?.pageCount ?? 1))
+        if (vpState.currentProject.pages.length + pageCount > 64) {
+            toast('A book is limited to 64 pages', 'error')
             return false
         }
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
         // Lay the layout out against the book's actual paper, not the legacy
         // page the templates were authored on.
-        const geo = bookGeometry(project, { orientation: layout?.orientation || 'portrait' })        const page = createLayoutPage(layout, { background, pageSize: { width: geo.width, height: geo.height } })
+        const geo = bookGeometry(project)
+        const newPages = createLayoutPages(layout, {
+            background,
+            pageSize: { width: geo.width, height: geo.height },
+            gutter: geo.gutter
+        })
+
         const pool = (fillWith || []).filter(asset => asset?.src)
         if (pool.length) {
-            const frames = page.elements.filter(el => el.type === 'photo-frame')
+            // Fill across the whole layout, in reading order across both pages,
+            // so a two-page layout gets an even spread of the shoot.
+            const frames = newPages.flatMap(p => p.elements.filter(el => el.type === 'photo-frame'))
             frames.forEach((frameElement, index) => {
                 const asset = pool[index % pool.length]
                 if (!asset) return
@@ -1167,27 +1239,36 @@ const VPProvider = ({ children }) => {
                 frameElement.lightTableRecipe = asset.recipe || null
             })
         }
-        project.pages = [...(project.pages || []), page]
-        const pageIdx = project.pages.length - 1
-        setVpState(prev => ({ ...prev, currentProject: project, selection: { type: 'page', id: page.id, pageIdx } }))
+
+        project.pages = [...(project.pages || []), ...newPages]
+        // The old last page is no longer the back cover, so kinds are re-derived.
+        markPageKinds(project.pages)
+        const pageIdx = project.pages.length - newPages.length
+        setVpState(prev => ({
+            ...prev,
+            currentProject: project,
+            selection: { type: 'page', id: newPages[0].id, pageIdx }
+        }))
         pushHistory(project)
         saveLocal(project)
         toast(pool.length
-            ? `${layout?.name || 'Layout'} added with ${Math.min(pool.length, page.elements.filter(el => el.type === 'photo-frame').length)} photos`
-            : `${layout?.name || 'Layout'} added`, 'success')
+            ? `${layout?.name || 'Layout'} added with ${Math.min(pool.length, newPages.reduce((n, p) => n + p.elements.filter(e => e.type === 'photo-frame').length, 0))} photos`
+            : `${layout?.name || 'Layout'} added (${newPages.length} page${newPages.length === 1 ? '' : 's'})`, 'success')
         return true
     }
 
     /**
-     * Save the current spread as a reusable layout. Stored on the project
-     * rather than in the shared asset library, because a layout is a decision
-     * about *this* book — a grid that works for a portrait series does not
-     * belong in the toolbox of every book on the account.
+     * Save the visible page (or pair of pages) as a reusable layout. Stored on
+     * the project rather than in the shared asset library, because a layout is a
+     * decision about *this* book — a grid that works for a portrait series does
+     * not belong in the toolbox of every book on the account.
      *
-     * Only frames and rules survive; text is stripped, because a saved layout
-     * is a set of empty mats waiting to be filled, not a page of prose.
+     * A saved layout records how many pages it covered, and its frames are
+     * authored in sheet space, so a two-page arrangement comes back as two
+     * pages rather than one wide one. Only frames survive; text is stripped,
+     * because a saved layout is a set of empty mats waiting to be filled.
      */
-    const saveCurrentSpreadAsLayout = (name) => {
+    const saveCurrentSpreadAsLayout = (name, pageIndices = null) => {
         const project = vpState.currentProject
         if (!project) {
             toast('Open a portfolio before saving a layout', 'error')
@@ -1195,45 +1276,66 @@ const VPProvider = ({ children }) => {
         }
         const pages = project.pages || []
         if (!pages.length) {
-            toast('This book has no spreads yet', 'error')
+            toast('This book has no pages yet', 'error')
             return null
         }
-        const pageIdx = vpState.selection?.pageIdx ?? 0
-        const source = pages[Math.min(Math.max(pageIdx, 0), pages.length - 1)]
-        if (!source) return null
+        const anchor = vpState.selection?.pageIdx ?? 0
+        const geo = bookGeometry(project)
+        // Default to whatever the workspace is currently showing, so "save
+        // layout" saves the spread the user is looking at.
+        const indices = pageIndices && pageIndices.length
+            ? pageIndices
+            : [anchor, anchor + 1].filter(i => i < pages.length)
 
-        const frames = (source.elements || []).filter(el => el.type === 'photo-frame')
+        const sources = indices.map(i => pages[i]).filter(Boolean)
+        const frames = sources.flatMap(p => (p.elements || []).filter(el => el.type === 'photo-frame'))
         if (!frames.length) {
             toast('A saved layout needs at least one photo frame', 'error')
             return null
         }
 
-        const landscape = source.orientation === 'landscape'
-        const pageWidth = landscape ? PAGE_H : PAGE_W
-        const pageHeight = landscape ? PAGE_W : PAGE_H
-        const minX = Math.min(...frames.map(f => f.x ?? 0))
-        const minY = Math.min(...frames.map(f => f.y ?? 0))
-        const maxX = Math.max(...frames.map(f => (f.x ?? 0) + (f.width ?? 0)))
-        const maxY = Math.max(...frames.map(f => (f.y ?? 0) + (f.height ?? 0)))
+        const pageCount = Math.max(1, Math.min(2, sources.length))
+        // Sheet space: pages side by side, separated by a nominal gutter, which
+        // is what createLayoutPages maps back onto real pages.
+        const NOMINAL_GUTTER = 24
+        const sheetW = PAGE_W * pageCount + NOMINAL_GUTTER * (pageCount - 1)
+        // Rebase each page's frames into sheet space.
+        const sheetFrames = sources.flatMap((p, pIdx) => (p.elements || [])
+            .filter(el => el.type === 'photo-frame')
+            .map(f => ({
+                __frame: true,
+                preset: f.framePreset || 'mat',
+                x: (f.x ?? 0) + PAGE_W * pIdx + NOMINAL_GUTTER * pIdx,
+                y: f.y ?? 0,
+                width: f.width ?? 0,
+                height: f.height ?? 0
+            })))
+
+        const minX = Math.min(...sheetFrames.map(f => f.x))
+        const minY = Math.min(...sheetFrames.map(f => f.y))
+        const maxX = Math.max(...sheetFrames.map(f => f.x + f.width))
+        const maxY = Math.max(...sheetFrames.map(f => f.y + f.height))
 
         const layout = {
             id: uid('layout'),
             name: (name || 'Custom layout').trim().slice(0, 60),
-            description: `${frames.length} frame${frames.length === 1 ? '' : 's'} · saved from spread ${(pageIdx ?? 0) + 1}`,
+            description: `${frames.length} frame${frames.length === 1 ? '' : 's'} · ${pageCount} page${pageCount === 1 ? '' : 's'}`,
             category: 'Saved',
-            orientation: source.orientation || 'portrait',
+            pageCount,
+            orientation: 'portrait',
             custom: true,
-            build: () => frames.map(f => ({
+            build: () => sheetFrames.map(f => ({
                 __frame: true,
-                preset: f.framePreset || 'mat',
-                // Rebased onto a full page so the arrangement is not stuck
-                // wherever it happened to sit on the spread it came from.
-                x: Math.round(f.x - minX + (pageWidth - (maxX - minX)) / 2),
-                y: Math.round(f.y - minY + (pageHeight - (maxY - minY)) / 2),
+                preset: f.preset,
+                // Rebased onto a full sheet so the arrangement is not stuck
+                // wherever it happened to sit on the pages it came from.
+                x: Math.round(f.x - minX + (sheetW - (maxX - minX)) / 2),
+                y: Math.round(f.y - minY + (PAGE_H - (maxY - minY)) / 2),
                 width: Math.round(f.width),
                 height: Math.round(f.height)
             }))
         }
+        void geo
 
         const updated = {
             ...project,
@@ -1900,6 +2002,9 @@ const VPProvider = ({ children }) => {
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
         const { pageIdx } = vpState.selection
         project.pages.splice(pageIdx, 1)
+        // Removing a page re-derives the cover/back cover, so a book that lost
+        // its back cover gets a new one rather than ending on a body page.
+        markPageKinds(project.pages)
         const nextIdx = Math.min(pageIdx, project.pages.length - 1)
         updateVpState({
             currentProject: project,
@@ -1919,8 +2024,12 @@ const VPProvider = ({ children }) => {
         const currentPage = project.pages[pageIdx]
         const newPage = JSON.parse(JSON.stringify(currentPage))
         newPage.id = Date.now()
+        // A duplicate is never a cover or back cover, however the original was
+        // stamped — otherwise duplicating the cover would create a second one.
+        newPage.pageKind = null
         if (newPage.elements) newPage.elements.forEach(e => { e.id = genId() })
         project.pages.splice(pageIdx + 1, 0, newPage)
+        markPageKinds(project.pages)
         updateVpState({
             currentProject: project,
             selection: { type: 'page', id: newPage.id, pageIdx: pageIdx + 1 }
