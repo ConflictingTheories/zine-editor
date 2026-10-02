@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import AssetModal from './AssetModal.jsx'
 import ExportModal from './ExportModal.jsx'
+import { FEATURES } from '../constants.js'
 
 /**
  * Component: Modal
@@ -155,17 +156,20 @@ function Modal() {
         </div>
     )
 
+    const isPublishingPortfolio = vpState.currentProject?.editorMode === 'photo-portfolio'
+    const publishNoun = isPublishingPortfolio ? 'Portfolio Book' : 'Zine'
+
     const renderPublishModal = () => (
         <div className="modal-overlay active" id="publishModal">
             <div className="modal-box" style={{ maxWidth: '600px' }}>
                 <button className="modal-close" onClick={() => closeModal('publishModal')}>✕</button>
-                <h2 className="modal-h2">Publish Your Zine</h2>
+                <h2 className="modal-h2">Publish Your {publishNoun}</h2>
                 <form onSubmit={handlePublishSubmit}>
                     <div className="form-row">
                         <label>Title</label>
                         <input
                             type="text"
-                            placeholder="Enter zine title..."
+                            placeholder={`Enter ${publishNoun.toLowerCase()} title...`}
                             value={publishData.title}
                             onChange={(e) => setPublishData({ ...publishData, title: e.target.value })}
                         />
@@ -182,7 +186,7 @@ function Modal() {
                     <div className="form-row">
                         <label>Description</label>
                         <textarea
-                            placeholder="What is this void about?"
+                            placeholder={isPublishingPortfolio ? 'What is this body of work about?' : 'What is this zine about?'}
                             rows="3"
                             value={publishData.description || vpState.currentProject?.publishSettings?.description || ''}
                             onChange={(e) => setPublishData({ ...publishData, description: e.target.value })}
@@ -194,13 +198,24 @@ function Modal() {
                             value={publishData.genre || vpState.currentProject?.theme || 'classic'}
                             onChange={(e) => setPublishData({ ...publishData, genre: e.target.value })}
                         >
-                            <option value="classic">Classic Literature</option>
-                            <option value="fantasy">Medieval Fantasy</option>
-                            <option value="cyberpunk">Cyberpunk</option>
-                            <option value="conspiracy">Dark Conspiracies</option>
-                            <option value="worldbuilding">World Building</option>
-                            <option value="comics">Comics</option>
-                            <option value="arcane">Arcane Lore</option>
+                            {isPublishingPortfolio ? (
+                                <>
+                                    <option value="editorial">Editorial</option>
+                                    <option value="documentary">Documentary</option>
+                                    <option value="fine-art">Fine Art</option>
+                                    <option value="photo-essay">Photo Essay</option>
+                                </>
+                            ) : (
+                                <>
+                                    <option value="classic">Classic Literature</option>
+                                    <option value="fantasy">Medieval Fantasy</option>
+                                    <option value="cyberpunk">Cyberpunk</option>
+                                    <option value="conspiracy">Dark Conspiracies</option>
+                                    <option value="worldbuilding">World Building</option>
+                                    <option value="comics">Comics</option>
+                                    <option value="arcane">Arcane Lore</option>
+                                </>
+                            )}
                         </select>
                     </div>
                     <div className="form-row">
@@ -213,37 +228,50 @@ function Modal() {
                         />
                     </div>
 
-                    {/* Monetization Section */}
-                    <div className="form-row">
-                        <label>Monetization</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                            {MONETIZATION_TYPES.map(type => (
-                                <div
-                                    key={type.key}
-                                    onClick={() => setPublishData({ ...publishData, monetizationType: type.key })}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '10px',
-                                        padding: '10px',
-                                        background: publishData.monetizationType === type.key ? 'rgba(124, 92, 252, 0.15)' : 'var(--vp-surface)',
-                                        border: publishData.monetizationType === type.key ? '1px solid var(--vp-accent)' : '1px solid var(--vp-border)',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    <span style={{ fontSize: '16px' }}>{type.icon}</span>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: '600', color: 'var(--vp-text)', fontSize: '13px' }}>{type.name}</div>
-                                        <div style={{ fontSize: '10px', color: 'var(--vp-text-dim)' }}>{type.desc}</div>
-                                    </div>
+                    {/* Monetization is Phase 2. It stays reachable behind its
+                        feature flag rather than being deleted, but it is hidden
+                        by default: offering crowdfunds and token gates during
+                        Phase 1 made the publish form look like it was doing
+                        something it could not actually do. */}
+                    {FEATURES.ENABLE_MONETIZATION ? (
+                        <>
+                            <div className="form-row">
+                                <label>Monetization</label>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                                    {MONETIZATION_TYPES.map(type => (
+                                        <div
+                                            key={type.key}
+                                            onClick={() => setPublishData({ ...publishData, monetizationType: type.key })}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '10px',
+                                                padding: '10px',
+                                                background: publishData.monetizationType === type.key ? 'rgba(124, 92, 252, 0.15)' : 'var(--vp-surface)',
+                                                border: publishData.monetizationType === type.key ? '1px solid var(--vp-accent)' : '1px solid var(--vp-border)',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <span style={{ fontSize: '16px' }}>{type.icon}</span>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontWeight: '600', color: 'var(--vp-text)', fontSize: '13px' }}>{type.name}</div>
+                                                <div style={{ fontSize: '10px', color: 'var(--vp-text-dim)' }}>{type.desc}</div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </div>
+                        </>
+                    ) : (
+                        <p className="prop-hint" style={{ marginBottom: '12px' }}>
+                            Publishing in this build marks the {publishNoun.toLowerCase()} as live and
+                            readable in-app. Paid tiers and discovery arrive in the next phase.
+                        </p>
+                    )}
 
-                    {publishData.monetizationType === 'crowdfund' && (
+                    {publishData.monetizationType === 'crowdfund' && FEATURES.ENABLE_MONETIZATION && (
                         <div className="form-row">
                             <label>Funding Goal (USD)</label>
                             <input
@@ -260,7 +288,7 @@ function Modal() {
                         </div>
                     )}
 
-                    {publishData.monetizationType === 'token' && (
+                    {publishData.monetizationType === 'token' && FEATURES.ENABLE_MONETIZATION && (
                         <div className="form-row">
                             <div style={{
                                 background: 'rgba(124, 92, 252, 0.1)',

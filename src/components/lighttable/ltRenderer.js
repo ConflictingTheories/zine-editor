@@ -11,7 +11,9 @@ import {
     GRADE_DEFAULTS,
     FX_DEFAULTS,
     DEFAULT_RECIPE,
-    channelCurve,
+    bakeCurveLut,
+    curveLutKey,
+    curvesAreIdentity,
     renderRecipe
 } from '../../lib/lightTableEngine.js'
 
@@ -27,18 +29,6 @@ function compileShader(gl, type, source) {
     return shader
 }
 
-// Pack 5 tone-curve points into the two vec4 uniforms the shader expects.
-function packCurve(points) {
-    const p = Array.isArray(points) && points.length >= 2 ? points : DEFAULT_RECIPE.curves.rgb
-    const sorted = p.slice().sort((a, b) => a[0] - b[0])
-    while (sorted.length < 5) sorted.push([sorted[sorted.length - 1][0] + 0.001, sorted[sorted.length - 1][1]])
-    const first = sorted.slice(0, 5)
-    return {
-        x: new Float32Array([first[0][0], first[1][0], first[2][0], first[3][0]]),
-        y: new Float32Array([first[0][1], first[1][1], first[2][1], first[3][1]])
-    }
-}
-
 export class LtRenderer {
     constructor(canvas) {
         this.canvas = canvas
@@ -46,8 +36,11 @@ export class LtRenderer {
         this.program = null
         this.texture = null
         this.lutTexture = null
+        this.curveTexture = null
         this.uniforms = {}
         this.lutKey = null
+        this.curveKey = null
+        this.cpuCanvas = null
         this.mode = 'none'
     }
 
@@ -61,8 +54,28 @@ export class LtRenderer {
             this.mode = 'cpu'
             return false
         }
+        // Probe before claiming the GPU. Headless Chrome ships WebGL2 but with
+        // no GPU behind it, and asking for a context there can succeed and then
+        // fail to compile or link. Whichever happens, the canvas has already
+        // been bound to 'webgl2' and can never hand out a 2D context — so the
+        // CPU fallback would get null and crash the view. Swapping in a canvas
+        // that has only ever known 2D keeps the fallback honest.
         try {
-            const program = gl.createProgram()
+            this.startGpu(gl)
+        } catch (err) {
+            console.warn('[LightTable] WebGL2 unavailable, using CPU render:', err.message)
+            this.releaseGpu()
+            this.adoptCpuCanvas()
+            this.mode = 'cpu'
+            return false
+        }
+        this.mode = 'gpu'
+        return true
+    }
+
+    /** Build the program, buffers and textures. Throws on any GPU failure. */
+    startGpu(gl) {
+        const program = gl.createProgram()
             gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE))
             gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE))
             gl.linkProgram(program)
@@ -98,6 +111,18 @@ export class LtRenderer {
                 gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
             }
 
+            this.curveTexture = gl.createTexture()
+            gl.activeTexture(gl.TEXTURE2)
+            gl.bindTexture(gl.TEXTURE_2D, this.curveTexture)
+            // A 1D curve needs NEAREST-independent linear filtering to hide the
+            // sampling step, but CLAMP_TO_EDGE so 0 and 1 stay anchored.
+            for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
+                gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
+            }
+            for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
+                gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
+            }
+
             const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS)
             for (let i = 0; i < count; i++) {
                 const info = gl.getActiveUniform(program, i)
@@ -106,15 +131,48 @@ export class LtRenderer {
             }
 
             gl.useProgram(program)
-            gl.uniform1i(this.uniforms.uSource, 0)
-            gl.uniform1i(this.uniforms.uLut, 1)
-            this.mode = 'gpu'
-            return true
-        } catch (err) {
-            console.warn('[LightTable] WebGL2 unavailable, using CPU render:', err.message)
-            this.mode = 'cpu'
-            return false
+        gl.uniform1i(this.uniforms.uSource, 0)
+        gl.uniform1i(this.uniforms.uLut, 1)
+        gl.uniform1i(this.uniforms.uCurveLut, 2)
+        this.programRef = program
+        // Seed an identity curve so the first frame never samples garbage.
+        this.uploadCurveLut({ curves: null })
+    }
+
+    /**
+     * Replace the canvas with a 2D-only twin. React keeps its ref on the
+     * original node, so the node is swapped in place — same tag, same
+     * attributes, no attributes lost — and the ref is redirected to it.
+     */
+    adoptCpuCanvas() {
+        const old = this.canvas
+        if (!old || this.cpuCanvas) return
+        if (old.getContext('2d')) return
+        const fresh = document.createElement('canvas')
+        for (const { name, value } of Array.from(old.attributes)) {
+            try { fresh.setAttribute(name, value) } catch { /* skip */ }
         }
+        old.replaceWith(fresh)
+        this.canvas = fresh
+        this.cpuCanvas = fresh
+        this.onCanvasSwap?.(fresh)
+    }
+
+    releaseGpu() {
+        const gl = this.gl
+        this.gl = null
+        this.program = null
+        if (!gl) return
+        try {
+            if (this.texture) gl.deleteTexture(this.texture)
+            if (this.lutTexture) gl.deleteTexture(this.lutTexture)
+            if (this.curveTexture) gl.deleteTexture(this.curveTexture)
+            if (this.programRef) gl.deleteProgram(this.programRef)
+        } catch { /* context already lost */ }
+        this.texture = null
+        this.lutTexture = null
+        this.curveTexture = null
+        this.programRef = null
     }
 
     uploadImage(image) {
@@ -154,6 +212,25 @@ export class LtRenderer {
         gl.activeTexture(gl.TEXTURE0)
     }
 
+    /**
+     * Upload the baked tone curve, but only when the curve actually changed.
+     * A curve edit arrives as a React state change many times a second while a
+     * point is being dragged, so keying on content keeps the GPU quiet.
+     */
+    uploadCurveLut(recipe) {
+        const gl = this.gl
+        if (!gl) return
+        const key = curveLutKey(recipe)
+        if (key === this.curveKey) return
+        this.curveKey = key
+        const { data, size } = bakeCurveLut(recipe)
+        gl.activeTexture(gl.TEXTURE2)
+        gl.bindTexture(gl.TEXTURE_2D, this.curveTexture)
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
+        gl.activeTexture(gl.TEXTURE0)
+    }
+
     /** Draw one frame. `time` drives the animated grain. */
     draw(recipe, time = 0) {
         if (this.mode !== 'gpu') return false
@@ -171,6 +248,7 @@ export class LtRenderer {
         gl.activeTexture(gl.TEXTURE1)
         gl.bindTexture(gl.TEXTURE_2D, this.lutTexture)
         this.uploadLut(recipe?.lut)
+        this.uploadCurveLut(recipe)
 
         gl.uniform2f(u.uResolution, c.width, c.height)
         gl.uniform1f(u.uTime, time / 1000)
@@ -202,14 +280,10 @@ export class LtRenderer {
         gl.uniform1f(u.uLutSize, recipe?.lut?.size || 0)
         gl.uniform1f(u.uLutStrength, recipe?.lut ? (recipe.lutStrength ?? 1) : 0)
 
-        const rgb = packCurve(channelCurve(recipe, 'rgb'))
-        gl.uniform4fv(u.uCurveX, rgb.x); gl.uniform4fv(u.uCurveY, rgb.y)
-        const r = packCurve(channelCurve(recipe, 'r'))
-        gl.uniform4fv(u.uCurveRX, r.x); gl.uniform4fv(u.uCurveRY, r.y)
-        const g = packCurve(channelCurve(recipe, 'g'))
-        gl.uniform4fv(u.uCurveGX, g.x); gl.uniform4fv(u.uCurveGY, g.y)
-        const b = packCurve(channelCurve(recipe, 'b'))
-        gl.uniform4fv(u.uCurveBX, b.x); gl.uniform4fv(u.uCurveBY, b.y)
+        // The curve pass is a texture fetch per pixel. When the curve is the
+        // identity (the overwhelmingly common case) it is skipped entirely, so
+        // a plain develop costs no more than it did before curves existed.
+        gl.uniform1f(u.uCurveAmount, curvesAreIdentity(recipe) ? 0 : 1)
 
         gl.viewport(0, 0, c.width, c.height)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
@@ -223,12 +297,9 @@ export class LtRenderer {
     }
 
     destroy() {
-        const gl = this.gl
-        if (!gl) return
-        gl.deleteTexture(this.texture)
-        gl.deleteTexture(this.lutTexture)
-        gl.deleteProgram(this.program)
-        this.gl = null
-        this.program = null
+        try {
+            this.releaseGpu()
+        } catch { /* context already gone */ }
+        this.mode = 'none'
     }
 }

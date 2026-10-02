@@ -19,28 +19,27 @@ import { PAGE_W, PAGE_H } from '../constants.js'
  * action handlers which call into `useVP()` helper functions.
  */
 
-const styles = {
-    themeSelect: {
-        padding: '5px 8px',
-        background: 'var(--vp-surface2)',
-        border: '1px solid var(--vp-border)',
-        color: 'var(--vp-text)',
-        borderRadius: '4px',
-        fontSize: '0.78em'
-    },
-    publishBtn: {
-        background: 'var(--vp-accent)',
-        color: '#000'
-    },
-    orientationSelect: {
-        padding: '4px 10px',
-        background: 'var(--vp-surface2)',
-        border: '1px solid var(--vp-border)',
-        color: 'var(--vp-text)',
-        fontSize: '0.78em',
-        borderRadius: '3px'
-    }
-}
+/* ── Inline SVG icons for the toolbar ───────────────────────────────────── */
+const IcoText = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M1.5 2.5h10M6.5 2.5v8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><path d="M4 10.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+const IcoPanel = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1.3" /><line x1="6.5" y1="1.5" x2="6.5" y2="11.5" stroke="currentColor" strokeWidth="1.3" /></svg>
+const IcoShape = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><rect x="2" y="2" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.3" /></svg>
+const IcoBalloon = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1.5a5 5 0 1 1 0 8h-3l1-2a5 5 0 0 1-3-3.75" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+const IcoSfx = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 9 L4 4 L6.5 10 L8.5 6.5 L10 8.5 L12 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+const IcoEffect = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1 L7.5 4.5 L11 5.5 L7.5 6.5 L6.5 10 L5.5 6.5 L2 5.5 L5.5 4.5Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
+const Ico3D = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1.5L11 4v5l-4.5 2.5L2 9V4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><path d="M2 4l4.5 2.5L11 4" stroke="currentColor" strokeWidth="1.3" /><line x1="6.5" y1="6.5" x2="6.5" y2="11.5" stroke="currentColor" strokeWidth="1.3" /></svg>
+const IcoGrid = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M1 4.5h11M1 8.5h11M4.5 1v11M8.5 1v11" stroke="currentColor" strokeWidth="1.1" strokeOpacity="0.7" /></svg>
+const IcoSnap = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="7.5" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2" /><path d="M5.5 3.5h2a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+const IcoUndo = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 5.5 A5 5 0 1 1 7 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><polyline points="2,2.5 2,5.5 5,5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+const IcoRedo = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M11 5.5 A5 5 0 1 0 6 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><polyline points="11,2.5 11,5.5 8,5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+const IcoSave = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 2h7l2 2v7H2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><rect x="4" y="7.5" width="5" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.2" /><rect x="4" y="2" width="4" height="2.5" rx="0.5" stroke="currentColor" strokeWidth="1.1" /></svg>
+const IcoPreview = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.3" /><path d="M4.5 4.5l5 2-5 2z" fill="currentColor" /></svg>
+const IcoExport = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1.5v7M4 6l2.5 3 2.5-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /><path d="M2 9.5v2h9v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+const IcoPublish = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><circle cx="6.5" cy="5" r="3" stroke="currentColor" strokeWidth="1.3" /><path d="M1.5 11.5c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+const IcoImport = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M6.5 4.5v4M4.5 7l2 2 2-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+const IcoLib = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="1.5" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" /><rect x="1.5" y="7.5" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="7.5" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" /></svg>
+const IcoAudio = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M3.5 4.5L7 2.5v8L3.5 8.5H1.5v-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M9 4.5a3 3 0 0 1 0 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M10.5 3a5.5 5.5 0 0 1 0 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+const IcoLightTable = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.3" /><circle cx="6.5" cy="6.5" r="2" stroke="currentColor" strokeWidth="1.2" /></svg>
+const IcoSymbol = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 10L6.5 2 11 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /><line x1="3.5" y1="7.5" x2="9.5" y2="7.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
 
 function PageThumbnail({ page, index, active, onSelect }) {
     const landscape = page.orientation === 'landscape'
@@ -89,6 +88,19 @@ function PageThumbnail({ page, index, active, onSelect }) {
         </button>
     )
 }
+
+/**
+ * Memoised page thumbnail.
+ *
+ * These render real element content for every page at 0.11 scale. Because the
+ * project is now updated structurally, only the page being edited gets a new
+ * object — so this bails out for every other thumbnail instead of re-rendering
+ * the entire book's worth of DOM sixty times a second during a drag.
+ */
+const MemoPageThumbnail = React.memo(
+    PageThumbnail,
+    (prev, next) => prev.page === next.page && prev.active === next.active && prev.index === next.index
+)
 
 function Editor() {
     const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes, toast } = useVP()
@@ -277,44 +289,79 @@ function Editor() {
     return (
         <div className="editor" id="editorContainer">
             <div className="ed-toolbar-top">
+                {/* Mode tabs — Compose / Library / Settings */}
                 <div className="ed-workspace-modes" role="tablist" aria-label="Editor workspace">
-                    {[['compose', isPortfolio ? 'Build book' : 'Compose'], ['media', 'Library'], ['settings', isPortfolio ? 'Book settings' : 'Zine settings']].map(([mode, label]) => (
-                        <button key={mode} type="button" role="tab" aria-selected={workspaceMode === mode} className={`ed-workspace-tab ${workspaceMode === mode ? 'active' : ''}`} onClick={() => setWorkspaceMode(mode)}>{label}</button>
+                    {[['compose', isPortfolio ? 'Build' : 'Compose'], ['media', 'Library'], ['settings', 'Settings']].map(([mode, label]) => (
+                        <button key={mode} type="button" role="tab" aria-selected={workspaceMode === mode}
+                            className={`ed-workspace-tab ${workspaceMode === mode ? 'active' : ''}`}
+                            onClick={() => setWorkspaceMode(mode)}>{label}</button>
                     ))}
                 </div>
+
+                <span className="ed-toolbar-sep" />
+
+                {/* Context tools — vary by workspace mode */}
                 <div className="ed-toolbar-context">
-                    {workspaceMode === 'compose' && <>
-                        <button className="ed-tool" title="Undo (Ctrl+Z)" onClick={undo}>↩</button>
-                        <button className="ed-tool" title="Redo (Ctrl+Shift+Z)" onClick={redo}>↪</button>
-                        <span className="ed-toolbar-label">Elements</span>
-                        <button className="ed-tool" onClick={handleAddText}>Text</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'panels')}>{isPortfolio ? 'Photo frame' : 'Panel'}</button>
-                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'shapes')}>Shape</button>}
-                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'balloons')}>Balloon</button>}
-                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'sfx')}>SFX</button>}
-                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'symbols')}>Symbol</button>}
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'shaders')}>Ethereal effect</button>
-                        {!isPortfolio && <button className="ed-tool" onClick={() => showModal('assetModal', 'objects')}>3D object</button>}
-                        <span className="ed-toolbar-label">View</span>
-                        <button className={`ed-tool ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>Grid</button>
-                        <button className={`ed-tool ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(!snapOn)}>Snap</button>
-                    </>}
-                    {workspaceMode === 'media' && <>
-                        <button className="ed-tool" onClick={handleAddImage}>Import image</button>
-                        <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = event => importFiles(event.target.files); input.click() }}>Bulk images</button>
-                        <button className="ed-tool" onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.multiple = true; input.onchange = event => importAudioFiles(event.target.files); input.click() }}>Import audio</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'imported')}>Image library</button>
-                        <button className="ed-tool" onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor' })}>Open Light Table</button>
-                        <button className="ed-tool" onClick={() => showModal('assetModal', 'audio')}>Audio library</button>
-                        <button className="ed-tool" onClick={() => openAudioPicker('project')}>Set background audio</button>
-                    </>}
-                    {workspaceMode === 'settings' && <span className="ed-toolbar-label">Project-wide configuration</span>}
+                    {workspaceMode === 'compose' && (
+                        <>
+                            {/* History */}
+                            <div className="ed-tool-group">
+                                <button className="ed-tool icon-tool" title="Undo (⌘Z)" onClick={undo}><IcoUndo /><span>Undo</span></button>
+                                <button className="ed-tool icon-tool" title="Redo (⌘⇧Z)" onClick={redo}><IcoRedo /><span>Redo</span></button>
+                            </div>
+                            <span className="ed-toolbar-divider" aria-hidden="true" />
+                            {/* Insert elements */}
+                            <div className="ed-tool-group">
+                                <span className="ed-tool-group-label">Insert</span>
+                                <button className="ed-tool icon-tool" title="Add text block" onClick={handleAddText}><IcoText /><span>Text</span></button>
+                                <button className="ed-tool icon-tool" title={isPortfolio ? 'Add photo frame' : 'Add panel'} onClick={() => showModal('assetModal', 'panels')}><IcoPanel /><span>{isPortfolio ? 'Frame' : 'Panel'}</span></button>
+                                {!isPortfolio && <button className="ed-tool icon-tool" title="Add shape" onClick={() => showModal('assetModal', 'shapes')}><IcoShape /><span>Shape</span></button>}
+                                {!isPortfolio && <button className="ed-tool icon-tool" title="Add speech balloon" onClick={() => showModal('assetModal', 'balloons')}><IcoBalloon /><span>Balloon</span></button>}
+                                {!isPortfolio && <button className="ed-tool icon-tool" title="Add sound effect text" onClick={() => showModal('assetModal', 'sfx')}><IcoSfx /><span>SFX</span></button>}
+                                {!isPortfolio && <button className="ed-tool icon-tool" title="Add symbol" onClick={() => showModal('assetModal', 'symbols')}><IcoSymbol /><span>Symbol</span></button>}
+                                <button className="ed-tool icon-tool" title="Add ethereal effect / shader" onClick={() => showModal('assetModal', 'shaders')}><IcoEffect /><span>Effect</span></button>
+                                {!isPortfolio && <button className="ed-tool icon-tool" title="Add 3D object" onClick={() => showModal('assetModal', 'objects')}><Ico3D /><span>3D</span></button>}
+                            </div>
+                            <span className="ed-toolbar-divider" aria-hidden="true" />
+                            {/* View options */}
+                            <div className="ed-tool-group">
+                                <span className="ed-tool-group-label">View</span>
+                                <button className={`ed-tool icon-tool ${gridOn ? 'active' : ''}`} title="Toggle grid" onClick={() => setGridOn(!gridOn)}><IcoGrid /><span>Grid</span></button>
+                                <button className={`ed-tool icon-tool ${snapOn ? 'active' : ''}`} title="Snap to grid" onClick={() => setSnapOn(!snapOn)}><IcoSnap /><span>Snap</span></button>
+                            </div>
+                        </>
+                    )}
+
+                    {workspaceMode === 'media' && (
+                        <>
+                            <div className="ed-tool-group">
+                                <span className="ed-tool-group-label">Import</span>
+                                <button className="ed-tool icon-tool" title="Import a single image" onClick={handleAddImage}><IcoImport /><span>Image</span></button>
+                                <button className="ed-tool icon-tool" title="Bulk import images to library" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = true; i.onchange = e => importFiles(e.target.files); i.click() }}><IcoImport /><span>Bulk</span></button>
+                                <button className="ed-tool icon-tool" title="Import audio files" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'audio/*'; i.multiple = true; i.onchange = e => importAudioFiles(e.target.files); i.click() }}><IcoAudio /><span>Audio</span></button>
+                            </div>
+                            <span className="ed-toolbar-divider" aria-hidden="true" />
+                            <div className="ed-tool-group">
+                                <span className="ed-tool-group-label">Library</span>
+                                <button className="ed-tool icon-tool" title="Browse image library" onClick={() => showModal('assetModal', 'imported')}><IcoLib /><span>Images</span></button>
+                                <button className="ed-tool icon-tool" title="Open Light Table for developing photos" onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor' })}><IcoLightTable /><span>Light Table</span></button>
+                                <button className="ed-tool icon-tool" title="Browse audio library" onClick={() => showModal('assetModal', 'audio')}><IcoAudio /><span>Audio</span></button>
+                                <button className="ed-tool icon-tool" title="Set project background audio" onClick={() => openAudioPicker('project')}><IcoAudio /><span>Set BGM</span></button>
+                            </div>
+                        </>
+                    )}
+
+                    {workspaceMode === 'settings' && (
+                        <span className="ed-toolbar-hint">Configure project-wide defaults in the left panel.</span>
+                    )}
                 </div>
+
+                {/* Right cluster — always visible */}
                 <div className="ed-toolbar-actions">
-                    <button className="ed-tool" onClick={saveProject}>Save</button>
-                    <button className="ed-tool" onClick={() => previewProject()}>Preview</button>
-                    <button className="ed-tool" onClick={() => showModal('exportModal')}>Export</button>
-                    <button className="ed-tool primary" onClick={() => showModal('publishModal')}>Publish</button>
+                    <button className="ed-action-btn" title="Save (⌘S)" onClick={saveProject}><IcoSave /><span>Save</span></button>
+                    <button className="ed-action-btn" title="Preview project" onClick={() => previewProject()}><IcoPreview /><span>Preview</span></button>
+                    <button className="ed-action-btn" title="Export to file" onClick={() => showModal('exportModal')}><IcoExport /><span>Export</span></button>
+                    <button className="ed-action-btn primary" title="Publish this project" onClick={() => showModal('publishModal')}><IcoPublish /><span>Publish</span></button>
                 </div>
             </div>
 
@@ -397,7 +444,7 @@ function Editor() {
                             <button className="ed-panel-btn" onClick={deletePage}>✕ Delete Page</button>
                         </div>
                         <div className="page-thumbs" id="pageThumbs">
-                            {pages.map((p, i) => <PageThumbnail key={p.id} page={p} index={i} active={i === pageIdx} onSelect={() => setCurrentPageIdx(i)} />)}
+                            {pages.map((p, i) => <MemoPageThumbnail key={p.id} page={p} index={i} active={i === pageIdx} onSelect={() => setCurrentPageIdx(i)} />)}
                         </div>
                     </div>}
                     {leftTab === 'templates' && <div className="ed-panel-section ed-left-pane">
@@ -452,9 +499,10 @@ function Editor() {
                     </div>
                     <div className="zoom-group">
                         <select
+                            aria-label="Page orientation"
+                            className="zoom-select"
                             value={currentPage?.orientation || 'portrait'}
                             onChange={(e) => updatePageOrientation(e.target.value)}
-                            style={styles.orientationSelect}
                         >
                             <option value="portrait">Portrait</option>
                             <option value="landscape">Landscape</option>

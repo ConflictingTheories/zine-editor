@@ -30,10 +30,14 @@ function LtPresetStrip({ image, recipe, activeId, onApply }) {
 
 function PresetThumb({ image, recipe, preset }) {
     const ref = useRef(null)
+    // With no photograph loaded there is nothing to preview, so the canvas
+    // would render as a black rectangle — thirteen of them, stacked. An
+    // explicit placeholder reads as "nothing to see yet" instead of broken.
+    const hasImage = Boolean(image?.naturalWidth)
 
     useEffect(() => {
         const canvas = ref.current
-        if (!canvas || !image?.naturalWidth) return
+        if (!canvas || !hasImage) return
         const p = getPreset(preset.id)
         const preview = createRecipe()
         preview.params = { ...DEFAULT_RECIPE.params, ...(p.params || {}) }
@@ -46,8 +50,11 @@ function PresetThumb({ image, recipe, preset }) {
         } catch {
             // A single failed thumbnail must never break the strip.
         }
-    }, [image, recipe, preset])
+    }, [image, recipe, preset, hasImage])
 
+    if (!hasImage) {
+        return <span className="lt-preset-placeholder" aria-hidden="true" />
+    }
     return <canvas ref={ref} />
 }
 

@@ -1,0 +1,213 @@
+/*
+ * Top navigation — the app's primary spine.
+ *
+ * The three modes are the only persistent navigation in the product, so they
+ * are a segmented control rather than a row of tabs: modes are exclusive at a
+ * time (unlike tabs, which are views within a page), and rendering them as a
+ * segmented group makes that relationship legible instead of implied.
+ *
+ * `.topnav-mode` replaced `.topnav-tab`, which used to style the pre-mode
+ * Dashboard/Editor tab pair. The old rules were left in styles.css for the
+ * legacy `.topnav-tab` selector; nothing renders that selector any more.
+ */
+
+.topnav {
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    height: var(--topnav-h);
+    padding: 0 var(--space-lg);
+    background: var(--surface-0);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+}
+
+/* ── Mode switcher ─────────────────────────────────────────────────────────── */
+.topnav-modes {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+}
+
+.topnav-mode {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 4px 11px;
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.topnav-mode:hover {
+    color: var(--text);
+    background: var(--surface-2);
+}
+
+.topnav-mode.active {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-sm);
+}
+
+.topnav-mode:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+.topnav-mode svg {
+    flex-shrink: 0;
+    opacity: .75;
+}
+
+.topnav-mode.active svg {
+    opacity: 1;
+}
+
+/* ── Wordmark ──────────────────────────────────────────────────────────────── */
+.topnav-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.topnav-logo-sub {
+    font-family: var(--font-ui);
+    font-size: 8px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    white-space: nowrap;
+}
+
+/* ── Right rail ────────────────────────────────────────────────────────────── */
+.topnav-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.topnav-icon-btn {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--dur) var(--ease);
+}
+
+.topnav-icon-btn:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.topnav-icon-btn:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+/* Connection state is a live signal, so it is one of the few places the
+   permitted signal colours are spent on chrome. */
+.topnav-online-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.topnav-online-dot.online {
+    background: var(--positive);
+}
+
+.topnav-online-dot.offline {
+    background: var(--danger);
+}
+
+.topnav-text-btn {
+    padding: 4px 8px;
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--dur) var(--ease);
+}
+
+.topnav-text-btn:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.topnav-user {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 1px solid var(--line);
+}
+
+.topnav-avatar {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    font-family: var(--font-ui);
+    font-size: var(--type-xs);
+    font-weight: 600;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    border-radius: 50%;
+    user-select: none;
+}
+
+@media (max-width: 860px) {
+    .topnav {
+        padding: 0 var(--space-md);
+    }
+
+    /* Labels are the first thing to go: the icons plus tooltips still identify
+       the modes, and the bar has to survive a narrow window. */
+    .topnav-mode span {
+        display: none;
+    }
+
+    .topnav-mode {
+        padding: 4px 8px;
+    }
+
+    .topnav-logo-sub {
+        display: none;
+    }
+}

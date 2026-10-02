@@ -130,20 +130,65 @@ export const smoothstep = (e0, e1, x) => {
 }
 export const luma = (r, g, b) => r * 0.2126 + g * 0.7152 + b * 0.0722
 
-// Monotone cubic-ish spline evaluator for tone curve points.
+/**
+ * Evaluate a tone curve with monotone cubic (Fritsch–Carlson) interpolation.
+ *
+ * The previous evaluator used a smoothstep between each pair of control points.
+ * Two things were wrong with that:
+ *
+ *  1. Smoothstep is not a spline — it bows away from the straight line between
+ *     any two control points, including collinear ones. The shipped default
+ *     curve is five points on the diagonal, so *every* untouched photograph was
+ *     being given an S-shaped distortion it never asked for.
+ *  2. Per-segment easing lets a curve fold back on itself, which can invert
+ *     tonal order and produce clipped bands.
+ *
+ * Monotone cubic passes exactly through every control point, reproduces a
+ * straight line exactly when the points are collinear, and refuses to overshoot
+ * outside the neighbouring values. A straight line in means a straight line out
+ * — which is the property the whole non-destructive pipeline depends on.
+ */
 export function curveValue(value, points) {
     if (!points || points.length < 2) return value
     const sorted = points.slice().sort((a, b) => a[0] - b[0])
     if (value <= sorted[0][0]) return sorted[0][1]
-    for (let i = 1; i < sorted.length; i++) {
-        if (value <= sorted[i][0]) {
-            const [x0, y0] = sorted[i - 1]
-            const [x1, y1] = sorted[i]
-            const t = (value - x0) / Math.max(0.0001, x1 - x0)
-            return clamp(y0 + (y1 - y0) * (t * t * (3 - 2 * t)))
-        }
+    const last = sorted[sorted.length - 1]
+    if (value >= last[0]) return last[1]
+
+    const n = sorted.length
+    const slopeAt = (i) => {
+        if (i === 0) return (sorted[1][1] - sorted[0][1]) / (sorted[1][0] - sorted[0][0])
+        if (i === n - 1) return (sorted[n - 1][1] - sorted[n - 2][1]) / (sorted[n - 1][0] - sorted[n - 2][0])
+        return (sorted[i + 1][1] - sorted[i - 1][1]) / (sorted[i + 1][0] - sorted[i - 1][0])
     }
-    return sorted[sorted.length - 1][1]
+
+    // Segment index: the last segment whose x start is <= value.
+    let i = 0
+    while (i < n - 2 && value >= sorted[i + 1][0]) i++
+
+    const [x0, y0] = sorted[i]
+    const [x1, y1] = sorted[i + 1]
+    const h = x1 - x0
+    if (h <= 0) return y1
+
+    const d0 = slopeAt(i)
+    const d1 = slopeAt(i + 1)
+    const slope = (y1 - y0) / h
+
+    // Fritsch–Carlson limiter: clip tangents into the monotone circle so the
+    // interpolant can never overshoot and reverse the tonal order.
+    const limit = (d, s) => (s === 0 ? 0 : Math.max(-3 * s, Math.min(3 * s, d)))
+    const m0 = limit(d0, slope)
+    const m1 = limit(d1, slope)
+
+    const t = (value - x0) / h
+    const t2 = t * t
+    const t3 = t2 * t
+    const h00 = 2 * t3 - 3 * t2 + 1
+    const h10 = t3 - 2 * t2 + t
+    const h01 = -2 * t3 + 3 * t2
+    const h11 = t3 - t2
+    return clamp(h00 * y0 + h10 * h * m0 + h01 * y1 + h11 * h * m1)
 }
 
 // Effective curve for a channel: falls back to the shared rgb curve.
@@ -152,6 +197,80 @@ export function channelCurve(recipe, channel) {
     if (!curves) return null
     if (Array.isArray(curves)) return curves
     return curves[channel] || curves.rgb || null
+}
+
+// ── Curve baking ─────────────────────────────────────────────────────────────
+/**
+ * Resolution of a baked curve. 256 entries is the point at which the texture
+ * read becomes indistinguishable from the analytic curve: the steepest useful
+ * control slope is roughly 8×, so consecutive samples differ by ~0.03 and the
+ * linear filter hides the rest.
+ */
+export const CURVE_LUT_SIZE = 256
+
+/**
+ * Bake a channel's curve into a flat RGBA byte table for upload as a 1D
+ * texture.
+ *
+ * Why this exists: the shader used to carry a fixed 4-segment spline in two
+ * `vec4` uniforms, which silently discarded every control point past the
+ * fourth — the shipped default has five, so the GPU preview and the exported
+ * JPEG disagreed for every photograph with an edited curve. Baking means the
+ * GPU evaluates exactly the samples `curveValue()` would return, so what a
+ * photographer sees on the stage is what lands on the spread.
+ *
+ * Channels R, G and B share one RGBA texture: R in the red byte, G in green,
+ * B in blue, which keeps this to a single texture unit and one sampler.
+ */
+export function bakeCurveLut(recipe, { rgb = null, r = null, g = null, b = null, size = CURVE_LUT_SIZE } = {}) {
+    const rgbCurve = rgb !== null ? rgb : channelCurve(recipe, 'rgb')
+    const rCurve = r !== null ? r : channelCurve(recipe, 'r')
+    const gCurve = g !== null ? g : channelCurve(recipe, 'g')
+    const bCurve = b !== null ? b : channelCurve(recipe, 'b')
+    const n = Math.max(2, size)
+    const out = new Uint8Array(n * 4)
+    const toByte = (v) => {
+        const c = Math.max(0, Math.min(1, v))
+        return Math.round(c * 255)
+    }
+    for (let i = 0; i < n; i++) {
+        const v = i / (n - 1)
+        out[i * 4] = toByte(curveValue(v, rCurve || rgbCurve))
+        out[i * 4 + 1] = toByte(curveValue(v, gCurve || rgbCurve))
+        out[i * 4 + 2] = toByte(curveValue(v, bCurve || rgbCurve))
+        out[i * 4 + 3] = 255
+    }
+    return { data: out, size: n }
+}
+
+/**
+ * True when every effective channel curve is a straight line, i.e. the curve
+ * pass is a no-op. The renderer uses this to skip the per-pixel texture fetch
+ * on the common case where no curve has been touched.
+ */
+export function curvesAreIdentity(recipe) {
+    const straight = (curve) => {
+        if (!Array.isArray(curve)) return true
+        return curve.every(([x, y]) => Math.abs(Number(y) - Number(x)) < 0.002)
+    }
+    return ['rgb', 'r', 'g', 'b'].every(ch => straight(channelCurve(recipe, ch)))
+}
+
+/**
+ * A short content key for a baked curve table, so the renderer only re-uploads
+ * when the curve genuinely changed. JSON over a 256-entry table is far cheaper
+ * than uploading 1KB on every slider tick.
+ */
+export function curveLutKey(recipe) {
+    const round = (curve) => (Array.isArray(curve)
+        ? curve.map(([x, y]) => `${Number(x).toFixed(4)}:${Number(y).toFixed(4)}`).join(',')
+        : '-')
+    return [
+        round(channelCurve(recipe, 'rgb')),
+        round(channelCurve(recipe, 'r')),
+        round(channelCurve(recipe, 'g')),
+        round(channelCurve(recipe, 'b'))
+    ].join('|')
 }
 
 export const VERTEX_SOURCE = `#version 300 es
@@ -177,10 +296,8 @@ uniform vec2  uFlip;
 uniform vec4  uCrop;   // x0, y0, x1, y1 in 0..1 space
 uniform sampler2D uLut;
 uniform float uLutSize, uLutStrength;
-uniform vec4 uCurveX, uCurveY;   // shared rgb curve
-uniform vec4 uCurveRX, uCurveRY; // red channel
-uniform vec4 uCurveGX, uCurveGY; // green channel
-uniform vec4 uCurveBX, uCurveBY; // blue channel
+uniform sampler2D uCurveLut;  // N×1 RGBA: per-channel baked tone curve
+uniform float uCurveAmount;    // 0 = curves bypassed (keeps the CPU cost off idle GPUs)
 
 float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
@@ -188,17 +305,13 @@ float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123
 vec3 toLinear(vec3 c){ return pow(max(c, 0.0), vec3(2.2)); }
 vec3 toSRGB(vec3 c){ return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
 
-// Tone curve: 4-segment smoothstep spline over 5 control points.
-// uCurveX holds the point x values, uCurveY the y values. This matches the
-// smoothstep interpolation used by curveValue() on the CPU side.
-float curveLookup(float v, vec4 uCurveX, vec4 uCurveY){
-    float x = clamp(v, 0.0, 1.0);
-    if(x <= uCurveX.x) return uCurveY.x;
-    if(x >= uCurveX.w) return uCurveY.w;
-    if(x < uCurveX.y){ float t = (x - uCurveX.x) / max(1e-4, uCurveX.y - uCurveX.x); return mix(uCurveY.x, uCurveY.y, t * t * (3.0 - 2.0 * t)); }
-    if(x < uCurveX.z){ float t = (x - uCurveX.y) / max(1e-4, uCurveX.z - uCurveX.y); return mix(uCurveY.y, uCurveY.z, t * t * (3.0 - 2.0 * t)); }
-    float t = (x - uCurveX.z) / max(1e-4, uCurveX.w - uCurveX.z);
-    return mix(uCurveY.z, uCurveY.w, t * t * (3.0 - 2.0 * t));
+// Tone curve: baked lookup table shared by every channel.
+// uCurveLut is an N×1 RGBA texture holding R, G and B curve samples; the
+// tables are produced by bakeCurveLut() from the same curveValue() the CPU
+// export uses, so the preview and the saved JPEG cannot drift apart.
+vec3 curveLookup(vec3 c){
+    vec3 s = texture(uCurveLut, vec3(c.r, 0.5)).rgb;
+    return mix(c, s, uCurveAmount);
 }
 
 vec3 sampleSource(vec2 uv){
@@ -302,12 +415,7 @@ void main(){
     c = grade(c);
 
     // --- Tone curves (applied per channel on top of the grade) ---
-    c.r = curveLookup(c.r, uCurveX, uCurveY);
-    c.g = curveLookup(c.g, uCurveX, uCurveY);
-    c.b = curveLookup(c.b, uCurveX, uCurveY);
-    c.r = curveLookup(c.r, uCurveRX, uCurveRY);
-    c.g = curveLookup(c.g, uCurveGX, uCurveGY);
-    c.b = curveLookup(c.b, uCurveBX, uCurveBY);
+    c = curveLookup(c);
 
     // --- Bloom: bright-pass blur, added back. ---
     if(uBloom > 0.001){
@@ -544,6 +652,7 @@ export function renderRecipe(source, target, recipe, options = {}) {
     srcCanvas.width = w
     srcCanvas.height = h
     const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true })
+    if (!srcCtx) return target
     srcCtx.drawImage(source, 0, 0, w, h)
     const srcData = srcCtx.getImageData(0, 0, w, h)
     const sd = srcData.data

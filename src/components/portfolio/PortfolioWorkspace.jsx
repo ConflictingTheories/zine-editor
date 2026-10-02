@@ -241,6 +241,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
         undo,
         redo,
         saveProject,
+        showModal,
         toast
     } = useVP()
 
@@ -248,7 +249,10 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     const safeIdx = Math.min(Math.max(pageIdx ?? 0, 0), Math.max(pages.length - 1, 0))
     const page = pages[safeIdx] || { id: 'empty', elements: [], background: '#ffffff' }
 
-    const [leftTab, setLeftTab] = useState('library')
+    // Photographers work spread-by-spread: the next question is almost always
+    // "what's on the next page", not "what's in the library". The library is one
+    // click away, so defaulting to Spreads puts the commonest action first.
+    const [leftTab, setLeftTab] = useState('spreads')
     const [rightTab, setRightTab] = useState('frame')
     const [zoom, setZoom] = useState(70)
     const [snapOn, setSnapOn] = useState(true)
@@ -470,6 +474,12 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                 </div>
                 <div className="pf-topbar-right">
                     <button type="button" className="pf-btn ghost" onClick={saveProject}>Save</button>
+                    <button type="button" className="pf-btn" onClick={() => showModal('exportModal')}>
+                        Export
+                    </button>
+                    <button type="button" className="pf-btn" onClick={() => showModal('publishModal')}>
+                        Publish
+                    </button>
                     <button type="button" className="pf-btn primary" onClick={() => previewProject()}>Preview book</button>
                 </div>
             </header>

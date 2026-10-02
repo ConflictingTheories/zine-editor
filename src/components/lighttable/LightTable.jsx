@@ -116,6 +116,10 @@ function LightTable() {
         const canvas = canvasRef.current
         if (!canvas) return
         const renderer = new LtRenderer(canvas)
+        // If WebGL2 turns out to be unusable the renderer swaps in a fresh
+        // 2D-capable canvas; the ref has to follow it or every later draw
+        // targets a node that is no longer in the document.
+        renderer.onCanvasSwap = (fresh) => { canvasRef.current = fresh }
         const ok = renderer.init()
         rendererRef.current = renderer
         setRendererMode(ok ? 'gpu' : 'cpu')
@@ -185,10 +189,15 @@ function LightTable() {
             if (ctx) ctx.drawImage(img, 0, 0, renderer.canvas.width, renderer.canvas.height)
             return
         }
-        if (renderer.supported) {
-            renderer.draw(recipeRef.current, time)
-        } else {
-            renderer.drawCpu(img, recipeRef.current)
+        try {
+            if (renderer.supported) {
+                renderer.draw(recipeRef.current, time)
+            } else {
+                renderer.drawCpu(img, recipeRef.current)
+            }
+        } catch (err) {
+            // One bad frame must never take the workspace down with it.
+            console.warn('[LightTable] render failed:', err)
         }
     }, [compare, sizeCanvas])
 
@@ -270,6 +279,20 @@ function LightTable() {
     }, [updateRecipe, toast])
 
     // ── Output ───────────────────────────────────────────────────────────
+    /**
+     * Throw away this photo's unsaved draft and fall back to whatever recipe
+     * is already saved on the library asset. Distinct from resetAll, which
+     * commits a clean slate as the new draft.
+     */
+    const revertDraft = useCallback(() => {
+        setDrafts(prev => {
+            if (!(selectedId in prev)) return prev
+            const next = { ...prev }
+            delete next[selectedId]
+            return next
+        })
+    }, [selectedId])
+
     const saveToLibrary = useCallback(() => {
         const img = imageRef.current
         if (!img || !selectedAsset) return
@@ -374,17 +397,31 @@ function LightTable() {
         updateGeometry({ rotate: Math.round(((current + delta) % 360 + 360) % 360) })
     }
 
-    const back = () => updateVpState({
-        currentView: vpState.lightTableReturnView || 'dashboard',
-        lightTableAsset: null,
-        lightTableReturnView: null
-    })
-
     // ── Non-destructive return to the book ─────────────────────────────────
     // When the Light Table was opened from a frame, "Apply" writes the recipe
     // back to that exact element. Nothing is re-imported, the frame keeps its
     // size, mat and caption, and the user lands exactly where they left off.
     const returnTarget = vpState.lightTableTarget
+
+    const applyToTarget = useCallback(({ src, recipe, name }) => {
+        if (!returnTarget?.elementId) return false
+        const applied = applyRecipeToElement(returnTarget, {
+            src,
+            recipe,
+            name: name || selectedAsset?.name
+        })
+        if (applied) {
+            updateVpState({
+                currentView: 'editor',
+                lightTableAsset: null,
+                lightTableTarget: null,
+                lightTableReturnView: null,
+                selection: { type: 'element', id: returnTarget.elementId, pageIdx: returnTarget.pageIdx }
+            })
+            toast('Developed — your frame is updated in place', 'success')
+        }
+        return applied
+    }, [returnTarget, applyRecipeToElement, selectedAsset, updateVpState, toast])
 
     const commitRecipe = useCallback(({ bake = false } = {}) => {
         if (!selectedAsset) return
@@ -419,32 +456,16 @@ function LightTable() {
         toast('Recipe saved to the library — open it again any time to keep adjusting', 'success')
     }, [selectedAsset, applyToTarget, updateImportedAsset, toast])
 
-    const applyToTarget = useCallback(({ src, recipe, name }) => {
-        if (!returnTarget?.elementId) return false
-        const applied = applyRecipeToElement(returnTarget, {
-            src,
-            recipe,
-            name: name || selectedAsset?.name
-        })
-        if (applied) {
-            updateVpState({
-                currentView: 'editor',
-                lightTableAsset: null,
-                lightTableTarget: null,
-                lightTableReturnView: null,
-                selection: { type: 'element', id: returnTarget.elementId, pageIdx: returnTarget.pageIdx }
-            })
-            toast('Developed — your frame is updated in place', 'success')
-        }
-        return applied
-    }, [returnTarget, applyRecipeToElement, selectedAsset, updateVpState, toast])
-
 
     // ── Keyboard shortcuts ───────────────────────────────────────────────
     useEffect(() => {
         const onKey = (event) => {
             const tag = event.target?.tagName
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || event.metaKey || event.ctrlKey) return
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target?.isContentEditable) return
+            // ⌘ and ⌃ belong to the platform layer, not the grade: on a Mac ⌃C
+            // is "copy" and skipping it here drops every keyboard copy and
+            // paste straight into the develop workspace.
+            if (event.metaKey || event.ctrlKey) return
             if (cropping) {
                 if (event.key === 'Escape') setCropping(false)
                 if (event.key === 'Enter') setCropping(false)
@@ -506,8 +527,10 @@ function LightTable() {
 
             {/* ── Header ─────────────────────────────────────────────── */}
             <header className="lt-header">
-                <button className="lt-btn ghost" onClick={back} title="Back">←</button>
-                <div className="lt-title">
+                        {/* No back arrow: TopNav owns navigation. A second, mode-specific
+                            way out was a leftover from before the three-mode shell, and it
+                            disagreed with the nav about where "back" even meant. */}
+                        <div className="lt-title">
                     <strong>LIGHT TABLE</strong>
                     <span className="lt-file">
                         {selectedAsset?.name || 'No image selected'}
@@ -551,8 +574,20 @@ function LightTable() {
                             </button>
                         </>
                     )}
-                    <button className="lt-btn primary" onClick={saveToLibrary} disabled={!selectedAsset}>Save</button>
+                    <button className="lt-btn" onClick={saveToLibrary} disabled={!selectedAsset} title="Render a new, flattened JPEG and add it to the library as a separate asset">
+                        {returnTarget ? 'Save as new' : 'Save'}
+                    </button>
                     <button className="lt-btn" onClick={downloadImage} disabled={!selectedAsset} title="Download a full-resolution JPEG">↓</button>
+                    {returnTarget && (
+                        <button
+                            className="lt-btn ghost"
+                            onClick={revertDraft}
+                            disabled={!selectedAsset || !isDirty}
+                            title="Discard this photo's unsaved edits"
+                        >
+                            Revert
+                        </button>
+                    )}
                     <button
                         className="lt-btn icon lt-inspector-toggle"
                         onClick={() => setInspectorOpen(v => !v)}
@@ -591,7 +626,7 @@ function LightTable() {
                 </div>
                 {!gallery.length && (
                     <p className="lt-gallery-empty">
-                        No images yet.<br />Import photographs to start developing.
+                        No photos yet
                     </p>
                 )}
             </aside>

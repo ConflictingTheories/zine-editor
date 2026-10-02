@@ -18,7 +18,7 @@ import { useVP } from '../context/VPContext.jsx'
  * - selection, pageIdx, selectedElement: editor selection context
  */
 export default function ContextMenu({ x, y, visible, onClose, selection, pageIdx, selectedElement }) {
-    const { copyElement, pasteElement, duplicateElement, moveLayer, deleteElement, updateElement, updateVpState } = useVP()
+    const { copyElement, pasteElement, duplicateElement, moveLayer, deleteElement, updateElement, openLightTableFor } = useVP()
 
     useEffect(() => {
         if (!visible) return
@@ -30,6 +30,7 @@ export default function ContextMenu({ x, y, visible, onClose, selection, pageIdx
     if (!visible) return null
 
     const hasElement = selection?.type === 'element' && selection?.id
+    const isPhotograph = hasElement && (selectedElement?.type === 'image' || selectedElement?.type === 'photo-frame') && selectedElement?.src
     const handle = (e, fn) => {
         e.stopPropagation()
         fn()
@@ -54,8 +55,16 @@ export default function ContextMenu({ x, y, visible, onClose, selection, pageIdx
             {hasElement && selectedElement && (
                 <div className="ctx-menu-item" onClick={e => { e.stopPropagation(); updateElement(pageIdx, selection.id, { locked: !selectedElement.locked }); onClose(); }}>🔒 {selectedElement.locked ? 'Unlock' : 'Lock'}</div>
             )}
-            {hasElement && selectedElement?.type === 'image' && (
-                <div className="ctx-menu-item" onClick={e => handle(e, () => updateVpState({ currentView: 'lighttable', lightTableAsset: { id: selectedElement.id, name: 'Page image', src: selectedElement.src }, lightTableReturnView: 'editor' }))}>✦ Open in Light Table</div>
+            {isPhotograph && (
+                <div className="ctx-menu-item" onClick={e => handle(e, () => openLightTableFor({
+                    // Pass the *asset* id, not the element id, so the Light Table
+                    // filmstrip lands on this photograph and "Apply to frame"
+                    // can write the grade straight back onto the selection.
+                    assetId: selectedElement.assetId || null,
+                    src: selectedElement.src,
+                    name: selectedElement.assetName || 'Page image',
+                    target: { pageIdx, elementId: selectedElement.id }
+                }))}>✦ Develop in Light Table</div>
             )}
             <div className="ctx-menu-sep" />
             <div className="ctx-menu-item ctx-menu-item-danger" onClick={e => handle(e, () => deleteElement())}>✕ Delete</div>

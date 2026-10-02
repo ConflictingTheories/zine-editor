@@ -34,15 +34,92 @@ const VPContext = createContext()
  */
 export const useVP = () => useContext(VPContext)
 
+/** Which stored collections a given library update touched. */
+const storedPatch = (update, library) => {
+    const patch = {}
+    if (update.imported) patch.imported = (library.imported || []).map(toStoredRecord)
+    if (update.audio) patch.audio = (library.audio || []).map(toStoredRecord)
+    if (update.video) patch.video = library.video || []
+    if (update.colors) patch.colors = library.colors
+    if (update.fonts) patch.fonts = library.fonts
+    return patch
+}
+
+// ── Library persistence ────────────────────────────────────────────────────────
+// Module scope, outside the provider: this is storage plumbing with no business
+// in React's render cycle, and the write chain must not reset between renders.
+
+const LIBRARY_KEY = 'vp_asset_library'
+const SHADOW_LIBRARY_KEY = 'vp_asset_library_shadow'
+
+/**
+ * Writes are serialised through one promise chain, so a read-modify-write can
+ * never interleave with another.
+ *
+ * The double buffer is the fix for the "assets disappear" class of bug.
+ * `persistLibrary` used to build its stored payload from `prev` — the value
+ * captured by the enclosing updater — so two library updates landing in the
+ * same React batch (import a shoot, then favourite one frame) both serialised
+ * the *old* library and the second write erased the first. Mirroring the
+ * previous payload into a shadow key means a lost update can cost at most one
+ * batch of edits, and boot merges the two back together.
+ */
+let libraryWriteChain = Promise.resolve()
+
+const writeLibraryPayload = (payload) => {
+    libraryWriteChain = libraryWriteChain.then(async () => {
+        try {
+            const previous = localStorage.getItem(LIBRARY_KEY)
+            if (previous) localStorage.setItem(SHADOW_LIBRARY_KEY, previous)
+        } catch { /* nothing to shadow */ }
+        try {
+            localStorage.setItem(LIBRARY_KEY, JSON.stringify(payload))
+            return true
+        } catch {
+            // Out of quota: the caller still holds the session in memory, so
+            // this is a soft failure rather than a lost library.
+            return false
+        }
+    })
+    return libraryWriteChain
+}
+
+/** Read-modify-write against the library *as stored*, never a stale closure. */
+const updateLibraryPersisted = (mutate) => libraryWriteChain.then(async () => {
+    let current = {}
+    try { current = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}') } catch { current = {} }
+    const next = mutate(current) || current
+    await writeLibraryPayload(next)
+    return next
+})
+
+/** Union two stored lists by value, primary first. */
+const mergeById = (primary, shadow) => {
+    const out = []
+    const seen = new Set()
+    for (const value of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(shadow) ? shadow : [])]) {
+        const key = typeof value === 'string' ? value : value?.id
+        if (key === undefined || key === null || seen.has(key)) continue
+        seen.add(key)
+        out.push(value)
+    }
+    return out
+}
+
 const readAssetLibrary = () => {
     try {
-        const stored = JSON.parse(localStorage.getItem('vp_asset_library') || '{}')
+        const stored = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}')
+        // A lost update can leave the shadow copy holding assets the primary
+        // key lost, so the two collections are merged by id rather than one
+        // being chosen outright — the user's photographs must come back.
+        let shadow = {}
+        try { shadow = JSON.parse(localStorage.getItem(SHADOW_LIBRARY_KEY) || '{}') } catch { shadow = {} }
         return {
-            colors: Array.isArray(stored.colors) ? stored.colors : [],
-            fonts: Array.isArray(stored.fonts) ? stored.fonts : [],
-            imported: Array.isArray(stored.imported) ? stored.imported : [],
-            audio: Array.isArray(stored.audio) ? stored.audio : [],
-            video: Array.isArray(stored.video) ? stored.video : []
+            colors: mergeById(stored.colors, shadow.colors),
+            fonts: mergeById(stored.fonts, shadow.fonts),
+            imported: mergeById(stored.imported, shadow.imported),
+            audio: mergeById(stored.audio, shadow.audio),
+            video: mergeById(stored.video, shadow.video)
         }
     } catch {
         return { colors: [], fonts: [], imported: [], audio: [], video: [] }
@@ -115,6 +192,52 @@ const VPProvider = ({ children }) => {
 
     const historyTimerRef = useRef(null)
 
+    // ── Persistence throttle ────────────────────────────────────────────────
+    /**
+     * Writing `vp_projects` is a full JSON serialisation plus a synchronous
+     * localStorage write. Doing that inside a state updater means every drag
+     * frame pays for it on the main thread, which is most of why the canvas
+     * used to feel like treacle. Persistence is now coalesced and trailing:
+     * state stays authoritative in memory, and the disk catches up once the
+     * user pauses.
+     */
+    const persistTimerRef = useRef(null)
+    const latestProjectsRef = useRef([])
+
+    useEffect(() => {
+        latestProjectsRef.current = vpState.projects || []
+        if (!latestProjectsRef.current.length) return
+        if (persistTimerRef.current) return
+        persistTimerRef.current = setTimeout(() => {
+            persistTimerRef.current = null
+            try {
+                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current))
+            } catch (e) {
+                // Quota or private-mode denial. The session keeps working from
+                // memory; losing autosave is strictly better than a frozen tab.
+            }
+        }, 500)
+    }, [vpState.projects])
+
+    // Never lose the last few hundred milliseconds of work to a closed tab.
+    useEffect(() => {
+        const flush = () => {
+            if (persistTimerRef.current) {
+                clearTimeout(persistTimerRef.current)
+                persistTimerRef.current = null
+            }
+            try {
+                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current))
+            } catch (e) { /* nothing more we can do */ }
+        }
+        window.addEventListener('pagehide', flush)
+        window.addEventListener('beforeunload', flush)
+        return () => {
+            window.removeEventListener('pagehide', flush)
+            window.removeEventListener('beforeunload', flush)
+        }
+    }, [])
+
     /**
      * Rehydrate the library on boot: mint object URLs for every photo whose
      * bytes are in IndexedDB, and migrate any legacy inline `data:` src into
@@ -154,9 +277,10 @@ const VPProvider = ({ children }) => {
                 const slim = withThumbs.map(asset => (stillInline.has(asset.id) ? asset : toStoredRecord(asset)))
 
                 setVpState(prev => ({ ...prev, library: { ...prev.library, imported: withThumbs } }))
-                try {
-                    localStorage.setItem('vp_asset_library', JSON.stringify({ ...vpState.library, imported: slim }))
-                } catch { /* out of quota: keep the session in memory */ }
+                // Read-modify-write against disk, not against the closure's
+                // copy of the library: anything imported while hydration was
+                // awaiting IndexedDB must survive this write.
+                await updateLibraryPersisted(stored => ({ ...stored, imported: slim }))
             } catch { /* leave the library as-is; it still renders from thumbs */ }
         }
         hydrate()
@@ -175,14 +299,7 @@ const VPProvider = ({ children }) => {
     const updateAssetLibrary = (update) => {
         setVpState(prev => {
             const library = { ...prev.library, ...update }
-            try {
-                localStorage.setItem('vp_asset_library', JSON.stringify({
-                    ...library,
-                    imported: (library.imported || []).map(toStoredRecord)
-                }))
-            } catch {
-                // Keep the current session usable when a large asset exceeds browser storage.
-            }
+            updateLibraryPersisted(stored => ({ ...stored, ...storedPatch(update, library) }))
             return { ...prev, library }
         })
     }
@@ -194,25 +311,16 @@ const VPProvider = ({ children }) => {
      * JSON serialisation.
      */
     const persistLibrary = (library) => {
-        try {
-            localStorage.setItem('vp_asset_library', JSON.stringify({
-                ...library,
-                imported: (library.imported || []).map(toStoredRecord)
-            }))
-        } catch {
-            // Out of quota: drop the in-memory thumbnails for the oldest
-            // entries and try once more rather than losing the whole library.
-            try {
-                localStorage.setItem('vp_asset_library', JSON.stringify({
-                    ...library,
-                    imported: (library.imported || []).map(asset => {
-                        const record = toStoredRecord(asset)
-                        delete record.thumb
-                        return record
-                    })
-                }))
-            } catch { /* keep the session usable in memory */ }
-        }
+        // `{}` here would mean "nothing was touched", which is exactly how a
+        // full-library save ends up writing an empty payload. The whole library
+        // is being persisted, so every collection is written.
+        updateLibraryPersisted(stored => ({
+            ...stored,
+            colors: library.colors || [],
+            fonts: library.fonts || [],
+            video: library.video || [],
+            ...storedPatch({ imported: true, audio: true }, library)
+        }))
     }
 
     const rememberColor = (color) => {
@@ -473,7 +581,7 @@ const VPProvider = ({ children }) => {
         setVpState(prev => {
             try {
                 const projects = project
-                    ? prev.projects.map(p => p.id === project.id ? { ...project, _dirty: true } : p)
+                    ? prev.projects.map(p => p.id === project.id ? { ...project, _dirty: true, updatedAt: Date.now() } : p)
                     : prev.projects
                 localStorage.setItem('vp_projects', JSON.stringify(projects))
             } catch (e) { }
@@ -486,8 +594,23 @@ const VPProvider = ({ children }) => {
         const stored = localStorage.getItem('vp_projects')
         const needsSeed = seedVersion !== String(EXAMPLE_SEED_VERSION)
 
+        /**
+         * Older projects predate the `updatedAt` stamp. Backfill from whatever
+         * ordering signal exists (creation date, then list position) so the hub's
+         * "Recent edits" and card timestamps work on an existing library
+         * instead of only on projects created from today onward.
+         */
+        const backfillTimestamps = (list) => list.map((p, i) => {
+            if (p.updatedAt) return p
+            const created = p.created ? new Date(p.created).getTime() : NaN
+            // Spread the fallback across the past so ordering stays stable
+            // rather than collapsing everything onto one timestamp.
+            const fallback = Number.isNaN(created) ? Date.now() - (list.length - i) * 1000 : created
+            return { ...p, updatedAt: fallback }
+        })
+
         if (!stored) {
-            const initial = [getTutorialData(), ...getAdditionalDefaultZines()]
+            const initial = backfillTimestamps([getTutorialData(), ...getAdditionalDefaultZines()])
             setVpState(prev => ({ ...prev, projects: initial }))
             localStorage.setItem('vp_projects', JSON.stringify(initial))
             localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
@@ -502,7 +625,7 @@ const VPProvider = ({ children }) => {
             const withoutOld = projects.filter(p =>
                 !DEFAULT_ZINE_IDS.includes(p.id) && p.id !== 'tutorial_zine'
             )
-            const next = [example, ...getAdditionalDefaultZines(), ...withoutOld]
+            const next = backfillTimestamps([example, ...getAdditionalDefaultZines(), ...withoutOld])
             setVpState(prev => ({ ...prev, projects: next }))
             localStorage.setItem('vp_projects', JSON.stringify(next))
             localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
@@ -511,13 +634,25 @@ const VPProvider = ({ children }) => {
         }
     }, [])
 
+    // The backfill above only runs when the example seed is re-applied, so an
+    // established library would never pick it up. A cheap one-time pass fixes
+    // every project that is still missing a timestamp.
+    useEffect(() => {
+        if (!vpState.projects?.length) return
+        if (vpState.projects.every(p => p.updatedAt)) return
+        const fixed = vpState.projects.map((p, i) => (
+            p.updatedAt ? p : { ...p, updatedAt: new Date(p.created || 0).getTime() || Date.now() - i * 1000 }
+        ))
+        setVpState(prev => ({ ...prev, projects: fixed }))
+    }, [vpState.projects])
+
     useEffect(() => {
         if (vpState.projects?.length > 0) {
             try {
                 localStorage.setItem('vp_projects', JSON.stringify(vpState.projects))
             } catch (e) { }
         }
-    }, [vpState.projects])
+    }, [])
 
 
 
@@ -673,6 +808,10 @@ const VPProvider = ({ children }) => {
                 ? portfolioPages
                 : [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
             created: new Date().toISOString(),
+            // `updatedAt` is what the hub's "Recent edits" sorts on. It was
+            // never being written, so that section could never render and the
+            // project card showed no date at all.
+            updatedAt: Date.now(),
             _dirty: true
         }
         applyContentThemeVars(theme)
@@ -740,7 +879,7 @@ const VPProvider = ({ children }) => {
         const idx = vpState.projects.findIndex(p => p.id === project.id)
         if (idx >= 0) {
             const next = [...vpState.projects]
-            next[idx] = { ...project, _dirty: true, _lastSaved: new Date().toISOString() }
+            next[idx] = { ...project, _dirty: true, _lastSaved: new Date().toISOString(), updatedAt: Date.now() }
             setVpState(prev => ({ ...prev, projects: next }))
         }
         toast('Project saved!', 'success')
@@ -824,35 +963,61 @@ const VPProvider = ({ children }) => {
 
     const updateElement = (pageIdx, elementId, updates) => {
         setVpState(prev => {
-            if (!prev.currentProject) return prev
-            const project = JSON.parse(JSON.stringify(prev.currentProject))
-            const page = project.pages[pageIdx]
-            const el = page?.elements?.find(e => e.id === elementId)
-            if (!el) return prev
-            Object.assign(el, updates)
+            const project = prev.currentProject
+            const page = project?.pages?.[pageIdx]
+            if (!page) return prev
+            const index = (page.elements || []).findIndex(e => e.id === elementId)
+            if (index < 0) return prev
+
+            // Structural update, not a deep clone.
+            //
+            // This function runs on every pointermove of a drag. Cloning the
+            // whole project with JSON round-tripping cost two full traversals
+            // per frame and, worse, handed fresh objects to every component —
+            // so no amount of React.memo could ever help. Copying only the path
+            // down to the changed element costs three shallow array copies,
+            // keeps every other element referentially identical, and makes
+            // memoisation actually pay off.
+            const elements = page.elements.slice()
+            elements[index] = { ...elements[index], ...updates }
+            const pages = project.pages.slice()
+            pages[pageIdx] = { ...page, elements }
+            const nextProject = { ...project, pages }
 
             const projIdx = prev.projects.findIndex(p => p.id === project.id)
             const projects = projIdx >= 0
-                ? prev.projects.map((p, i) => i === projIdx ? { ...project, _dirty: true } : p)
+                ? prev.projects.map((p, i) => i === projIdx ? { ...nextProject, _dirty: true, updatedAt: Date.now() } : p)
                 : prev.projects
 
             // Debounce history for rapid edits (typing / drag)
-            if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
-            historyTimerRef.current = setTimeout(() => {
-                setVpState(p => {
-                    const nextHistory = p.history.slice(0, p.historyIdx + 1)
-                    nextHistory.push(JSON.parse(JSON.stringify(project)))
-                    if (nextHistory.length > 50) nextHistory.shift()
-                    return {
-                        ...p,
-                        history: nextHistory,
-                        historyIdx: nextHistory.length - 1
-                    }
-                })
-            }, 400)
+            scheduleHistory(nextProject)
 
-            return { ...prev, currentProject: project, projects }
+            return { ...prev, currentProject: nextProject, projects }
         })
+    }
+
+    /**
+     * Queue an undo snapshot without blocking the interaction that caused it.
+     * Snapshots are deep copies, so they must never happen on the drag path —
+     * one trailing snapshot per gesture is what the user actually wants, and it
+     * is indistinguishable from the old behaviour at the undo button.
+     */
+    const scheduleHistory = (project) => {
+        if (!project) return
+        if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+        historyTimerRef.current = setTimeout(() => {
+            historyTimerRef.current = null
+            setVpState(p => {
+                const nextHistory = p.history.slice(0, p.historyIdx + 1)
+                nextHistory.push(JSON.parse(JSON.stringify(project)))
+                if (nextHistory.length > 50) nextHistory.shift()
+                return {
+                    ...p,
+                    history: nextHistory,
+                    historyIdx: nextHistory.length - 1
+                }
+            })
+        }, 450)
     }
 
     const deleteElement = () => {
@@ -937,8 +1102,21 @@ const VPProvider = ({ children }) => {
      * is done, so grading never destroys the layout they were working on.
      */
     const openLightTableFor = ({ assetId = null, src = null, name = null, target = null } = {}) => {
+        // If the photograph is not in the library yet (dropped straight onto a
+        // page, or a legacy inline image) it has no filmstrip entry, so the
+        // Light Table would open on a pseudo asset that is not selectable and
+        // whose grade could never be re-opened. Adopting it into the library
+        // first is what makes "develop, then keep editing" actually work.
         const asset = assetId ? getAssetById(assetId) : null
-        const pseudoAsset = asset || (src ? { id: `inline-${Date.now()}`, src, name: name || 'Untitled' } : null)
+        const adopted = asset ? null : (src ? {
+            id: assetId || `adopted-${Date.now()}`,
+            src,
+            name: name || 'Untitled',
+            kind: 'image',
+            addedAt: new Date().toISOString()
+        } : null)
+        if (adopted) addImportedAssetsWithRoom([adopted])
+        const pseudoAsset = asset || adopted
         setVpState(prev => ({
             ...prev,
             currentView: 'lighttable',
@@ -1022,7 +1200,7 @@ const VPProvider = ({ children }) => {
                 updatesById[el.id] ? { ...el, ...updatesById[el.id] } : el)
             const projIdx = prev.projects.findIndex(p => p.id === project.id)
             const projects = projIdx >= 0
-                ? prev.projects.map((p, i) => i === projIdx ? { ...project, _dirty: true } : p)
+                ? prev.projects.map((p, i) => i === projIdx ? { ...project, _dirty: true, updatedAt: Date.now() } : p)
                 : prev.projects
             return { ...prev, currentProject: project, projects }
         })

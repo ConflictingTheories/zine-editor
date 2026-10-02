@@ -3,7 +3,7 @@
  * Renders the editor page surface and coordinates element layout and interaction.
  */
 
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { useEditor } from '../hooks/useEditor.js'
 import ContextMenu from './ContextMenu.jsx'
@@ -42,16 +42,16 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
     const canvasRef = useRef(null)
     const [ctxMenu, setCtxMenu] = useState({ visible: false, x: 0, y: 0, element: null })
 
-    const handleElementClick = (e, elId) => {
+    const handleElementClick = useCallback((e, elId) => {
         e.stopPropagation()
         updateVpState({ selection: { type: 'element', id: elId, pageIdx } })
-    }
+    }, [pageIdx, updateVpState])
 
-    const handleCanvasClick = () => {
+    const handleCanvasClick = useCallback(() => {
         updateVpState({ selection: { type: 'page', id: page.id, pageIdx } })
-    }
+    }, [page.id, pageIdx, updateVpState])
 
-    const handleDrop = (event) => {
+    const handleDrop = useCallback((event) => {
         event.preventDefault()
         const files = Array.from(event.dataTransfer.files || [])
         const imageFiles = files.filter(file => file.type.startsWith('image/'))
@@ -66,9 +66,9 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
             }
             reader.readAsDataURL(audioFile)
         })
-    }
+    }, [importFiles, addImportedAsset, setPageAudio, pageIdx])
 
-    const handleContextMenu = (e, el) => {
+    const handleContextMenu = useCallback((e, el) => {
         e.preventDefault()
         e.stopPropagation()
         if (el) updateVpState({ selection: { type: 'element', id: el.id, pageIdx } })
@@ -84,7 +84,20 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
             y: (e.clientY - rect.top) / scale,
             element: el
         })
-    }
+    }, [page.id, pageIdx, zoom, updateVpState])
+
+    /**
+     * One stable `handlers` object for every element on the page.
+     *
+     * This is what makes memoised children possible. `useEditor` rebuilds its
+     * callbacks whenever context state changes, so passing them inline created
+     * a new object every render and forced *every* element on the page to
+     * re-render while a single one was being dragged. Hoisting them here means
+     * a drag re-renders the dragged element and nothing else.
+     */
+    const handlers = useMemo(() => ({
+        startDrag, startResize, startRotate, handleElementClick, handleContextMenu, updateElement
+    }), [startDrag, startResize, startRotate, handleElementClick, handleContextMenu, updateElement])
 
     return (
         <>
@@ -109,14 +122,7 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
                             isSelected={selection.type === 'element' && selection.id === el.id}
                             onRequestImage={onRequestImage}
                             onDropAsset={onDropAsset}
-                            handlers={{
-                                startDrag,
-                                startResize,
-                                startRotate,
-                                handleElementClick,
-                                handleContextMenu,
-                                updateElement
-                            }}
+                            handlers={handlers}
                         />
                     ))}
             </div>

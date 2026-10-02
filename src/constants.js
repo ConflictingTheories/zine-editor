@@ -42,11 +42,23 @@ export const API = {
     },
 }
 
-// Feature flags (can be toggled via env vars if needed)
+// ── Feature flags ─────────────────────────────────────────────────────────────
+// Phase 1 is a single-account authoring build: every mode works offline against
+// local storage, and the network layer is there but not load-bearing.
+//
+// The economy and reputation stack is Phase 2. It is real code and stays
+// reachable, but it must stay OFF until the authoring experience is finished,
+// because with it on every single boot fires seven requests that all 404 while
+// the local API is not running — which buries genuine failures in noise and
+// makes the console useless for diagnosing anything else.
+export const PHASE = 1
+
 export const FEATURES = {
-    ENABLE_XRP: true,
-    ENABLE_MONETIZATION: true,
-    ENABLE_REPUTATION: true,
+    PHASE,
+    // Phase 2 features. Flip PHASE to 2 when the authoring experience is done.
+    ENABLE_XRP: PHASE >= 2,
+    ENABLE_MONETIZATION: PHASE >= 2,
+    ENABLE_REPUTATION: PHASE >= 2,
     ENABLE_COMMENTS: false, // Coming soon
 }
 

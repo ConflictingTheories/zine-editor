@@ -158,7 +158,7 @@ function PageInteractionEditor({ interaction, index, numPages, knownKeys, onChan
 }
 
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets } = useVP()
+    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets, openLightTableFor, replaceElementImage, showModal } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -255,8 +255,45 @@ function PropertyPanel({ activeTab = 'props' }) {
     const availableFonts = [...recentFonts, ...fonts.filter(font => !recentFonts.includes(font))]
 
     if (activeTab === 'effects') {
+        // Image actions lead. A photograph on a page is opened for grading far
+        // more often than for a drop shadow, and the Design tab is a long scroll
+        // away from the only control that matters.
+        const isPhotograph = (element.type === 'image' || element.type === 'photo-frame') && element.src
         return (
             <div className="property-panel">
+                {isPhotograph && (
+                    <div className="prop-section">
+                        <h4>Image</h4>
+                        <div className="pf-row-actions">
+                            <button
+                                type="button"
+                                className="prop-btn"
+                                title="Develop this photograph and write the grade back onto the element"
+                                onClick={() => openLightTableFor({
+                                    // assetId (not element id) so the Light Table filmstrip
+                                    // opens on the actual library photograph.
+                                    assetId: element.assetId || null,
+                                    src: element.src,
+                                    name: element.assetName || 'Page image',
+                                    target: { pageIdx, elementId: element.id }
+                                })}
+                            >
+                                ✦ Develop
+                            </button>
+                            <button
+                                type="button"
+                                className="prop-btn"
+                                title="Swap in another photo from the shared library"
+                                onClick={() => showModal('assetModal', 'imported')}
+                            >
+                                ⇄ Swap
+                            </button>
+                        </div>
+                        {element.lightTableRecipe && (
+                            <p className="prop-hint">Developed — the grade is live and non-destructive.</p>
+                        )}
+                    </div>
+                )}
                 <div className="prop-section">
                     <h4>Effects</h4>
                     <div className="prop-row">
@@ -617,8 +654,22 @@ function PropertyPanel({ activeTab = 'props' }) {
                             input.onchange = e => { const file = e.target.files?.[0]; if (!file) return; const r = new FileReader(); r.onload = ev => handleChange('src', ev.target.result); r.readAsDataURL(file) }
                             input.click()
                         }}>↑ Replace image</button>
-                        <button type="button" className="prop-btn" style={{ fontSize: '11px', borderColor: 'var(--vp-accent)', color: 'var(--vp-accent)' }} onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor', lightTableAsset: element.src ? { id: element.id, src: element.src, name: element.id } : null })}>
-                            💡 Light Table
+                        <button
+                            type="button"
+                            className="prop-btn"
+                            style={{ fontSize: '11px', borderColor: 'var(--vp-accent)', color: 'var(--vp-accent)' }}
+                            disabled={!element.src}
+                            title="Develop this image and write the grade back onto this element"
+                            onClick={() => openLightTableFor({
+                                // assetId (not element id) so the filmstrip opens on
+                                // the actual library photograph.
+                                assetId: element.assetId || null,
+                                src: element.src,
+                                name: element.assetName || 'Page image',
+                                target: { pageIdx, elementId: element.id }
+                            })}
+                        >
+                            ✦ Develop
                         </button>
                     </div>
                     {element.lightTableRecipe && (
@@ -630,6 +681,30 @@ function PropertyPanel({ activeTab = 'props' }) {
             {element.type === 'photo-frame' && <div className="prop-section">
                 <h4>Photo frame</h4>
                 <div className="form-row"><label>Image source</label><select value={element.src || ''} onChange={e => handleChange('src', e.target.value)}><option value="">Choose from library...</option>{getAssets('imported').map(asset => <option key={asset.id} value={asset.src}>{asset.name || asset.id}</option>)}</select></div>
+                <div className="pf-row-actions">
+                    <button
+                        type="button"
+                        className="prop-btn"
+                        disabled={!element.src}
+                        title="Develop this photograph and write the grade back onto the frame"
+                        onClick={() => openLightTableFor({
+                            assetId: element.assetId || null,
+                            src: element.src,
+                            name: element.assetName || 'Frame image',
+                            target: { pageIdx, elementId: element.id }
+                        })}
+                    >
+                        ✦ Develop
+                    </button>
+                    <button
+                        type="button"
+                        className="prop-btn"
+                        title="Swap in another photo from the shared library"
+                        onClick={() => showModal('assetModal', 'imported')}
+                    >
+                        ⇄ Swap from library
+                    </button>
+                </div>
                 <div className="form-row"><label>Or paste URL</label><input type="text" value={element.src || ''} onChange={e => handleChange('src', e.target.value)} placeholder="https://… or data URL" /></div>
                 <div className="form-row"><label>Image fit</label><select value={element.imageFit || 'cover'} onChange={e => handleChange('imageFit', e.target.value)}><option value="cover">Fill frame</option><option value="contain">Fit inside</option></select></div>
                 <div className="form-row"><label>Mat width</label><input type="number" min="0" value={element.frameWidth || 18} onChange={e => handleChange('frameWidth', Number(e.target.value))} /></div>

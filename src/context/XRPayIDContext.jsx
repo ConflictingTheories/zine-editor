@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useVP } from './VPContext.jsx'
+import { FEATURES } from '../constants.js'
 
 const XRPayIDContext = createContext()
 
@@ -90,6 +91,27 @@ const XRPayIDProvider = ({ children }) => {
 
     // Load initial data
     const loadData = async () => {
+        // Phase 1 does not use the economy layer. Without this guard the app
+        // issues seven doomed requests on every single boot, which costs a
+        // round trip each, floods the console with 404s, and buries the errors
+        // that actually matter. The empty state below is the same one the
+        // provider already renders when there is no token.
+        if (!FEATURES.ENABLE_XRP) {
+            setXrState(prev => ({
+                ...prev,
+                wallet: null,
+                credits: 0,
+                tokens: [],
+                trustLines: [],
+                subscriptions: [],
+                subscribers: [],
+                bids: [],
+                transactions: [],
+                isLoading: false,
+                error: null
+            }))
+            return
+        }
         if (!token) {
             setXrState(prev => ({
                 ...prev,

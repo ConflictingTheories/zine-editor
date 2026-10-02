@@ -202,6 +202,120 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   Crash fallback
+   A React render that throws unmounts the whole tree, which looks to the user
+   like the app closed. This keeps the failure legible and recoverable.
+   ══════════════════════════════════════════════════════════════════════ */
+.view-crash {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: var(--space-xl);
+}
+
+/* A mode with nothing open. Explains itself and offers the next move, rather
+   than showing an editor that cannot render an empty page. */
+.empty-mode {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: var(--space-xl);
+}
+
+.empty-mode-card {
+    max-width: 460px;
+    text-align: center;
+}
+
+.empty-mode-card h2 {
+    margin: 0 0 var(--space-sm);
+    font-size: var(--type-xl);
+    color: var(--text);
+}
+
+.empty-mode-card p {
+    margin: 0 0 var(--space-lg);
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.empty-mode-card button {
+    padding: 8px 18px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: var(--type-sm);
+    font-family: var(--font-ui);
+    cursor: pointer;
+}
+
+.empty-mode-card button:hover {
+    background: var(--surface-3);
+    border-color: var(--accent-line);
+}
+
+.view-crash-card {
+    max-width: 520px;
+    background: var(--surface-0);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+}
+
+.view-crash-card h2 {
+    margin: 0 0 var(--space-sm);
+    font-size: var(--type-lg);
+    color: var(--text);
+}
+
+.view-crash-card p {
+    margin: 0 0 var(--space-md);
+    color: var(--text-muted);
+    line-height: 1.55;
+}
+
+.view-crash-card kbd {
+    font-family: var(--font-mono);
+    font-size: var(--type-xs);
+    padding: 1px 5px;
+    margin: 0 1px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+}
+
+.view-crash-detail {
+    font-family: var(--font-mono);
+    font-size: var(--type-xs);
+    color: var(--text-dim);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    max-height: 140px;
+    overflow: auto;
+    white-space: pre-wrap;
+    margin: 0 0 var(--space-lg);
+}
+
+.view-crash-card button {
+    padding: 7px 16px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: var(--type-sm);
+    cursor: pointer;
+}
+
+.view-crash-card button:hover {
+    background: var(--surface-3);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    Shared primitives
    ══════════════════════════════════════════════════════════════════════ */
 .svrn-panel {

@@ -11,6 +11,8 @@ import { VPProvider } from './context/VPContext.jsx'
 import { XRPayIDProvider } from './context/XRPayIDContext.jsx'
 import './styles.css'
 import './styles/tokens.css'
+import './styles/topnav.css'
+import './styles/dashboard.css'
 import './styles/portfolio.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(

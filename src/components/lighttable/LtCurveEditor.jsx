@@ -1,15 +1,28 @@
 /*
  * Component: LtCurveEditor
- * Draggable tone curve with per-channel (RGB / R / G / B) selection, point
- * insertion on click, and point removal via double click or right click.
+ * The tone curve surface.
+ *
+ * Three things make or break a curve tool, and all three used to be missing:
+ *
+ *  1. The drawn line has to be the applied line. It was drawn as straight
+ *     segments between control points while the renderer evaluated a smoothstep
+ *     spline, so the shape on screen lied about the result. It is now sampled
+ *     from the same `curveValue()` the CPU and GPU pipelines use.
+ *  2. All channels at once. Grading a curve while judging it against the
+ *     per-channel red/green/blue curves is the normal workflow, so the other
+ *     channels are drawn behind the active one.
+ *  3. A number. Input and output for the selected point, editable, because
+ *     nudging one point by a pixel is most of what curve work actually is.
  */
 
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
+import { curveValue } from '../../lib/lightTableEngine.js'
 
 const W = 240
 const H = 150
 const PAD = 0.04
 const MAX_POINTS = 12
+const SAMPLES = 96
 
 const CHANNELS = [
     { id: 'rgb', label: 'RGB', color: '#dfe4ea' },
@@ -18,12 +31,55 @@ const CHANNELS = [
     { id: 'b', label: 'B', color: '#6f9cff' }
 ]
 
+/** A channel curve inherits the shared RGB curve until it is edited itself. */
+const effectivePoints = (curves, channel) => {
+    const own = curves?.[channel]
+    if (Array.isArray(own) && own.length >= 2) return own
+    return curves?.rgb || []
+}
+
+const toPath = (points) => {
+    if (!points || points.length < 2) return ''
+    let d = ''
+    for (let i = 0; i < SAMPLES; i++) {
+        const v = i / (SAMPLES - 1)
+        d += `${i ? 'L' : 'M'} ${(v * W).toFixed(2)} ${((1 - curveValue(v, points)) * H).toFixed(2)} `
+    }
+    return d.trim()
+}
+
+const asPct = (v) => Math.round(v * 100)
+
 function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
     const svgRef = useRef(null)
     const [activePoint, setActivePoint] = useState(null)
     const dragging = useRef(false)
+    // The active index is mirrored into a ref because inserting a point and
+    // immediately dragging it must not wait for a React re-render — otherwise
+    // the first pointermove after an insert is dropped.
+    const activeIndex = useRef(null)
 
-    const points = curves?.[activeChannel] || []
+    const selectPoint = useCallback((index) => {
+        activeIndex.current = index
+        setActivePoint(index)
+    }, [])
+
+    const points = useMemo(
+        () => effectivePoints(curves, activeChannel),
+        [curves, activeChannel]
+    )
+
+    // Ghosts for every channel besides the one being edited, so the red curve
+    // stays visible while the master curve is shaped — and is hidden when it
+    // has never been overridden, because then it *is* the master curve.
+    const ghosts = useMemo(
+        () => CHANNELS
+            .filter(c => c.id !== activeChannel)
+            .filter(c => c.id === 'rgb' || (Array.isArray(curves?.[c.id]) && curves[c.id].length >= 2))
+            .map(c => ({ ...c, d: toPath(effectivePoints(curves, c.id)) }))
+            .filter(c => c.d),
+        [curves, activeChannel]
+    )
 
     const toLocal = (event) => {
         const rect = svgRef.current.getBoundingClientRect()
@@ -72,26 +128,27 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
             index = insertAt
         }
         dragging.current = true
-        setActivePoint(index)
+        selectPoint(index)
         commit(index, nx, ny)
     }
 
     const onPointerMove = (event) => {
-        if (!dragging.current || activePoint === null) return
+        if (!dragging.current || activeIndex.current === null) return
         const { nx, ny } = toLocal(event)
-        commit(activePoint, nx, ny)
+        commit(activeIndex.current, nx, ny)
     }
 
-    const stopDrag = () => { dragging.current = false; setActivePoint(null) }
+    const stopDrag = () => { dragging.current = false }
 
     const removePoint = (index) => {
         if (index <= 0 || index >= points.length - 1) return
         onChange(activeChannel, points.filter((_, i) => i !== index))
     }
 
-    // Monotone cubic path through the control points.
-    const path = points.map((p, i) => `${i ? 'L' : 'M'} ${p[0] * W} ${(1 - p[1]) * H}`).join(' ')
+    const path = toPath(points)
     const active = CHANNELS.find(c => c.id === activeChannel) || CHANNELS[0]
+
+    const selected = activePoint !== null ? points[activePoint] : null
 
     return (
         <div>
@@ -100,8 +157,15 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                     <button
                         key={c.id}
                         className={`lt-btn${activeChannel === c.id ? ' active' : ''}`}
-                        onClick={() => onChannelChange(c.id)}
+                        onClick={() => { selectPoint(null); onChannelChange(c.id) }}
+                        aria-pressed={activeChannel === c.id}
+                        title={
+                            Array.isArray(curves?.[c.id]) && curves[c.id].length >= 2
+                                ? `${c.label} channel — edited separately`
+                                : `${c.label} channel — currently follows the master curve`
+                        }
                     >
+                        <span className="lt-curve-swatch" style={{ background: c.color }} />
                         {c.label}
                     </button>
                 ))}
@@ -110,6 +174,21 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                 ref={svgRef}
                 className="lt-curve"
                 viewBox={`0 0 ${W} ${H}`}
+                tabIndex={0}
+                onKeyDown={(event) => {
+            if (activeIndex.current === null) return
+            const step = event.shiftKey ? 0.01 : 0.001
+            const delta = {
+                ArrowLeft: [-step, 0], ArrowRight: [step, 0],
+                ArrowUp: [0, step], ArrowDown: [0, -step]
+            }[event.key]
+            if (!delta) return
+            event.preventDefault()
+            const [dx, dy] = delta
+            const current = points[activeIndex.current]
+            if (!current) return
+            commit(activeIndex.current, current[0] + dx, current[1] + dy)
+        }}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={stopDrag}
@@ -127,6 +206,11 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                 }}
             >
                 <path className="lt-curve-grid" d={`M60 0V${H}M120 0V${H}M180 0V${H}M0 37.5H${W}M0 75H${W}M0 112.5H${W}M0 0L${W} ${H}`} />
+
+                {ghosts.map(ghost => (
+                    <path key={ghost.id} className="lt-curve-ghost" d={ghost.d} style={{ stroke: ghost.color }} />
+                ))}
+
                 <path className="lt-curve-line" d={path} style={{ stroke: active.color }} />
                 {points.map((p, i) => (
                     <circle
@@ -136,10 +220,67 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                         r={activePoint === i ? 5.5 : 4}
                         className={activePoint === i ? 'active' : ''}
                         style={{ stroke: active.color }}
+                        onPointerDown={e => {
+                            e.stopPropagation()
+                            dragging.current = true
+                            selectPoint(i)
+                        }}
                     />
                 ))}
             </svg>
-            <p className="lt-help">Click to add a point · drag to shape · double-click or right-click a point to remove it.</p>
+
+            <div className="lt-curve-readout">
+                {selected ? (
+                    <>
+                        <label>
+                            In
+                            <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={asPct(selected[0])}
+                                aria-label="Selected point input"
+                                onChange={e => commit(
+                                    activePoint,
+                                    Math.min(1, Math.max(0, Number(e.target.value) / 100)),
+                                    selected[1]
+                                )}
+                            />
+                            <span>%</span>
+                        </label>
+                        <label>
+                            Out
+                            <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={asPct(selected[1])}
+                                aria-label="Selected point output"
+                                onChange={e => commit(
+                                    activePoint,
+                                    selected[0],
+                                    Math.min(1, Math.max(0, Number(e.target.value) / 100))
+                                )}
+                            />
+                            <span>%</span>
+                        </label>
+                        <button
+                            type="button"
+                            className="lt-btn ghost"
+                            disabled={activePoint <= 0 || activePoint >= points.length - 1}
+                            onClick={() => removePoint(activePoint)}
+                            title="Remove this point"
+                        >
+                            Remove point
+                        </button>
+                    </>
+                ) : (
+                    <p className="lt-help">
+                        Click to add a point · drag to shape · arrow keys nudge ·
+                        double-click a point to remove it.
+                    </p>
+                )}
+            </div>
         </div>
     )
 }

@@ -35,6 +35,39 @@ export function useEditor(zoom = 100, snapOn = true) {
     const snap = (value) => snapRef.current ? Math.round(value / 8) * 8 : value
 
     /**
+     * Coalesce a pointer stream down to one state update per animation frame.
+     *
+     * A mouse emits `mousemove` far faster than the screen refreshes — often
+     * several times per frame on a trackpad. Committing every one of them means
+     * React renders more often than the user can possibly see, which is wasted
+     * work and, on a heavy page, visible stutter. The last position within a
+     * frame always wins, so the result is identical to committing everything,
+     * only cheaper.
+     */
+    const createFrameCommit = (commit) => {
+        let queued = null
+        let frame = 0
+        return {
+            push(payload) {
+                queued = payload
+                if (frame) return
+                frame = requestAnimationFrame(() => {
+                    frame = 0
+                    const next = queued
+                    queued = null
+                    if (next) commit(next)
+                })
+            },
+            // The gesture ended: drop any coalesced frame and commit nothing
+            // extra — the rAF callback already carries the final position.
+            flush() {
+                if (frame) { cancelAnimationFrame(frame); frame = 0 }
+                queued = null
+            }
+        }
+    }
+
+    /**
      * Begin dragging an element. This function attaches global mousemove/mouseup
      * listeners and updates the element position via `updateElement` while moving.
      * Holding Shift overrides editable content checks (allow drag while editing)
@@ -53,12 +86,13 @@ export function useEditor(zoom = 100, snapOn = true) {
         dragStartPos.current = { x: e.clientX, y: e.clientY }
         elementStartPos.current = { x: el.x || 0, y: el.y || 0 }
 
+        const commit = createFrameCommit(next => updateElement(pageIdx, el.id, next))
+
         const onMouseMove = (moveEvent) => {
             const scale = getScale()
             const dx = (moveEvent.clientX - dragStartPos.current.x) / scale
             const dy = (moveEvent.clientY - dragStartPos.current.y) / scale
-
-            updateElement(pageIdx, el.id, {
+            commit.push({
                 x: snap(elementStartPos.current.x + dx),
                 y: snap(elementStartPos.current.y + dy)
             })
@@ -89,6 +123,8 @@ export function useEditor(zoom = 100, snapOn = true) {
         dragStartPos.current = { x: e.clientX, y: e.clientY }
         elementStartPos.current = { x: el.x || 0, y: el.y || 0, w: el.width || 100, h: el.height || 50 }
 
+        const commit = createFrameCommit(next => updateElement(pageIdx, el.id, next))
+
         const onMouseMove = (moveEvent) => {
             const scale = getScale()
             const dx = (moveEvent.clientX - dragStartPos.current.x) / scale
@@ -106,7 +142,7 @@ export function useEditor(zoom = 100, snapOn = true) {
                 updates.y = snap(elementStartPos.current.y + dy)
             }
 
-            updateElement(pageIdx, el.id, updates)
+            commit.push(updates)
         }
 
         const onMouseUp = () => {
@@ -135,10 +171,12 @@ export function useEditor(zoom = 100, snapOn = true) {
         const centerX = rect.left + rect.width / 2
         const centerY = rect.top + rect.height / 2
 
+        const commit = createFrameCommit(next => updateElement(pageIdx, el.id, next))
+
         const onMouseMove = (moveEvent) => {
             const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX)
             const deg = angle * (180 / Math.PI) + 90
-            updateElement(pageIdx, el.id, { rotation: deg })
+            commit.push({ rotation: deg })
         }
 
         const onMouseUp = () => {

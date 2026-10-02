@@ -73,4 +73,21 @@ const CanvasElement = ({ el, pageIdx, isSelected, handlers, onRequestImage, onDr
     )
 }
 
-export default CanvasElement
+/**
+ * Memoised so that dragging one element does not re-render its neighbours.
+ *
+ * This only works because `updateElement` now performs a structural update:
+ * untouched elements keep their object identity, so this comparator sees a
+ * genuinely equal prop and bails out. With the previous deep-clone-everything
+ * approach this memo would never have hit.
+ */
+const MemoCanvasElement = React.memo(CanvasElement, (prev, next) =>
+    prev.el === next.el &&
+    prev.isSelected === next.isSelected &&
+    prev.pageIdx === next.pageIdx &&
+    prev.handlers === next.handlers &&
+    prev.onRequestImage === next.onRequestImage &&
+    prev.onDropAsset === next.onDropAsset
+)
+
+export default MemoCanvasElement
