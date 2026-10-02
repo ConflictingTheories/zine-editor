@@ -3,12 +3,13 @@
  * Public zine reader view for browsing published content with navigation controls.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 import Object3D from './Object3D.jsx'
-import { getPanelBackground } from './ElementContent.jsx'
+import { getPanelBackground, PhotoFrameSurface } from './ElementContent.jsx'
 import { resolvePublicationAsset } from '../utils/assets.js'
+import { bookGeometry, legacyPageSize } from '../lib/bookGeometry.js'
 
 const ANIMATION_MAP = {
     'flash-in': 'reader-flash-in',
@@ -37,13 +38,19 @@ const BALLOON_PROPS = {
 
 const styles = {
     toolbarSpacer: { flex: 1 },
-    page: (page) => ({
-        background: page.background || '#fff',
-        position: 'relative',
-        width: page.orientation === 'landscape' ? '816px' : '528px',
-        height: page.orientation === 'landscape' ? '528px' : '816px',
-        minHeight: 0
-    }),
+    page: (page, project) => {
+        const size = project?.editorMode === 'photo-portfolio'
+            ? bookGeometry(project, page)
+            : legacyPageSize(page?.orientation === 'landscape')
+        return {
+            background: page.background || '#fff',
+            position: 'relative',
+            width: `${size.width}px`,
+            height: `${size.height}px`,
+            minHeight: 0,
+            flex: '0 0 auto'
+        }
+    },
     texture: (page) => ({
         position: 'absolute', inset: 0,
         backgroundImage: `url(${resolvePublicationAsset(page.texture)})`,
@@ -147,6 +154,8 @@ function Reader() {
     const [flags, setFlags] = useState(() => ({ ...(currentProject?.flags || {}) }))
     const [inventory, setInventory] = useState(() => new Set(currentProject?.inventory || []))
     const [achievements, setAchievements] = useState(() => new Set(currentProject?.achievements || []))
+    const [readerScale, setReaderScale] = useState(1)
+    const readerWrapRef = useRef(null)
     const project = currentProject
     // Keep hooks unconditional. Preview can briefly render while the project
     // changes; returning before the effects below would change hook order and
@@ -154,6 +163,26 @@ function Reader() {
     const pageCount = project?.pages?.length || 0
     const safePageIdx = pageCount ? Math.min(pageIdx, pageCount - 1) : 0
     const page = project?.pages?.[safePageIdx]
+    const pageSize = project?.editorMode === 'photo-portfolio'
+        ? bookGeometry(project, page)
+        : legacyPageSize(page?.orientation === 'landscape')
+
+    useEffect(() => {
+        const wrap = readerWrapRef.current
+        if (!wrap) return
+        const fit = () => {
+            const scale = Math.min(
+                1,
+                Math.max(1, wrap.clientWidth - 48) / pageSize.width,
+                Math.max(1, wrap.clientHeight - 48) / pageSize.height
+            )
+            setReaderScale(previous => Math.abs(previous - scale) < 0.001 ? previous : scale)
+        }
+        const observer = new ResizeObserver(fit)
+        observer.observe(wrap)
+        fit()
+        return () => observer.disconnect()
+    }, [pageSize.width, pageSize.height])
 
     // BGM is owned by VPContext, not by an individual page component. Do not
     // stop it in the page effect cleanup: changing pages must not interrupt it.
@@ -291,69 +320,78 @@ function Reader() {
                 <span>{safePageIdx + 1} / {project.pages.length}</span>
             </div>
 
-            <div className="reader-canvas-wrap">
-                <div className="reader-page" style={styles.page(page)}>
-                    {page.texture && (
-                        <div style={styles.texture(page)} />
-                    )}
-                    {(page.elements || []).filter(e => !e.hidden).map(el => {
-                        const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
-                        const hiddenByFlag = el.requiredFlag && !flags[el.requiredFlag]
-                        return (
-                            <div
-                                key={el.id}
-                                className="reader-el reader-el-item"
-                                data-label={el.label || ''}
-                                style={styles.element(el, hiddenByToggle || hiddenByFlag)}
-                                onClick={() => (!el.trigger || el.trigger === 'click') && handleInteraction(el)}
-                                onMouseEnter={() => el.trigger === 'hover' && handleInteraction(el)}
-                            >
-                                {el.type === 'text' && (
-                                    <div style={styles.text(el)}>{el.content}</div>
-                                )}
-                                {el.type === 'image' && (
-                                    <img src={el.src} style={styles.image(el)} alt="" />
-                                )}
-                                {el.type === 'panel' && (
-                                    <div style={styles.panel(el)} />
-                                )}
-                                {el.type === 'shape' && (
-                                    <div style={styles.shape(el)} />
-                                )}
-                                {el.type === 'shader' && (
-                                    <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
-                                )}
-                                {el.type === 'object' && (
-                                    <Object3D
-                                        model={el.objModel || 'crystal'}
-                                        color={el.objColor || '#4488ff'}
-                                        autoRotate={el.objSpin !== false}
-                                        width={el.width}
-                                        height={el.height}
-                                    />
-                                )}
-                                {el.type === 'balloon' && (
-                                    <div style={styles.balloon(el)}>{el.content}</div>
-                                )}
-                                {el.type === 'video' && (
-                                    el.src
-                                        ? <video src={el.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls autoPlay muted />
-                                        : <div style={styles.video}>VIDEO: No Source</div>
-                                )}
-                                {el.type === 'audio-log' && (
-                                    <div style={styles.audioLog}>
-                                        <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
-                                            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                                                onClick={(e) => { e.stopPropagation(); if (el.src) { const a = new Audio(el.src); a.play().catch(() => { }) } }}
-                                            >▶</div>
-                                            <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
+            <div className="reader-canvas-wrap" ref={readerWrapRef}>
+                <div className="reader-page-fit" style={{ width: pageSize.width * readerScale, height: pageSize.height * readerScale }}>
+                    <div className="reader-page" style={{ ...styles.page(page, project), transform: `scale(${readerScale})`, transformOrigin: 'top left' }}>
+                        {page.texture && (
+                            <div style={styles.texture(page)} />
+                        )}
+                        {(page.elements || []).filter(e => !e.hidden).map(el => {
+                            const libraryAsset = el.assetId
+                                ? (vpState.library?.imported || []).find(asset => asset.id === el.assetId)
+                                : null
+                            const renderedElement = libraryAsset?.src ? { ...el, src: libraryAsset.src } : el
+                            const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
+                            const hiddenByFlag = el.requiredFlag && !flags[el.requiredFlag]
+                            return (
+                                <div
+                                    key={el.id}
+                                    className="reader-el reader-el-item"
+                                    data-label={el.label || ''}
+                                    style={styles.element(renderedElement, hiddenByToggle || hiddenByFlag)}
+                                    onClick={() => (!el.trigger || el.trigger === 'click') && handleInteraction(el)}
+                                    onMouseEnter={() => el.trigger === 'hover' && handleInteraction(el)}
+                                >
+                                    {el.type === 'text' && (
+                                        <div style={styles.text(el)}>{el.content}</div>
+                                    )}
+                                    {el.type === 'image' && (
+                                        <img src={renderedElement.src} style={styles.image(renderedElement)} alt="" />
+                                    )}
+                                    {el.type === 'photo-frame' && (
+                                        <PhotoFrameSurface el={renderedElement} />
+                                    )}
+                                    {el.type === 'panel' && (
+                                        <div style={styles.panel(el)} />
+                                    )}
+                                    {el.type === 'shape' && (
+                                        <div style={styles.shape(el)} />
+                                    )}
+                                    {el.type === 'shader' && (
+                                        <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
+                                    )}
+                                    {el.type === 'object' && (
+                                        <Object3D
+                                            model={el.objModel || 'crystal'}
+                                            color={el.objColor || '#4488ff'}
+                                            autoRotate={el.objSpin !== false}
+                                            width={el.width}
+                                            height={el.height}
+                                        />
+                                    )}
+                                    {el.type === 'balloon' && (
+                                        <div style={styles.balloon(el)}>{el.content}</div>
+                                    )}
+                                    {el.type === 'video' && (
+                                        el.src
+                                            ? <video src={el.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls autoPlay muted />
+                                            : <div style={styles.video}>VIDEO: No Source</div>
+                                    )}
+                                    {el.type === 'audio-log' && (
+                                        <div style={styles.audioLog}>
+                                            <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+                                                <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                                    onClick={(e) => { e.stopPropagation(); if (el.src) { const a = new Audio(el.src); a.play().catch(() => { }) } }}
+                                                >▶</div>
+                                                <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
+                                            </div>
+                                            <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[{el.vizTheme || 'bars'}]</div>
                                         </div>
-                                        <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[{el.vizTheme || 'bars'}]</div>
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    })}
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
                 </div>
             </div>
 

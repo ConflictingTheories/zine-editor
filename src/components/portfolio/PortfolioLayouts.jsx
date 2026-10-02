@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo, useState } from 'react'
-import { PORTFOLIO_LAYOUTS, PORTFOLIO_LAYOUT_CATEGORIES, createLayoutPage } from '../../data/portfolioTemplates.js'
+import { PORTFOLIO_LAYOUTS, PORTFOLIO_LAYOUT_CATEGORIES, createLayoutPages } from '../../data/portfolioTemplates.js'
 import { getFramePreset } from '../../lib/photoLibrary.js'
 import { bookGeometry } from '../../lib/bookGeometry.js'
 import { DEFAULT_PAPER } from '../../constants.js'
@@ -22,98 +22,81 @@ import { useVP } from '../../context/VPContext.jsx'
  * still drawn to a digest rectangle, so the arrangement the user approved was
  * not the arrangement they got. Preview and reality are now the same call.
  */
-const PREVIEW_H = 120
-const PREVIEW_MAX_W = 140
+const PREVIEW_H = 124
+const PREVIEW_MAX_W = 220
+const PREVIEW_PAD = 8
 
-const LayoutPreview = ({ layout, paperSize }) => {
-    // A landscape layout needs landscape geometry. Reusing the *current page's*
-    // geometry is what made landscape templates draw a wide arrangement inside a
-    // portrait box, so their frames hung off the side of the preview — the
-    // arrangement you approved was never the one you got.
-    const trim = useMemo(
-        () => bookGeometry({ paperSize }, { orientation: layout?.orientation || 'portrait' }),
-        [paperSize, layout]
-    )
-
-    // Build the real page for this book's trim, then draw that.
-    const page = useMemo(() => {
-        if (!layout) return null
+const LayoutPreview = ({ layout, paperSize, assets = [] }) => {
+    const trim = useMemo(() => bookGeometry({ paperSize }), [paperSize])
+    const pages = useMemo(() => {
+        if (!layout) return []
         try {
-            return createLayoutPage(layout, { pageSize: { width: trim.width, height: trim.height } })
+            return createLayoutPages(layout, {
+                pageSize: { width: trim.width, height: trim.height },
+                gutter: trim.gutter
+            })
         } catch {
-            return null
+            return []
         }
-    }, [layout, trim.width, trim.height])
+    }, [layout, trim.width, trim.height, trim.gutter])
 
-    const width = trim.width
-    const height = trim.height
-    // Fit the whole page into the thumbnail, capped on width. A landscape page
-    // is wider than it is tall, so scaling to a fixed 120px *height* alone made
-    // its canvas wider than the box and every frame overflowed to the right.
-    // Scale by whichever axis is tighter.
-    const scale = Math.min(PREVIEW_H / height, PREVIEW_MAX_W / width)
-    const boxW = Math.round(width * scale)
-    const boxH = Math.round(height * scale)
+    const spreadWidth = trim.width * pages.length + trim.gutter * Math.max(0, pages.length - 1)
+    const scale = Math.min(PREVIEW_H / trim.height, PREVIEW_MAX_W / Math.max(1, spreadWidth))
+    const boxW = Math.max(1, Math.round(spreadWidth * scale))
+    const boxH = Math.max(1, Math.round(trim.height * scale))
+    const frames = pages.flatMap((page, pageIndex) => (page.elements || [])
+        .filter(element => element.type === 'photo-frame')
+        .map(element => ({ element, pageIndex })))
+    const texts = pages.flatMap((page, pageIndex) => (page.elements || [])
+        .filter(element => element.type === 'text')
+        .map(element => ({ element, pageIndex })))
 
-    const frames = useMemo(
-        () => (page?.elements || []).filter(el => el.type === 'photo-frame'),
-        [page]
-    )
-    const texts = useMemo(
-        () => (page?.elements || []).filter(el => el.type === 'text'),
-        [page]
-    )
-
-    if (!page) return <span className="pf-layout-preview" style={{ width: boxW, height: boxH }} />
+    if (!pages.length) return <span className="pf-layout-preview" style={{ width: boxW + PREVIEW_PAD * 2, height: boxH + PREVIEW_PAD * 2 }} />
 
     return (
-        <span className="pf-layout-preview" style={{ width: boxW, height: boxH }}>
-            <span
-                className="pf-layout-canvas"
-                style={{ width: `${boxW}px`, height: `${boxH}px` }}
-            >
-                {frames.map((el, index) => {
-                    const preset = getFramePreset(el.framePreset || 'mat')
+        <span className="pf-layout-preview" style={{ width: boxW + PREVIEW_PAD * 2, height: boxH + PREVIEW_PAD * 2 }}>
+            <span className="pf-layout-canvas" style={{ width: `${boxW}px`, height: `${boxH}px` }}>
+                {pages.length > 1 && <span className="pf-layout-gutter" style={{ left: trim.width * scale, width: trim.gutter * scale }} />}
+                {frames.map(({ element, pageIndex }, index) => {
+                    const preset = getFramePreset(element.framePreset || 'mat')
                     const border = preset.style.frameBorderWidth || 0
+                    const asset = assets[index % Math.max(1, assets.length)]
+                    const left = pageIndex * (trim.width + trim.gutter) + element.x
                     return (
                         <span
-                            key={el.id || index}
+                            key={element.id || index}
                             className="pf-layout-frame"
                             style={{
-                                left: el.x * scale,
-                                top: el.y * scale,
-                                width: el.width * scale,
-                                height: el.height * scale,
-                                // Fill the whole cell with the mat colour, then
-                                // inset a darker "window" for the photograph, so
-                                // the matte proportion reads at thumbnail size the
-                                // way it will on the page.
+                                left: left * scale,
+                                top: element.y * scale,
+                                width: element.width * scale,
+                                height: element.height * scale,
                                 background: preset.style.frameColor || '#f6f4f0',
-                                border: border
-                                    ? `${Math.max(0.5, border * scale)} solid ${preset.style.frameBorderColor}`
-                                    : 'none',
+                                border: border ? `${Math.max(0.5, border * scale)} solid ${preset.style.frameBorderColor}` : 'none',
                                 boxSizing: 'border-box'
                             }}
                         >
                             <span
                                 className="pf-layout-window"
                                 style={{
-                                    inset: `${Math.max(1, (el.frameWidth ?? 0) * scale)}px ${Math.max(1, (el.frameWidth ?? 0) * scale)}px ${Math.max(1, (el.frameWidthBottom ?? el.frameWidth ?? 0) * scale)}px`
+                                    inset: `${Math.max(1, (element.frameWidth ?? 0) * scale)}px ${Math.max(1, (element.frameWidthRight ?? element.frameWidth ?? 0) * scale)}px ${Math.max(1, (element.frameWidthBottom ?? element.frameWidth ?? 0) * scale)}px ${Math.max(1, (element.frameWidth ?? 0) * scale)}px`
                                 }}
-                            />
+                            >
+                                {asset && <img src={asset.thumb || asset.src} alt="" loading="lazy" />}
+                            </span>
                         </span>
                     )
                 })}
-                {texts.map((el, index) => (
+                {texts.map(({ element, pageIndex }, index) => (
                     <span
-                        key={el.id || index}
+                        key={element.id || index}
                         className="pf-layout-text"
                         style={{
-                            left: el.x * scale,
-                            top: el.y * scale,
-                            width: el.width * scale,
-                            height: Math.max(1.5, (el.fontSize || 12) * scale * 1.3),
-                            color: el.color || '#333',
+                            left: (pageIndex * (trim.width + trim.gutter) + element.x) * scale,
+                            top: element.y * scale,
+                            width: element.width * scale,
+                            height: Math.max(1.5, (element.fontSize || 12) * scale * 1.3),
+                            color: element.color || '#333',
                             opacity: 0.5
                         }}
                     />
@@ -200,7 +183,7 @@ export default function PortfolioLayouts({ onApplied, paperSize }) {
                         className="pf-layout-card"
                         onClick={() => confirm(layout)}
                     >
-                        <LayoutPreview layout={layout} paperSize={trimKey} />
+                        <LayoutPreview layout={layout} paperSize={trimKey} assets={assets} />
                         <span className="pf-layout-meta">
                             <strong>{layout.name}</strong>
                             <span>{layout.description}</span>

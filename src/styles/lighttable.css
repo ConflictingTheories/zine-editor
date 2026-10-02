@@ -150,6 +150,48 @@
     align-content: start;
 }
 
+/* Each tile is a positioned wrapper so the delete affordance can sit over the
+   thumbnail without becoming part of the button's accessible name. */
+.lt-thumb-wrap {
+    position: relative;
+    min-width: 0;
+}
+
+.lt-thumb-wrap .lt-thumb {
+    width: 100%;
+}
+
+.lt-thumb-delete {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    font-size: 10px;
+    line-height: 1;
+    color: #fff;
+    background: rgb(0 0 0 / .62);
+    border: 1px solid rgb(255 255 255 / .18);
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+/* Revealed on hover, but always reachable by keyboard — an affordance that only
+   exists on hover is an affordance a keyboard user does not have. */
+.lt-thumb-wrap:hover .lt-thumb-delete,
+.lt-thumb-delete:focus-visible {
+    opacity: 1;
+}
+
+.lt-thumb-delete:hover {
+    background: var(--danger);
+}
+
 .lt-thumb {
     position: relative;
     display: flex;
@@ -969,4 +1011,260 @@
     border-top: 1px solid rgba(255, 255, 255, .28);
     border-bottom: 1px solid rgba(255, 255, 255, .28);
     margin: 33.33% 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Storage manager
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.storage-modal {
+    position: relative;
+    max-width: 640px;
+    text-align: left;
+}
+
+.storage-head {
+    margin-bottom: var(--space-lg);
+    padding-right: 36px;
+}
+
+/* The shared `.modal-h2` is the display serif in accent gold — a publication
+   face for publication surfaces. A storage panel is app UI, so it opts out and
+   uses the UI font at UI weight. */
+.storage-head .modal-h2 {
+    font-family: var(--font-ui);
+    font-size: var(--type-lg);
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--text);
+    text-shadow: none;
+    margin: 0;
+}
+
+.storage-head p {
+    margin: 4px 0 0;
+    font-size: var(--type-sm);
+    color: var(--text-muted);
+}
+
+.storage-usage {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xl);
+    padding: var(--space-lg);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+}
+
+.storage-figure {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.storage-figure-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-figure-label {
+    font-size: var(--type-xs);
+    color: var(--text-faint);
+    margin-top: 2px;
+}
+
+.storage-meter {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.storage-meter-track {
+    height: 6px;
+    background: var(--surface-3);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+
+.storage-meter-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: var(--radius-pill);
+    transition: width var(--dur-slow) var(--ease);
+}
+
+/* Colour carries the meaning here: the meter is about how close the browser is
+   to refusing further writes, and the percentage alone is easy to skim past. */
+.storage-meter-fill.mid {
+    background: var(--warning, #d29922);
+}
+
+.storage-meter-fill.warn {
+    background: var(--danger);
+}
+
+.storage-meter-label {
+    margin: 6px 0 0;
+    font-size: var(--type-xs);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-note {
+    margin: 0;
+    font-size: var(--type-xs);
+    color: var(--text-faint);
+    line-height: 1.5;
+}
+
+.storage-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-md);
+}
+
+.storage-breakdown>div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-1);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+}
+
+.storage-breakdown dt {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-faint);
+}
+
+.storage-breakdown dd {
+    margin: 0;
+    font-size: var(--type-md);
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-warning {
+    margin: 0 0 var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--type-xs);
+    line-height: 1.5;
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+    border-radius: var(--radius-sm);
+}
+
+.storage-list {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+}
+
+.storage-empty {
+    margin: 0;
+    padding: var(--space-xl);
+    text-align: center;
+    font-size: var(--type-sm);
+    color: var(--text-faint);
+}
+
+.storage-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.storage-row:last-child {
+    border-bottom: none;
+}
+
+.storage-row.selected {
+    background: var(--surface-2);
+}
+
+.storage-row.lost {
+    opacity: .7;
+}
+
+.storage-row-main {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.storage-row-main input {
+    width: auto;
+    flex-shrink: 0;
+    margin: 0;
+}
+
+.storage-row-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.storage-row-name {
+    font-size: var(--type-sm);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.storage-row-meta {
+    font-size: var(--type-xxs);
+    color: var(--text-faint);
+}
+
+.storage-row-size {
+    flex-shrink: 0;
+    font-size: var(--type-xs);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.storage-selected {
+    flex: 1 1 auto;
+    font-size: var(--type-xs);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-confirm {
+    flex: 1 1 auto;
+    font-size: var(--type-xs);
+    line-height: 1.45;
+    color: var(--danger);
+}
+/* The close control is a circle the shared stylesheet positions statically, so
+   it lands above the heading instead of in the corner. Pin it. */
+.storage-modal .modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 1;
 }

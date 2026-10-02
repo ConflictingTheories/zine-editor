@@ -25,7 +25,18 @@ import {
     centreCrop
 } from '../../lib/lightTableEngine.js'
 import { LtRenderer } from './ltRenderer.js'
+import StorageManager from '../StorageManager.jsx'
 import { filesToAssets, commitAssets, measureAssets } from '../../utils/photoImport.js'
+
+/** A storage/box glyph for the library manager button. */
+const StorageIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <rect x="1.5" y="2.5" width="11" height="3" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="1.5" y="8.5" width="11" height="3" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <line x1="4" y1="4" x2="4" y2="4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <line x1="7" y1="10" x2="7" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+)
 import LtSlider from './LtSlider.jsx'
 import LtHistogram from './LtHistogram.jsx'
 import LtCurveEditor from './LtCurveEditor.jsx'
@@ -115,9 +126,23 @@ function SliderGroup({ label, controls, values, onChange, onReset, onInteraction
 }
 
 function LightTable() {
-    const { vpState, updateVpState, addImportedAssets, addElement, updateImportedAsset, applyRecipeToElement, toast } = useVP()
+    const { vpState, updateVpState, addImportedAssets, addElement, updateImportedAsset, applyRecipeToElement, removeLibraryAsset, goBack, toast } = useVP()
 
-    const gallery = vpState.library?.imported || []
+    const allAssets = vpState.library?.imported || []
+    const gallery = useMemo(() => {
+        const project = vpState.currentProject
+        if (project?.editorMode !== 'photo-portfolio' || !vpState.lightTableTarget) return allAssets
+        const ids = new Set()
+        const sources = new Set()
+        for (const page of project.pages || []) {
+            for (const element of page.elements || []) {
+                if (!['image', 'photo-frame'].includes(element.type) || !element.src) continue
+                if (element.assetId) ids.add(element.assetId)
+                sources.add(element.src)
+            }
+        }
+        return allAssets.filter(asset => ids.has(asset.id) || sources.has(asset.src))
+    }, [allAssets, vpState.currentProject, vpState.lightTableTarget])
 
     // Per-asset recipe drafts, keyed by asset id, so switching images keeps
     // each photo's edits instead of resetting on every selection change.
@@ -133,6 +158,7 @@ function LightTable() {
     const [inspectorOpen, setInspectorOpen] = useState(false)
     const [dragging, setDragging] = useState(false)
     const [rendererMode, setRendererMode] = useState('pending')
+    const [storageOpen, setStorageOpen] = useState(false)
     const [adjusting, setAdjusting] = useState(false)
     const [zoom, setZoom] = useState(1)
 
@@ -337,6 +363,25 @@ function LightTable() {
 
     const onPickFiles = () => fileInputRef.current?.click()
 
+    /**
+     * Delete one asset and reclaim its bytes. Selection moves to a neighbour so
+     * the stage is never left showing a photograph that no longer exists.
+     */
+    const handleDeleteAsset = useCallback(async (asset) => {
+        if (!asset) return
+        const at = gallery.findIndex(a => a.id === asset.id)
+        const next = gallery[at + 1] || gallery[at - 1] || null
+        await removeLibraryAsset(asset.id)
+        if (selectedId === asset.id) setSelectedId(next ? next.id : null)
+        setDrafts(prev => {
+            if (!(asset.id in prev)) return prev
+            const next = { ...prev }
+            delete next[asset.id]
+            return next
+        })
+        toast(`Deleted “${asset.name || 'file'}”`, 'success')
+    }, [gallery, selectedId, removeLibraryAsset, toast])
+
     // ── Presets & auto ───────────────────────────────────────────────────
     const applyPreset = useCallback((id) => {
         const preset = getPreset(id)
@@ -506,16 +551,28 @@ function LightTable() {
     // size, mat and caption, and the user lands exactly where they left off.
     const returnTarget = vpState.lightTableTarget
 
+    const returnToPrevious = useCallback(() => {
+        const handoff = {
+            lightTableAsset: null,
+            lightTableTarget: null,
+            lightTableReturnView: null
+        }
+        if (goBack()) updateVpState(handoff)
+        else updateVpState({ ...handoff, currentView: vpState.lightTableReturnView || 'dashboard' })
+    }, [goBack, updateVpState, vpState.lightTableReturnView])
+
     const applyToTarget = useCallback(({ src, recipe, name }) => {
         if (!returnTarget?.elementId) return false
         const applied = applyRecipeToElement(returnTarget, {
             src,
             recipe,
-            name: name || selectedAsset?.name
+            name: name || selectedAsset?.name,
+            assetId: selectedAsset?.id
         })
         if (applied) {
+            const returned = goBack()
             updateVpState({
-                currentView: 'editor',
+                ...(returned ? {} : { currentView: vpState.lightTableReturnView || 'editor' }),
                 lightTableAsset: null,
                 lightTableTarget: null,
                 lightTableReturnView: null,
@@ -524,7 +581,7 @@ function LightTable() {
             toast('Developed — your frame is updated in place', 'success')
         }
         return applied
-    }, [returnTarget, applyRecipeToElement, selectedAsset, updateVpState, toast])
+    }, [returnTarget, applyRecipeToElement, selectedAsset, updateVpState, vpState.lightTableReturnView, goBack, toast])
 
     const commitRecipe = useCallback(({ bake = false } = {}) => {
         if (!selectedAsset) return
@@ -618,460 +675,484 @@ function LightTable() {
         : ''
 
     return (
-        <div className="light-table lt-workspace">
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                style={{ display: 'none' }}
-                onChange={e => { importFiles(e.target.files); e.target.value = '' }}
-            />
+        <>
+            <div className="light-table lt-workspace">
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={e => { importFiles(e.target.files); e.target.value = '' }}
+                />
 
-            {/* ── Header ─────────────────────────────────────────────── */}
-            <header className="lt-header">
-                {/* No back arrow: TopNav owns navigation. A second, mode-specific
+                {/* ── Header ─────────────────────────────────────────────── */}
+                <header className="lt-header">
+                    {/* No back arrow: TopNav owns navigation. A second, mode-specific
                             way out was a leftover from before the three-mode shell, and it
                             disagreed with the nav about where "back" even meant. */}
-                <div className="lt-title">
-                    <strong>LIGHT TABLE</strong>
-                    <span className="lt-file">
-                        {selectedAsset?.name || 'No image selected'}
-                        {isDirty ? ' •' : ''}
-                    </span>
-                </div>
-                <div className="lt-header-actions">
-                    <button className="lt-btn" onClick={onPickFiles} title="Import images">Import</button>
-                    <button className="lt-btn" onClick={autoAdjust} disabled={!selectedAsset} title="Auto adjust (A)">Auto</button>
-                    <button
-                        className={`lt-btn${compare ? ' active' : ''}`}
-                        onClick={() => setCompare(v => !v)}
-                        disabled={!selectedAsset}
-                        title="Hold to compare with the original (\\)"
-                        onPointerDown={() => setCompare(true)}
-                        onPointerUp={() => setCompare(false)}
-                        onPointerLeave={() => setCompare(false)}
-                    >
-                        Compare
-                    </button>
-                    {vpState.currentProject && (
-                        <button className="lt-btn" onClick={placeOnSpread} disabled={!selectedAsset}>Place</button>
-                    )}
-                    {returnTarget && (
-                        <>
-                            <button
-                                className="lt-btn primary"
-                                onClick={() => commitRecipe({ bake: false })}
-                                disabled={!selectedAsset}
-                                title="Write this grade back onto the frame you came from — non-destructive"
-                            >
-                                Apply to frame
-                            </button>
-                            <button
-                                className="lt-btn"
-                                onClick={() => commitRecipe({ bake: true })}
-                                disabled={!selectedAsset}
-                                title="Flatten the grade into pixels and swap the frame's image"
-                            >
-                                Bake &amp; apply
-                            </button>
-                        </>
-                    )}
-                    <button className="lt-btn" onClick={saveToLibrary} disabled={!selectedAsset} title="Render a new, flattened JPEG and add it to the library as a separate asset">
-                        {returnTarget ? 'Save as new' : 'Save'}
-                    </button>
-                    <button className="lt-btn" onClick={downloadImage} disabled={!selectedAsset} title="Download a full-resolution JPEG">↓</button>
-                    {returnTarget && (
-                        <button
-                            className="lt-btn ghost"
-                            onClick={revertDraft}
-                            disabled={!selectedAsset || !isDirty}
-                            title="Discard this photo's unsaved edits"
-                        >
-                            Revert
-                        </button>
-                    )}
-                    <button
-                        className="lt-btn icon lt-inspector-toggle"
-                        onClick={() => setInspectorOpen(v => !v)}
-                        title="Toggle inspector"
-                    >
-                        ⚙
-                    </button>
-                </div>
-            </header>
-
-            {/* ── Filmstrip ─────────────────────────────────────────── */}
-            <aside className="lt-library">
-                <div className="lt-lib-toolbar">
-                    <button className="lt-btn" onClick={onPickFiles} title="Import images">+</button>
-                    <button
-                        className="lt-btn"
-                        onClick={() => setDrafts({})}
-                        title="Discard unsaved edits for every image"
-                    >
-                        ↺
-                    </button>
-                </div>
-                <div className="lt-thumbs">
-                    {gallery.map(asset => (
-                        <button
-                            key={asset.id}
-                            className={`lt-thumb${selectedId === asset.id ? ' active' : ''}`}
-                            onClick={() => setSelectedId(asset.id)}
-                            title={asset.name}
-                        >
-                            <img src={asset.src} alt={asset.name || ''} />
-                            {asset.recipe && <span className="lt-thumb-dirty" />}
-                            <span className="lt-thumb-name">{asset.name}</span>
-                        </button>
-                    ))}
-                </div>
-                {!gallery.length && (
-                    <p className="lt-gallery-empty">
-                        No photos yet
-                    </p>
-                )}
-            </aside>
-
-            {/* ── Stage ─────────────────────────────────────────────── */}
-            <main
-                className={`lt-stage${compare ? ' compare' : ''}${dragging ? ' dragging' : ''}`}
-                onDragOver={e => { e.preventDefault(); setDragging(true) }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={e => { e.preventDefault(); setDragging(false); importFiles(e.dataTransfer.files) }}
-            >
-                {selectedAsset ? (
-                    <>
-                        {/* Top bar: image info + quick geometry */}
-                        <div className="lt-stage-bar top">
-                            <span className="lt-meta">{imgDims}</span>
-                            <div className="divider" />
-                            <button className="lt-btn icon" onClick={() => rotate(-90)} title="Rotate left (Shift+R)">↺</button>
-                            <button className="lt-btn icon" onClick={() => rotate(90)} title="Rotate right (R)">↻</button>
-                            <button
-                                className={`lt-btn icon${recipe.geometry.flipH ? ' active' : ''}`}
-                                onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
-                                title="Flip horizontal (F)"
-                            >
-                                ⇋
-                            </button>
-                            <button
-                                className={`lt-btn icon${recipe.geometry.flipV ? ' active' : ''}`}
-                                onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
-                                title="Flip vertical"
-                            >
-                                ⇵
-                            </button>
-                            <div className="divider" />
-                            <button className="lt-btn icon" onClick={resetAll} title="Reset everything">⟲</button>
-                        </div>
-
-                        <div
-                            style={{
-                                position: 'relative',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '100%',
-                                height: '100%',
-                                overflow: 'auto'
-                            }}
-                        >
-                            <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: 'transform .12s ease' }}>
-                                <canvas ref={canvasRef} />
-                            </div>
-                            {cropping && (
-                                <LtCropOverlay
-                                    crop={recipe.geometry.crop || [0, 0, 1, 1]}
-                                    imageAspect={imageRef.current
-                                        ? imageRef.current.naturalWidth / imageRef.current.naturalHeight
-                                        : 1}
-                                    onCommit={(crop) => { updateGeometry({ crop }); setCropping(false) }}
-                                    onCancel={() => setCropping(false)}
-                                />
-                            )}
-                        </div>
-
-                        {/* Bottom bar: zoom + crop toggle */}
-                        <div className="lt-stage-bar bottom">
-                            <button className="lt-btn icon" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="Zoom out">−</button>
-                            <span className="lt-zoom-label">{Math.round(zoom * 100)}%</span>
-                            <button className="lt-btn icon" onClick={() => setZoom(z => Math.min(4, z + 0.25))} title="Zoom in">+</button>                            <div className="divider" />
-                            <button
-                                className={`lt-btn${cropping ? ' active' : ''}`}
-                                onClick={() => setCropping(v => !v)}
-                                title="Crop (C)"
-                            >
-                                Crop
-                            </button>
-                        </div>
-                    </>
-                ) : (
-                    <div className="lt-stage-empty">
-                        <div className="lt-drop">
-                            <h2>Start with a photograph</h2>
-                            <p>
-                                Import images or drop them here. Develop them with a full
-                                grade, crop, tone curves and LUTs — then push the result
-                                straight into a spread.
-                            </p>
-                            <button className="lt-btn primary" onClick={onPickFiles}>Import images</button>
-                        </div>
+                    <div className="lt-title">
+                        <strong>LIGHT TABLE</strong>
+                        <span className="lt-file">
+                            {selectedAsset?.name || 'No image selected'}
+                            {isDirty ? ' •' : ''}
+                        </span>
                     </div>
-                )}
-            </main>
-
-            {/* ── Inspector ─────────────────────────────────────────── */}
-            <aside className={`lt-controls${inspectorOpen ? ' open' : ''}`}>
-                <div className="lt-inspector-head">
-                    <LtHistogram image={imageRef.current} stats={imageStats} />
-                    <div className="lt-tabs">
-                        {TABS.map(t => (
+                    <div className="lt-header-actions">
+                        <button className="lt-btn" onClick={returnToPrevious} title="Return to the previous workspace">← Back</button>
+                        <button className="lt-btn" onClick={onPickFiles} title="Import images">Import</button>
+                        <button className="lt-btn" onClick={autoAdjust} disabled={!selectedAsset} title="Auto adjust (A)">Auto</button>
+                        <button
+                            className={`lt-btn${compare ? ' active' : ''}`}
+                            onClick={() => setCompare(v => !v)}
+                            disabled={!selectedAsset}
+                            title="Hold to compare with the original (\\)"
+                            onPointerDown={() => setCompare(true)}
+                            onPointerUp={() => setCompare(false)}
+                            onPointerLeave={() => setCompare(false)}
+                        >
+                            Compare
+                        </button>
+                        {vpState.currentProject && (
+                            <button className="lt-btn" onClick={placeOnSpread} disabled={!selectedAsset}>Place</button>
+                        )}
+                        {returnTarget && (
+                            <>
+                                <button
+                                    className="lt-btn primary"
+                                    onClick={() => commitRecipe({ bake: false })}
+                                    disabled={!selectedAsset}
+                                    title="Write this grade back onto the frame you came from — non-destructive"
+                                >
+                                    Apply to frame
+                                </button>
+                                <button
+                                    className="lt-btn"
+                                    onClick={() => commitRecipe({ bake: true })}
+                                    disabled={!selectedAsset}
+                                    title="Flatten the grade into pixels and swap the frame's image"
+                                >
+                                    Bake &amp; apply
+                                </button>
+                            </>
+                        )}
+                        <button className="lt-btn" onClick={saveToLibrary} disabled={!selectedAsset} title="Render a new, flattened JPEG and add it to the library as a separate asset">
+                            {returnTarget ? 'Save as new' : 'Save'}
+                        </button>
+                        <button className="lt-btn" onClick={downloadImage} disabled={!selectedAsset} title="Download a full-resolution JPEG">↓</button>
+                        {returnTarget && (
                             <button
-                                key={t.id}
-                                className={`lt-tab${tab === t.id ? ' active' : ''}`}
-                                onClick={() => setTab(t.id)}
+                                className="lt-btn ghost"
+                                onClick={revertDraft}
+                                disabled={!selectedAsset || !isDirty}
+                                title="Discard this photo's unsaved edits"
                             >
-                                {t.label}
+                                Revert
                             </button>
+                        )}
+                        <button
+                            className="lt-btn icon lt-inspector-toggle"
+                            onClick={() => setInspectorOpen(v => !v)}
+                            title="Toggle inspector"
+                        >
+                            ⚙
+                        </button>
+                    </div>
+                </header>
+
+                {/* ── Filmstrip ─────────────────────────────────────────── */}
+                <aside className="lt-library">
+                    <div className="lt-lib-toolbar">
+                        <button className="lt-btn" onClick={onPickFiles} title="Import images">+</button>
+                        <button
+                            className="lt-btn"
+                            onClick={() => setDrafts({})}
+                            title="Discard unsaved edits for every image"
+                        >
+                            ↺
+                        </button>
+                        <button
+                            className="lt-btn lt-lib-manage"
+                            onClick={() => setStorageOpen(true)}
+                            title="Manage library files and see how much space they use"
+                            aria-label="Manage library"
+                        >
+                            <StorageIcon />
+                        </button>
+                    </div>
+                    <div className="lt-thumbs">
+                        {gallery.map(asset => (
+                            <div key={asset.id} className="lt-thumb-wrap">
+                                <button
+                                    className={`lt-thumb${selectedId === asset.id ? ' active' : ''}`}
+                                    onClick={() => setSelectedId(asset.id)}
+                                    title={asset.name}
+                                >
+                                    <img src={asset.src} alt={asset.name || ''} />
+                                    {asset.recipe && <span className="lt-thumb-dirty" />}
+                                    <span className="lt-thumb-name">{asset.name}</span>
+                                </button>
+                                {/* Delete is on the tile rather than in a menu: the
+                                whole point of the panel is that removing a file
+                                should not be a multi-click errand. */}
+                                <button
+                                    className="lt-thumb-delete"
+                                    onClick={() => handleDeleteAsset(asset)}
+                                    title={`Delete ${asset.name}`}
+                                    aria-label={`Delete ${asset.name}`}
+                                >
+                                    ✕
+                                </button>
+                            </div>
                         ))}
                     </div>
-                </div>
-
-                {returnTarget && (
-                    <p className="lt-return-hint">
-                        Developing for a frame in your book. <strong>Apply to frame</strong> keeps the
-                        image as a live recipe — you can keep adjusting it later.
-                    </p>
-                )}
-
-                <div className="lt-inspector-body">
-                    {/* ── Develop ─────────────────────────────────── */}
-                    {tab === 'develop' && (
-                        <>
-                            <div className="lt-group">
-                                <div className="lt-group-head">Presets</div>
-                                <LtPresetStrip
-                                    image={imageRef.current}
-                                    recipe={recipe}
-                                    activeId={activePreset}
-                                    onApply={applyPreset}
-                                />
-                            </div>
-                            {DEVELOP_GROUPS.map(group => (
-                                <SliderGroup
-                                    key={group.id}
-                                    label={group.label}
-                                    controls={group.controls}
-                                    values={recipe.params}
-                                    onChange={updateParam}
-                                    onInteraction={setAdjusting}
-                                    onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
-                                />
-                            ))}
-                        </>
+                    {!gallery.length && (
+                        <p className="lt-gallery-empty">
+                            No photos yet
+                        </p>
                     )}
+                </aside>
 
-                    {/* ── Detail ──────────────────────────────────── */}
-                    {tab === 'detail' && (
+                {/* ── Stage ─────────────────────────────────────────────── */}
+                <main
+                    className={`lt-stage${compare ? ' compare' : ''}${dragging ? ' dragging' : ''}`}
+                    onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={e => { e.preventDefault(); setDragging(false); importFiles(e.dataTransfer.files) }}
+                >
+                    {selectedAsset ? (
                         <>
-                            {DETAIL_GROUP.map(group => (
-                                <SliderGroup
-                                    key={group.id}
-                                    label={group.label}
-                                    controls={group.controls}
-                                    values={recipe.params}
-                                    onChange={updateParam}
-                                    onInteraction={setAdjusting}
-                                    onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
-                                />
-                            ))}
-                            <p className="lt-help">
-                                The pipeline drives one sharpening pass and one noise-reduction
-                                pass. Radius, Detail, Masking and the per-channel breakdown
-                                need separable stages in the shader before their sliders
-                                would move a pixel — they arrive with that, not before.
-                            </p>
-                        </>
-                    )}
-
-                    {/* ── Effects ─────────────────────────────────── */}
-                    {tab === 'effects' && (
-                        <>
-                            {FX_GROUPS.map(group => (
-                                <SliderGroup
-                                    key={group.id}
-                                    label={group.label}
-                                    controls={group.controls.map(key => FX_CONTROL_SPEC[key])}
-                                    values={recipe.fx}
-                                    onInteraction={setAdjusting}
-                                    onChange={updateFx}
-                                    onReset={() => group.controls.forEach(key => updateFx(key, 0))}
-                                />
-                            ))}
-                            <div className="lt-group">
-                                <div className="lt-group-head">Monochrome</div>
-                                <div className="lt-row">
-                                    <label>Black &amp; white</label>
-                                    <button
-                                        className={`lt-switch${recipe.bw ? ' on' : ''}`}
-                                        onClick={() => updateRecipe({ bw: !recipe.bw })}
-                                        aria-pressed={recipe.bw}
-                                        aria-label="Toggle black and white"
-                                    />
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    {/* ── Curves ──────────────────────────────────── */}
-                    {tab === 'curves' && (
-                        <div className="lt-group">
-                            <div className="lt-group-head">
-                                Tone Curve
+                            {/* Top bar: image info + quick geometry */}
+                            <div className="lt-stage-bar top">
+                                <span className="lt-meta">{imgDims}</span>
+                                <div className="divider" />
+                                <button className="lt-btn icon" onClick={() => rotate(-90)} title="Rotate left (Shift+R)">↺</button>
+                                <button className="lt-btn icon" onClick={() => rotate(90)} title="Rotate right (R)">↻</button>
                                 <button
-                                    className="lt-btn ghost"
-                                    onClick={() => updateRecipe({ curves: createRecipe().curves })}
+                                    className={`lt-btn icon${recipe.geometry.flipH ? ' active' : ''}`}
+                                    onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
+                                    title="Flip horizontal (F)"
                                 >
-                                    Reset
+                                    ⇋
                                 </button>
+                                <button
+                                    className={`lt-btn icon${recipe.geometry.flipV ? ' active' : ''}`}
+                                    onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
+                                    title="Flip vertical"
+                                >
+                                    ⇵
+                                </button>
+                                <div className="divider" />
+                                <button className="lt-btn icon" onClick={resetAll} title="Reset everything">⟲</button>
                             </div>
-                            <LtCurveEditor
-                                curves={recipe.curves}
-                                activeChannel={curveChannel}
-                                onChannelChange={setCurveChannel}
-                                onChange={(channel, points) => {
-                                    updateRecipe({ curves: { ...recipeRef.current.curves, [channel]: points } })
-                                    setActivePreset('custom')
-                                }}
-                            />
-                        </div>
-                    )}
 
-                    {/* ── Geometry ───────────────────────────────── */}
-                    {tab === 'geometry' && (
-                        <>
-                            <div className="lt-group">
-                                <div className="lt-group-head">Crop</div>
+                            <div
+                                style={{
+                                    position: 'relative',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                    height: '100%',
+                                    overflow: 'auto'
+                                }}
+                            >
+                                <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: 'transform .12s ease' }}>
+                                    <canvas ref={canvasRef} />
+                                </div>
+                                {cropping && (
+                                    <LtCropOverlay
+                                        crop={recipe.geometry.crop || [0, 0, 1, 1]}
+                                        imageAspect={imageRef.current
+                                            ? imageRef.current.naturalWidth / imageRef.current.naturalHeight
+                                            : 1}
+                                        onCommit={(crop) => { updateGeometry({ crop }); setCropping(false) }}
+                                        onCancel={() => setCropping(false)}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Bottom bar: zoom + crop toggle */}
+                            <div className="lt-stage-bar bottom">
+                                <button className="lt-btn icon" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="Zoom out">−</button>
+                                <span className="lt-zoom-label">{Math.round(zoom * 100)}%</span>
+                                <button className="lt-btn icon" onClick={() => setZoom(z => Math.min(4, z + 0.25))} title="Zoom in">+</button>                            <div className="divider" />
                                 <button
                                     className={`lt-btn${cropping ? ' active' : ''}`}
-                                    style={{ width: '100%' }}
                                     onClick={() => setCropping(v => !v)}
+                                    title="Crop (C)"
                                 >
-                                    {cropping ? 'Apply crop' : 'Crop on canvas'}
+                                    Crop
                                 </button>
-                                <div className="lt-row" style={{ marginTop: 8 }}>
-                                    <label>Clear crop</label>
-                                    <button className="lt-btn" onClick={() => updateGeometry({ crop: null })}>Reset</button>
-                                </div>
-                            </div>
-                            <div className="lt-group">
-                                <div className="lt-group-head">Aspect Ratio</div>
-                                <div className="lt-crop-grid">
-                                    {ASPECTS.map(a => (
-                                        <button key={a.id} className="lt-btn" onClick={() => applyAspect(a.id)}>{a.label}</button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="lt-group">
-                                <div className="lt-group-head">Rotate</div>
-                                <div className="lt-row">
-                                    <label>Rotation</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="359"
-                                        value={recipe.geometry.rotate || 0}
-                                        onChange={e => updateGeometry({ rotate: Number(e.target.value) || 0 })}
-                                    />
-                                    <span className="lt-crop-info">degrees</span>
-                                </div>
-                                <div className="lt-row">
-                                    <label>Rotate by</label>
-                                    <button className="lt-btn" onClick={() => rotate(-90)}>↺ 90°</button>
-                                    <button className="lt-btn" onClick={() => rotate(90)}>↻ 90°</button>
-                                </div>
-                            </div>
-                            <div className="lt-group">
-                                <div className="lt-group-head">Flip</div>
-                                <div className="lt-row">
-                                    <label>Flip horizontal</label>
-                                    <button
-                                        className={`lt-switch${recipe.geometry.flipH ? ' on' : ''}`}
-                                        onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
-                                        aria-pressed={recipe.geometry.flipH}
-                                        aria-label="Flip horizontal"
-                                    />
-                                </div>
-                                <div className="lt-row">
-                                    <label>Flip vertical</label>
-                                    <button
-                                        className={`lt-switch${recipe.geometry.flipV ? ' on' : ''}`}
-                                        onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
-                                        aria-pressed={recipe.geometry.flipV}
-                                        aria-label="Flip vertical"
-                                    />
-                                </div>
                             </div>
                         </>
+                    ) : (
+                        <div className="lt-stage-empty">
+                            <div className="lt-drop">
+                                <h2>Start with a photograph</h2>
+                                <p>
+                                    Import images or drop them here. Develop them with a full
+                                    grade, crop, tone curves and LUTs — then push the result
+                                    straight into a spread.
+                                </p>
+                                <button className="lt-btn primary" onClick={onPickFiles}>Import images</button>
+                            </div>
+                        </div>
+                    )}
+                </main>
+
+                {/* ── Inspector ─────────────────────────────────────────── */}
+                <aside className={`lt-controls${inspectorOpen ? ' open' : ''}`}>
+                    <div className="lt-inspector-head">
+                        <LtHistogram image={imageRef.current} stats={imageStats} />
+                        <div className="lt-tabs">
+                            {TABS.map(t => (
+                                <button
+                                    key={t.id}
+                                    className={`lt-tab${tab === t.id ? ' active' : ''}`}
+                                    onClick={() => setTab(t.id)}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {returnTarget && (
+                        <p className="lt-return-hint">
+                            Developing for a frame in your book. <strong>Apply to frame</strong> keeps the
+                            image as a live recipe — you can keep adjusting it later.
+                        </p>
                     )}
 
-                    {/* ── LUT ─────────────────────────────────────── */}
-                    {tab === 'lut' && (
-                        <div className="lt-group">
-                            <div className="lt-group-head">Look Up Table</div>
-                            <label className="lt-file-btn">
-                                {recipe.lut ? recipe.lut.name : 'Import .cube LUT'}
-                                <input type="file" accept=".cube,text/plain" onChange={importLut} style={{ display: 'none' }} />
-                            </label>
-                            {recipe.lut && (
-                                <>
-                                    <div style={{ marginTop: 10 }}>
-                                        <LtSlider
-                                            label="Strength"
-                                            value={recipe.lutStrength}
-                                            onChange={v => updateRecipe({ lutStrength: v })}
-                                            spec={{ min: 0, max: 1, step: 0.01, bipolar: false, neutral: 1 }}
+                    <div className="lt-inspector-body">
+                        {/* ── Develop ─────────────────────────────────── */}
+                        {tab === 'develop' && (
+                            <>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Presets</div>
+                                    <LtPresetStrip
+                                        image={imageRef.current}
+                                        recipe={recipe}
+                                        activeId={activePreset}
+                                        onApply={applyPreset}
+                                    />
+                                </div>
+                                {DEVELOP_GROUPS.map(group => (
+                                    <SliderGroup
+                                        key={group.id}
+                                        label={group.label}
+                                        controls={group.controls}
+                                        values={recipe.params}
+                                        onChange={updateParam}
+                                        onInteraction={setAdjusting}
+                                        onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
+                                    />
+                                ))}
+                            </>
+                        )}
+
+                        {/* ── Detail ──────────────────────────────────── */}
+                        {tab === 'detail' && (
+                            <>
+                                {DETAIL_GROUP.map(group => (
+                                    <SliderGroup
+                                        key={group.id}
+                                        label={group.label}
+                                        controls={group.controls}
+                                        values={recipe.params}
+                                        onChange={updateParam}
+                                        onInteraction={setAdjusting}
+                                        onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
+                                    />
+                                ))}
+                                <p className="lt-help">
+                                    The pipeline drives one sharpening pass and one noise-reduction
+                                    pass. Radius, Detail, Masking and the per-channel breakdown
+                                    need separable stages in the shader before their sliders
+                                    would move a pixel — they arrive with that, not before.
+                                </p>
+                            </>
+                        )}
+
+                        {/* ── Effects ─────────────────────────────────── */}
+                        {tab === 'effects' && (
+                            <>
+                                {FX_GROUPS.map(group => (
+                                    <SliderGroup
+                                        key={group.id}
+                                        label={group.label}
+                                        controls={group.controls.map(key => FX_CONTROL_SPEC[key])}
+                                        values={recipe.fx}
+                                        onInteraction={setAdjusting}
+                                        onChange={updateFx}
+                                        onReset={() => group.controls.forEach(key => updateFx(key, 0))}
+                                    />
+                                ))}
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Monochrome</div>
+                                    <div className="lt-row">
+                                        <label>Black &amp; white</label>
+                                        <button
+                                            className={`lt-switch${recipe.bw ? ' on' : ''}`}
+                                            onClick={() => updateRecipe({ bw: !recipe.bw })}
+                                            aria-pressed={recipe.bw}
+                                            aria-label="Toggle black and white"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* ── Curves ──────────────────────────────────── */}
+                        {tab === 'curves' && (
+                            <div className="lt-group">
+                                <div className="lt-group-head">
+                                    Tone Curve
+                                    <button
+                                        className="lt-btn ghost"
+                                        onClick={() => updateRecipe({ curves: createRecipe().curves })}
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                                <LtCurveEditor
+                                    curves={recipe.curves}
+                                    activeChannel={curveChannel}
+                                    onChannelChange={setCurveChannel}
+                                    onChange={(channel, points) => {
+                                        updateRecipe({ curves: { ...recipeRef.current.curves, [channel]: points } })
+                                        setActivePreset('custom')
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {/* ── Geometry ───────────────────────────────── */}
+                        {tab === 'geometry' && (
+                            <>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Crop</div>
+                                    <button
+                                        className={`lt-btn${cropping ? ' active' : ''}`}
+                                        style={{ width: '100%' }}
+                                        onClick={() => setCropping(v => !v)}
+                                    >
+                                        {cropping ? 'Apply crop' : 'Crop on canvas'}
+                                    </button>
+                                    <div className="lt-row" style={{ marginTop: 8 }}>
+                                        <label>Clear crop</label>
+                                        <button className="lt-btn" onClick={() => updateGeometry({ crop: null })}>Reset</button>
+                                    </div>
+                                </div>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Aspect Ratio</div>
+                                    <div className="lt-crop-grid">
+                                        {ASPECTS.map(a => (
+                                            <button key={a.id} className="lt-btn" onClick={() => applyAspect(a.id)}>{a.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Rotate</div>
+                                    <div className="lt-row">
+                                        <label>Rotation</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="359"
+                                            value={recipe.geometry.rotate || 0}
+                                            onChange={e => updateGeometry({ rotate: Number(e.target.value) || 0 })}
+                                        />
+                                        <span className="lt-crop-info">degrees</span>
+                                    </div>
+                                    <div className="lt-row">
+                                        <label>Rotate by</label>
+                                        <button className="lt-btn" onClick={() => rotate(-90)}>↺ 90°</button>
+                                        <button className="lt-btn" onClick={() => rotate(90)}>↻ 90°</button>
+                                    </div>
+                                </div>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Flip</div>
+                                    <div className="lt-row">
+                                        <label>Flip horizontal</label>
+                                        <button
+                                            className={`lt-switch${recipe.geometry.flipH ? ' on' : ''}`}
+                                            onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
+                                            aria-pressed={recipe.geometry.flipH}
+                                            aria-label="Flip horizontal"
                                         />
                                     </div>
                                     <div className="lt-row">
-                                        <label>Export this LUT</label>
-                                        <button className="lt-btn" onClick={exportLut}>↓ .cube</button>
+                                        <label>Flip vertical</label>
+                                        <button
+                                            className={`lt-switch${recipe.geometry.flipV ? ' on' : ''}`}
+                                            onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
+                                            aria-pressed={recipe.geometry.flipV}
+                                            aria-label="Flip vertical"
+                                        />
                                     </div>
-                                    <div className="lt-row">
-                                        <label>Remove LUT</label>
-                                        <button className="lt-btn danger" onClick={() => updateRecipe({ lut: null })}>Remove</button>
-                                    </div>
-                                </>
-                            )}
-                            <div className="lt-group-head" style={{ marginTop: 14 }}>Recipe</div>
-                            <button className="lt-btn" style={{ width: '100%' }} onClick={exportRecipe}>
-                                Export recipe JSON
-                            </button>
-                            <p className="lt-help">
-                                Recipes are portable. The same file drives the preview, the
-                                export and the live treatment when an image is placed on a spread.
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </aside>
+                                </div>
+                            </>
+                        )}
 
-            {/* ── Status bar ───────────────────────────────────── */}
-            <footer className="lt-status">
-                <span>
-                    <span className={`dot ${rendererMode === 'gpu' ? 'gpu' : rendererMode === 'cpu' ? 'cpu' : 'off'}`} />
-                    {rendererMode === 'gpu' ? 'GPU' : rendererMode === 'cpu' ? 'CPU fallback' : 'initialising'}
-                </span>
-                <span>{gallery.length} image{gallery.length === 1 ? '' : 's'}</span>
-                {selectedAsset && <span>{imgDims}</span>}
-                {recipe.geometry.crop && <span>cropped</span>}
-                {recipe.lut && <span>LUT: {recipe.lut.name}</span>}
-                <span className="spacer" />
-                <span>\ compare · ← → browse · A auto · C crop · R rotate · F flip</span>
-            </footer>
-        </div>
+                        {/* ── LUT ─────────────────────────────────────── */}
+                        {tab === 'lut' && (
+                            <div className="lt-group">
+                                <div className="lt-group-head">Look Up Table</div>
+                                <label className="lt-file-btn">
+                                    {recipe.lut ? recipe.lut.name : 'Import .cube LUT'}
+                                    <input type="file" accept=".cube,text/plain" onChange={importLut} style={{ display: 'none' }} />
+                                </label>
+                                {recipe.lut && (
+                                    <>
+                                        <div style={{ marginTop: 10 }}>
+                                            <LtSlider
+                                                label="Strength"
+                                                value={recipe.lutStrength}
+                                                onChange={v => updateRecipe({ lutStrength: v })}
+                                                spec={{ min: 0, max: 1, step: 0.01, bipolar: false, neutral: 1 }}
+                                            />
+                                        </div>
+                                        <div className="lt-row">
+                                            <label>Export this LUT</label>
+                                            <button className="lt-btn" onClick={exportLut}>↓ .cube</button>
+                                        </div>
+                                        <div className="lt-row">
+                                            <label>Remove LUT</label>
+                                            <button className="lt-btn danger" onClick={() => updateRecipe({ lut: null })}>Remove</button>
+                                        </div>
+                                    </>
+                                )}
+                                <div className="lt-group-head" style={{ marginTop: 14 }}>Recipe</div>
+                                <button className="lt-btn" style={{ width: '100%' }} onClick={exportRecipe}>
+                                    Export recipe JSON
+                                </button>
+                                <p className="lt-help">
+                                    Recipes are portable. The same file drives the preview, the
+                                    export and the live treatment when an image is placed on a spread.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </aside>
+
+                {/* ── Status bar ───────────────────────────────────── */}
+                <footer className="lt-status">
+                    <span>
+                        <span className={`dot ${rendererMode === 'gpu' ? 'gpu' : rendererMode === 'cpu' ? 'cpu' : 'off'}`} />
+                        {rendererMode === 'gpu' ? 'GPU' : rendererMode === 'cpu' ? 'CPU fallback' : 'initialising'}
+                    </span>
+                    <span>{gallery.length} image{gallery.length === 1 ? '' : 's'}</span>
+                    {selectedAsset && <span>{imgDims}</span>}
+                    {recipe.geometry.crop && <span>cropped</span>}
+                    {recipe.lut && <span>LUT: {recipe.lut.name}</span>}
+                    <span className="spacer" />
+                    <span>\ compare · ← → browse · A auto · C crop · R rotate · F flip</span>
+                </footer>
+            </div>
+            {storageOpen && <StorageManager onClose={() => setStorageOpen(false)} />}
+        </>
     )
 }
 

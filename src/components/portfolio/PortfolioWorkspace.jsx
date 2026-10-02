@@ -346,6 +346,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     // click away, so defaulting to Spreads puts the commonest action first.
     const [leftTab, setLeftTab] = useState('spreads')
     const [rightTab, setRightTab] = useState('frame')
+    const [inspectorOpen, setInspectorOpen] = useState(false)
     const [zoom, setZoom] = useState(70)
     const [snapOn, setSnapOn] = useState(project?.portfolioSnapOn ?? true)
     // On by default: a book is trimmed, so knowing where the trim falls is not
@@ -753,6 +754,14 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                 <div className="pf-spreadbar-right">
                     <button
                         type="button"
+                        className="pf-btn pf-inspector-toggle"
+                        aria-expanded={inspectorOpen}
+                        onClick={() => setInspectorOpen(open => !open)}
+                    >
+                        {inspectorOpen ? 'Close inspector' : 'Inspector'}
+                    </button>
+                    <button
+                        type="button"
                         className="pf-btn ghost"
                         onClick={handleSaveLayout}
                         title="Save this arrangement of frames as a reusable layout"
@@ -961,7 +970,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                 </main>
 
                 {/* ── Inspector ──────────────────────────────────────── */}
-                <aside className="pf-right">
+                <aside className={`pf-right${inspectorOpen ? ' open' : ''}`}>
                     <div className="pf-tabs" role="tablist">
                         {[['frame', 'Frame'], ['design', 'Design'], ['layers', 'Layers'], ['settings', 'Settings']].map(([id, label]) => (
                             <button

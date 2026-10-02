@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { filesToAssets, commitAssets, measureAssets } from '../utils/photoImport.js'
+import { putPhoto } from '../lib/photoStore.js'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 import ElementContent from './ElementContent.jsx'
@@ -104,7 +105,7 @@ const MemoPageThumbnail = React.memo(
 )
 
 function Editor() {
-    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes, toast } = useVP()
+    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes, toast, showView } = useVP()
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => {
         const pages = vpState.currentProject?.pages || []
@@ -247,19 +248,38 @@ function Editor() {
         toast(`${settled.length} image${settled.length === 1 ? '' : 's'} stored in the library`, 'success')
     }
 
-    const importAudioFiles = (files) => {
-        Array.from(files || []).forEach(file => {
-            if (!file.type.startsWith('audio/')) return
-            const reader = new FileReader()
-            reader.onload = (event) => addImportedAsset({
-                id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    /**
+     * Import audio through the blob store, like photographs.
+     *
+     * This was storing every sound as a base64 data URL inside the localStorage
+     * library record. Audio is the worst case for that: a five-minute track is
+     * tens of megabytes of base64, which counts against a quota shared with
+     * project data, and re-serialising it on any metadata change is what made
+     * the editor stall. The bytes belong in IndexedDB like everything else.
+     */
+    const importAudioFiles = async (files) => {
+        const list = Array.from(files || []).filter(file => file.type.startsWith('audio/'))
+        if (!list.length) return
+        const stamp = Date.now()
+        // Pair each record with its File up front, so the blob write and the
+        // library row cannot drift apart.
+        const pairs = list.map((file, i) => ({
+            file,
+            asset: {
+                id: `audio-${stamp}-${i}-${Math.random().toString(36).slice(2, 8)}`,
                 name: file.name,
-                src: event.target.result,
+                originalName: file.name,
+                src: URL.createObjectURL(file),
+                bytes: file.size || 0,
                 kind: 'audio',
                 addedAt: new Date().toISOString()
-            })
-            reader.readAsDataURL(file)
-        })
+            }
+        }))
+        // Write the real bytes first, so a storage failure never leaves a record
+        // whose pixels are nowhere.
+        await Promise.all(pairs.map(({ asset, file }) => putPhoto(asset.id, file)))
+        addImportedAssets(pairs.map(p => p.asset))
+        toast(`${pairs.length} sound${pairs.length === 1 ? '' : 's'} added to the library`, 'success')
     }
 
     const handleZoomFit = () => {
@@ -339,7 +359,7 @@ function Editor() {
                             <div className="ed-tool-group">
                                 <span className="ed-tool-group-label">Library</span>
                                 <button className="ed-tool icon-tool" title="Browse image library" onClick={() => showModal('assetModal', 'imported')}><IcoLib /><span>Images</span></button>
-                                <button className="ed-tool icon-tool" title="Open Light Table for developing photos" onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor' })}><IcoLightTable /><span>Light Table</span></button>
+                                <button className="ed-tool icon-tool" title="Open Light Table for developing photos" onClick={() => showView('lighttable')}><IcoLightTable /><span>Light Table</span></button>
                                 <button className="ed-tool icon-tool" title="Browse audio library" onClick={() => showModal('assetModal', 'audio')}><IcoAudio /><span>Audio</span></button>
                                 <button className="ed-tool icon-tool" title="Set project background audio" onClick={() => openAudioPicker('project')}><IcoAudio /><span>Set BGM</span></button>
                             </div>
@@ -404,7 +424,7 @@ function Editor() {
                     <h4>Media library</h4>
                     <p className="ed-pane-hint">Images and audio stay reusable across this workspace.</p>
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'imported')}>Browse image library</button>
-                    <button className="ed-panel-btn" onClick={() => updateVpState({ currentView: 'lighttable', lightTableReturnView: 'editor' })}>✦ Grade images in Light Table</button>
+                    <button className="ed-panel-btn" onClick={() => showView('lighttable')}>✦ Grade images in Light Table</button>
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'audio')}>Browse audio library</button>
                     <div className="media-library-summary"><strong>{vpState.library?.imported?.length || 0}</strong><span>images saved</span><strong>{vpState.library?.audio?.length || 0}</strong><span>audio files saved</span></div>
                     <div className="settings-divider">Page audio</div>

@@ -146,6 +146,52 @@ export const storedPhotoIds = async () => {
 }
 
 /**
+ * Total bytes actually occupied by the blob store, plus a per-asset breakdown.
+ *
+ * The library record deliberately does not carry `src`, so the size of a photo
+ * is not knowable from the metadata — it has to be measured from the bytes. This
+ * is what the storage manager shows, and it is the difference between "12 photos"
+ * and "12 photos, 340 MB, and you have 1.2 GB left".
+ *
+ * @returns {Promise<{total:number, byId:Record<string, number>}>}
+ */
+export const photoStoreUsage = async () => {
+    const byId = {}
+    try {
+        const records = await withStore('readonly', store => req(store.getAll()))
+        for (const record of records || []) {
+            const size = record?.blob?.size || 0
+            byId[record.id] = size
+        }
+    } catch {
+        return { total: 0, byId }
+    }
+    const total = Object.values(byId).reduce((sum, n) => sum + n, 0)
+    return { total, byId }
+}
+
+/**
+ * What the browser will let us keep, and how much is used.
+ *
+ * `usage` is the whole origin (this app plus anything else sharing it) and
+ * `quota` is an estimate that moves with disk pressure, so the percentage is a
+ * guide rather than a promise. Both are null where the API is unavailable —
+ * Firefox historically has no StorageManager, and a caller must handle that
+ * rather than render "NaN% used".
+ */
+export const storageEstimate = async () => {
+    try {
+        if (typeof navigator === 'undefined' || !navigator.storage?.estimate) {
+            return { usage: null, quota: null, supported: false }
+        }
+        const { usage, quota } = await navigator.storage.estimate()
+        return { usage: usage ?? null, quota: quota ?? null, supported: true }
+    } catch {
+        return { usage: null, quota: null, supported: false }
+    }
+}
+
+/**
  * Migrate a legacy `data:` src into the blob store. Returns the id once the
  * bytes are on disk so the caller can drop the base64 from localStorage.
  */

@@ -447,10 +447,10 @@ const VPProvider = ({ children }) => {
         setVpState(prev => {
             const library = { ...prev.library }
             const next = {}
-            ;['imported', 'audio'].forEach(collection => {
-                next[collection] = (library[collection] || []).map(asset =>
-                    asset.id === assetId ? { ...asset, ...updates } : asset)
-            })
+                ;['imported', 'audio'].forEach(collection => {
+                    next[collection] = (library[collection] || []).map(asset =>
+                        asset.id === assetId ? { ...asset, ...updates } : asset)
+                })
             library.imported = next.imported
             library.audio = next.audio
             persistLibrary(library)
@@ -482,6 +482,52 @@ const VPProvider = ({ children }) => {
 
     const getAssetById = (assetId) =>
         (vpState.library?.imported || []).find(asset => asset.id === assetId) || null
+
+    /**
+     * Remove an asset from the library, from whichever collection holds it, and
+     * reclaim its bytes.
+     *
+     * `removeImportedAssets` only ever filtered `imported`, so deleting an audio
+     * file silently did nothing at all — the row vanished from the audio list
+     * on the next render only if something else re-wrote the collection, and the
+     * pixels stayed on disk regardless. One function for every collection is the
+     * only version that can be trusted to actually free space.
+     *
+     * @returns {Promise<boolean>} whether the record was found and removed
+     */
+    const removeLibraryAsset = async (assetId) => {
+        const id = Array.isArray(assetId) ? assetId[0] : assetId
+        if (!id) return false
+        setVpState(prev => {
+            const library = { ...prev.library }
+            let found = false
+            for (const collection of ['imported', 'audio', 'video']) {
+                const list = library[collection]
+                if (!Array.isArray(list)) continue
+                const next = list.filter(a => a?.id !== id)
+                if (next.length !== list.length) {
+                    library[collection] = next
+                    found = true
+                }
+            }
+            if (found) persistLibrary(library)
+            return { ...prev, library }
+        })
+        // Reclaim the pixels, not just the metadata row.
+        await deletePhotos([id])
+        return true
+    }
+
+    /**
+     * Delete several assets at once. Sequential rather than parallel: each one
+     * is a separate IndexedDB transaction and a bulk delete that fires a dozen
+     * at a time is what turns a delete into a dropped connection.
+     */
+    const removeLibraryAssets = async (assetIds) => {
+        const ids = (Array.isArray(assetIds) ? assetIds : [assetIds]).filter(Boolean)
+        for (const id of ids) await removeLibraryAsset(id)
+        return ids.length
+    }
 
     /**
      * Push the provided `project` snapshot into the in-memory history stack.
@@ -1360,7 +1406,8 @@ const VPProvider = ({ children }) => {
         // Light Table would open on a pseudo asset that is not selectable and
         // whose grade could never be re-opened. Adopting it into the library
         // first is what makes "develop, then keep editing" actually work.
-        const asset = assetId ? getAssetById(assetId) : null
+        const asset = (assetId ? getAssetById(assetId) : null)
+            || (src ? (vpState.library?.imported || []).find(item => item.src === src) : null)
         const adopted = asset ? null : (src ? {
             id: assetId || `adopted-${Date.now()}`,
             src,
@@ -1370,10 +1417,11 @@ const VPProvider = ({ children }) => {
         } : null)
         if (adopted) addImportedAssetsWithRoom([adopted])
         const pseudoAsset = asset || adopted
+        const returnView = vpState.currentView
+        showView('lighttable')
         setVpState(prev => ({
             ...prev,
-            currentView: 'lighttable',
-            lightTableReturnView: prev.currentView === 'lighttable' ? 'editor' : prev.currentView,
+            lightTableReturnView: returnView,
             lightTableAsset: pseudoAsset,
             // Remembers page/element so "Apply" can write the recipe back.
             lightTableTarget: target
@@ -1385,13 +1433,14 @@ const VPProvider = ({ children }) => {
      * Position, size, frame styling and every other property are preserved —
      * only the image source and recipe are updated.
      */
-    const applyRecipeToElement = (target, { src, recipe, name } = {}) => {
+    const applyRecipeToElement = (target, { src, recipe, name, assetId } = {}) => {
         if (!target?.elementId) return false
         const element = findElement(target.pageIdx, target.elementId)
         if (!element) return false
         const updates = { lightTableRecipe: recipe || null }
         if (src) updates.src = src
         if (name) updates.assetName = name
+        if (assetId) updates.assetId = assetId
         updateElement(target.pageIdx, target.elementId, updates)
         return true
     }
@@ -2262,6 +2311,8 @@ const VPProvider = ({ children }) => {
         updateImportedAsset,
         toggleAssetFlag,
         removeImportedAssets,
+        removeLibraryAsset,
+        removeLibraryAssets,
         getAssetById,
         openLightTableFor,
         applyRecipeToElement,
