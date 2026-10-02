@@ -787,8 +787,8 @@ export function renderRecipe(source, target, recipe, options = {}) {
         const brightPoint = [0, 0]
         for (let y = 0; y < bh; y++) {
             for (let x = 0; x < bw; x++) {
-            const point = mapGeometry((x + 0.5) / bw, (y + 0.5) / bh, 1, 1, geo, brightPoint)
-            const su = point[0], sv = point[1]
+                const point = mapGeometry((x + 0.5) / bw, (y + 0.5) / bh, 1, 1, geo, brightPoint)
+                const su = point[0], sv = point[1]
                 const o = (y * bw + x) * 4
                 if (su < 0 || su > 1 || sv < 0 || sv > 1) { small[o + 3] = 255; continue }
                 const s = sampleSrc(su, sv, brightSrc)
