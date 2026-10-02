@@ -44,312 +44,315 @@ const withPageCount = layout => ({
     orientation: 'portrait'
 })
 
+const M = 48        // consistent outer margin
+const G = 24        // consistent inner gutter
+const ONE_W = PAGE_W          // 528
+const ONE_H = PAGE_H          // 816
+const TWO_W = PAGE_W * 2 + 24 // 1080
+
 const RAW_PORTFOLIO_LAYOUTS = [
+    // ── Single page ──────────────────────────────────────────────────────
     {
         id: 'pf-full-bleed',
         name: 'Full Bleed',
         category: 'Single',
-        orientation: 'landscape',
         description: 'One photograph edge to edge. Maximum impact.',
-        build: () => [frame(0, 0, PAGE_H, PAGE_W, 'bleed')]
+        build: () => [frame(0, 0, ONE_W, ONE_H, 'bleed')]
+    },
+    {
+        id: 'pf-dark-bleed',
+        name: 'Night Bleed',
+        category: 'Single',
+        description: 'A full-bleed print on deep black — for night work.',
+        build: () => [frame(0, 0, ONE_W, ONE_H, 'black-mat')],
+        background: '#0d0d0d'
     },
     {
         id: 'pf-matted-full',
         name: 'Matted Hero',
         category: 'Single',
-        orientation: 'landscape',
         description: 'A single hero print floating on white paper.',
         build: () => [
-            frame(96, 92, PAGE_H - 192, PAGE_W - 184, 'mat-asymmetric'),
-            caption(PAGE_H / 2 - 160, 740, 320, 'TITLE  ·  01')
+            frame(M + 8, M + 16, ONE_W - M * 2 - 16, 600, 'mat-asymmetric'),
+            caption(M + 8, 700, ONE_W - M * 2 - 16, 'TITLE  ·  01')
         ]
     },
     {
         id: 'pf-diptych',
         name: 'Diptych',
         category: 'Paired',
-        orientation: 'portrait',
-        description: 'Two frames stacked with a generous margin.',
+        description: 'Two frames stacked with even margins.',
         build: () => [
-            frame(56, 56, 260, 330, 'mat'),
-            frame(56, 430, 260, 330, 'mat')
-        ]
-    },
-    {
-        id: 'pf-pair-offset',
-        name: 'Offset Pair',
-        category: 'Paired',
-        orientation: 'landscape',
-        description: 'Two prints on a shared baseline, deliberately unbalanced.',
-        build: () => [
-            frame(72, 150, 300, 380, 'mat'),
-            frame(452, 260, 240, 306, 'mat'),
-            hairline(72, 594, 620)
-        ]
-    },
-    {
-        id: 'pf-triptych',
-        name: 'Triptych',
-        category: 'Series',
-        orientation: 'landscape',
-        description: 'Three frames in a row, tight gutters.',
-        build: () => [
-            frame(60, 180, 202, 270, 'hairline'),
-            frame(288, 180, 202, 270, 'hairline'),
-            frame(516, 180, 202, 270, 'hairline'),
-            caption(60, 476, 658, 'I  ·  II  ·  III')
-        ]
-    },
-    {
-        id: 'pf-four-grid',
-        name: 'Quad Grid',
-        category: 'Series',
-        orientation: 'landscape',
-        description: 'A calm 2×2 contact-sheet arrangement.',
-        build: () => [
-            frame(60, 110, 296, 224, 'hairline'),
-            frame(412, 110, 296, 224, 'hairline'),
-            frame(60, 358, 296, 224, 'hairline'),
-            frame(412, 358, 296, 224, 'hairline')
-        ]
-    },
-    {
-        id: 'pf-six-contact',
-        name: 'Contact Sheet',
-        category: 'Series',
-        orientation: 'landscape',
-        description: 'Six small frames — a sequence at a glance.',
-        build: () => [
-            frame(60, 130, 200, 150, 'hairline'),
-            frame(288, 130, 200, 150, 'hairline'),
-            frame(516, 130, 200, 150, 'hairline'),
-            frame(60, 300, 200, 150, 'hairline'),
-            frame(288, 300, 200, 150, 'hairline'),
-            frame(516, 300, 200, 150, 'hairline'),
-            text('CONTACT SHEET', 60, 490, 656, 24, { fontSize: 11, letterSpacing: 5, color: '#8a8578', fontFamily: 'DM Sans' })
-        ]
-    },
-    {
-        id: 'pf-mosaic',
-        name: 'Editorial Mosaic',
-        category: 'Grid',
-        orientation: 'landscape',
-        description: 'One dominant image with a supporting stack.',
-        build: () => [
-            frame(56, 96, 400, 500, 'mat'),
-            frame(496, 96, 216, 236, 'hairline'),
-            frame(496, 360, 216, 236, 'hairline')
-        ]
-    },
-    {
-        id: 'pf-staircase',
-        name: 'Staircase',
-        category: 'Grid',
-        orientation: 'portrait',
-        description: 'A descending rhythm of equal frames.',
-        build: () => [
-            frame(96, 60, 190, 240, 'mat'),
-            frame(126, 300, 190, 240, 'mat'),
-            frame(156, 540, 190, 240, 'mat')
-        ]
-    },
-    {
-        id: 'pf-hero-caption',
-        name: 'Hero + Caption',
-        category: 'Editorial',
-        orientation: 'landscape',
-        description: 'Photograph above, generous caption block below.',
-        build: () => [
-            frame(120, 60, 520, 400, 'mat'),
-            hairline(120, 500, 520),
-            text('Untitled Series', 120, 524, 520, 44, { fontSize: 30, color: '#141414', fontFamily: 'Playfair Display' }),
-            text('A short description of the series goes here, set in a quiet serif at a comfortable measure.', 120, 574, 430, 70, { fontSize: 13, color: '#6f6a60', fontFamily: 'Source Serif 4', lineHeight: 1.5 })
-        ]
-    },
-    {
-        id: 'pf-quote-spread',
-        name: 'Statement',
-        category: 'Editorial',
-        orientation: 'landscape',
-        description: 'A single frame with a large pull quote.',
-        build: () => [
-            frame(56, 96, 268, 340, 'mat'),
-            text('Light does the editing for you.', 372, 190, 340, 160, { fontSize: 30, color: '#141414', fontFamily: 'Playfair Display', lineHeight: 1.25, italic: true }),
-            hairline(372, 372, 60, '#b7b0a2')
+            frame(M, M, ONE_W - M * 2, 344, 'mat'),
+            frame(M, M + 344 + G, ONE_W - M * 2, 344, 'mat')
         ]
     },
     {
         id: 'pf-vertical-pair',
         name: 'Vertical Pair',
         category: 'Paired',
-        orientation: 'portrait',
         description: 'Two tall frames side by side, suited to portrait work.',
         build: () => [
-            frame(48, 48, 202, 480, 'mat'),
-            frame(278, 48, 202, 480, 'mat')
+            frame(M, M, (ONE_W - M * 2 - G) / 2, ONE_H - M * 2, 'mat'),
+            frame(M + (ONE_W - M * 2 - G) / 2 + G, M, (ONE_W - M * 2 - G) / 2, ONE_H - M * 2, 'mat')
         ]
     },
     {
         id: 'pf-solo-portrait',
         name: 'Solo Portrait',
         category: 'Single',
-        orientation: 'portrait',
         description: 'One tall frame with a caption rail.',
         build: () => [
-            frame(112, 40, 304, 600, 'mat-asymmetric'),
-            caption(112, 668, 304, 'PORTRAIT  ·  2024')
+            frame(112, M, 304, ONE_H - M * 2 - 96, 'mat-asymmetric'),
+            caption(112, ONE_H - M - 40, 304, 'PORTRAIT  ·  2024')
         ]
-    },
-    {
-        id: 'pf-title-page',
-        name: 'Title Page',
-        category: 'Editorial',
-        orientation: 'portrait',
-        description: 'Minimal cover: title, byline, hairline.',
-        build: () => [
-            text('YOUR NAME', 56, 250, 416, 60, { fontSize: 40, color: '#141414', fontFamily: 'Playfair Display', letterSpacing: 2 }),
-            hairline(216, 330, 96, '#b7b0a2'),
-            text('Selected Works  ·  2019 — 2025', 56, 356, 416, 30, { fontSize: 11, color: '#8a8578', fontFamily: 'DM Sans', letterSpacing: 3, align: 'center' }),
-            text('Contact & commissions', 56, 720, 416, 24, { fontSize: 10, color: '#a39d92', fontFamily: 'DM Sans', align: 'center', letterSpacing: 2 })
-        ]
-    },
-    {
-        id: 'pf-colophon',
-        name: 'Colophon',
-        category: 'Editorial',
-        orientation: 'portrait',
-        description: 'Credits, editions and contact for the back of the book.',
-        build: () => [
-            text('COLOPHON', 56, 90, 416, 34, { fontSize: 22, color: '#141414', fontFamily: 'Playfair Display', letterSpacing: 4 }),
-            hairline(56, 134, 416, '#d8d3c8'),
-            text('Photography\n\nYour Name\n\nPrinted in an edition of 25.\n\nAll images remain the property of the photographer.\n\nhello@example.com', 56, 168, 416, 320, { fontSize: 13, color: '#4a453d', fontFamily: 'Source Serif 4', lineHeight: 1.6 })
-        ]
-    },
-    {
-        id: 'pf-blank-spread',
-        name: 'Blank Spread',
-        category: 'Single',
-        orientation: 'landscape',
-        description: 'An empty page — drop a single frame anywhere you like.',
-        build: () => [frame(200, 200, 368, 276, 'mat')]
-    },
-    {
-        id: 'pf-honours-fifteen',
-        name: 'Fifteen',
-        category: 'Grid',
-        orientation: 'landscape',
-        description: 'Fifteen small frames, five across — a sequence at a glance.',
-        build: () => {
-            const items = []
-            const w = 106; const h = 88; const x0 = 44; const y0 = 168
-            for (let row = 0; row < 3; row += 1) {
-                for (let col = 0; col < 5; col += 1) {
-                    items.push(frame(x0 + col * (w + 12), y0 + row * (h + 12), w, h, 'hairline'))
-                }
-            }
-            items.push(text('FIFTEEN', x0, 96, 300, 24, { fontSize: 11, letterSpacing: 6, color: '#8a8578', fontFamily: 'DM Sans' }))
-            return items
-        }
-    },
-    {
-        id: 'pf-mirror-duo',
-        name: 'Mirror',
-        category: 'Paired',
-        orientation: 'landscape',
-        description: 'Two prints of equal size meeting at a centre rule.',
-        build: () => [
-            frame(56, 96, 200, 268, 'mat'),
-            frame(512, 96, 200, 268, 'mat'),
-            hairline(430, 96, 1, '#c9c3b6'),
-            caption(56, 392, 200, '01'),
-            caption(512, 392, 200, '02')
-        ]
-    },
-    {
-        id: 'pf-dark-bleed',
-        name: 'Night Bleed',
-        category: 'Single',
-        orientation: 'landscape',
-        description: 'A full-bleed print on deep black — for night work.',
-        build: () => [frame(0, 0, PAGE_H, PAGE_W, 'black-mat')],
-        background: '#0d0d0d'
     },
     {
         id: 'pf-portfolio-quad',
         name: 'Quad Study',
         category: 'Grid',
-        orientation: 'portrait',
         description: 'Four equal frames on a tight, even grid.',
-        build: () => [
-            frame(56, 56, 196, 300, 'hairline'),
-            frame(276, 56, 196, 300, 'hairline'),
-            frame(56, 396, 196, 300, 'hairline'),
-            frame(276, 396, 196, 300, 'hairline'),
-            caption(56, 736, 416, 'STUDY  ·  FOUR VIEWS')
-        ]
+        build: () => {
+            const w = (ONE_W - M * 2 - G) / 2
+            const h = (ONE_H - M * 2 - G - 32) / 2
+            return [
+                frame(M, M, w, h, 'hairline'),
+                frame(M + w + G, M, w, h, 'hairline'),
+                frame(M, M + h + G, w, h, 'hairline'),
+                frame(M + w + G, M + h + G, w, h, 'hairline'),
+                caption(M, ONE_H - M - 24, ONE_W - M * 2, 'STUDY  ·  FOUR VIEWS')
+            ]
+        }
     },
     {
-        id: 'pf-overview-band',
-        name: 'Overview Band',
-        category: 'Series',
-        orientation: 'landscape',
-        description: 'A hero print above a strip of supporting detail shots.',
+        id: 'pf-hero-caption',
+        name: 'Hero + Caption',
+        category: 'Editorial',
+        description: 'Photograph above, generous caption block below.',
         build: () => [
-            frame(56, 72, 624, 300, 'mat'),
-            frame(56, 404, 196, 148, 'hairline'),
-            frame(272, 404, 196, 148, 'hairline'),
-            frame(488, 404, 192, 148, 'hairline')
+            frame(M, M, ONE_W - M * 2, 520, 'mat'),
+            hairline(M, 616, ONE_W - M * 2),
+            text('Untitled Series', M, 640, ONE_W - M * 2, 44, { fontSize: 30, color: '#141414', fontFamily: 'Playfair Display' }),
+            text('A short description of the series goes here, set in a quiet serif at a comfortable measure.', M, 692, ONE_W - M * 2 - 90, 70, { fontSize: 13, color: '#6f6a60', fontFamily: 'Source Serif 4', lineHeight: 1.5 })
         ]
     },
     {
         id: 'pf-plinth',
         name: 'Plinth',
         category: 'Single',
-        orientation: 'landscape',
         description: 'A floating print, high and alone, with air beneath it.',
         build: () => [
-            frame(200, 64, 368, 276, 'float-shadow'),
-            caption(200, 380, 368, 'UNTITLED  ·  2025')
+            frame(80, 96, ONE_W - 160, 420, 'float-shadow'),
+            caption(80, 548, ONE_W - 160, 'UNTITLED  ·  2025')
         ]
     },
     {
-        id: 'pf-pair-stack-wide',
-        name: 'Wide Stack',
-        category: 'Paired',
-        orientation: 'landscape',
-        description: 'Two wide prints stacked with a deliberate overlap.',
+        id: 'pf-title-page',
+        name: 'Title Page',
+        category: 'Editorial',
+        description: 'Minimal cover: title, byline, hairline.',
         build: () => [
-            frame(120, 96, 480, 216, 'mat'),
-            frame(248, 330, 480, 216, 'mat')
+            text('YOUR NAME', M, 250, ONE_W - M * 2, 60, { fontSize: 40, color: '#141414', fontFamily: 'Playfair Display', letterSpacing: 2 }),
+            hairline(216, 330, 96, '#b7b0a2'),
+            text('Selected Works  ·  2019 — 2025', M, 356, ONE_W - M * 2, 30, { fontSize: 11, color: '#8a8578', fontFamily: 'DM Sans', letterSpacing: 3, align: 'center' }),
+            text('Contact & commissions', M, 720, ONE_W - M * 2, 24, { fontSize: 10, color: '#a39d92', fontFamily: 'DM Sans', align: 'center', letterSpacing: 2 })
         ]
     },
     {
-        id: 'pf-sequence-strip',
+        id: 'pf-colophon',
+        name: 'Colophon',
+        category: 'Editorial',
+        description: 'Credits, editions and contact for the back of the book.',
+        build: () => [
+            text('COLOPHON', M, 90, ONE_W - M * 2, 34, { fontSize: 22, color: '#141414', fontFamily: 'Playfair Display', letterSpacing: 4 }),
+            hairline(M, 134, ONE_W - M * 2, '#d8d3c8'),
+            text('Photography\n\nYour Name\n\nPrinted in an edition of 25.\n\nAll images remain the property of the photographer.\n\nhello@example.com', M, 168, ONE_W - M * 2, 320, { fontSize: 13, color: '#4a453d', fontFamily: 'Source Serif 4', lineHeight: 1.6 })
+        ]
+    },
+    {
+        id: 'pf-blank-spread',
+        name: 'Blank Page',
+        category: 'Single',
+        description: 'An empty page — drop a single frame anywhere you like.',
+        build: () => [frame(80, 220, ONE_W - 160, 360, 'mat')]
+    },
+
+    // ── Two-page spreads ─────────────────────────────────────────────────
+    {
+        id: 'pf-spread-bleed',
+        name: 'Spread Bleed',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'One photograph flowing across both pages.',
+        build: () => [
+            frame(0, 0, ONE_W, ONE_H, 'bleed'),
+            frame(ONE_W + 24, 0, ONE_W, ONE_H, 'bleed')
+        ]
+    },
+    {
+        id: 'pf-spread-diptych',
+        name: 'Spread Diptych',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'A tall print on each page, balanced across the gutter.',
+        build: () => [
+            frame(M, M, ONE_W - M * 2, ONE_H - M * 2, 'mat'),
+            frame(ONE_W + 24 + M, M, ONE_W - M * 2, ONE_H - M * 2, 'mat')
+        ]
+    },
+    {
+        id: 'pf-spread-hero',
+        name: 'Spread Hero',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'Full-height photo on the left, title on the right.',
+        build: () => [
+            frame(M, M, ONE_W - M * 2, ONE_H - M * 2, 'mat'),
+            text('Series Title', ONE_W + 24 + M, 340, ONE_W - M * 2, 50, { fontSize: 34, color: '#141414', fontFamily: 'Playfair Display' }),
+            hairline(ONE_W + 24 + M, 410, 96, '#b7b0a2'),
+            text('A note on the series, the place, or the making of these photographs.', ONE_W + 24 + M, 436, ONE_W - M * 2 - 60, 80, { fontSize: 13, color: '#6f6a60', fontFamily: 'Source Serif 4', lineHeight: 1.5 })
+        ]
+    },
+    {
+        id: 'pf-spread-triptych',
+        name: 'Spread Triptych',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'One tall print against a pair — the panel split that reads well across a gutter.',
+        build: () => [
+            frame(M, M, ONE_W - M * 2, ONE_H - M * 2, 'hairline'),
+            frame(ONE_W + 24 + M, M, ONE_W - M * 2, (ONE_H - M * 2 - G) / 2, 'hairline'),
+            frame(ONE_W + 24 + M, M + (ONE_H - M * 2 - G) / 2 + G, ONE_W - M * 2, (ONE_H - M * 2 - G) / 2, 'hairline'),
+            caption(M, ONE_H - M - 24, ONE_W - M * 2, 'I  ·  II  ·  III')
+        ]
+    },
+    {
+        id: 'pf-spread-quad',
+        name: 'Spread Quad',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'Four equal frames, two per page.',
+        build: () => {
+            const w = (TWO_W - M * 2 - G) / 2
+            const h = (ONE_H - M * 2 - G) / 2
+            return [
+                frame(M, M, w, h, 'hairline'),
+                frame(M + w + G, M, w, h, 'hairline'),
+                frame(M, M + h + G, w, h, 'hairline'),
+                frame(M + w + G, M + h + G, w, h, 'hairline')
+            ]
+        }
+    },
+    {
+        id: 'pf-spread-sequence',
         name: 'Sequence Strip',
         category: 'Series',
-        orientation: 'landscape',
-        description: 'Four frames in a row for a narrative run of images.',
+        pageCount: 2,
+        description: 'Four frames in a row for a narrative run.',
+        build: () => {
+            const w = (TWO_W - M * 2 - G * 3) / 4
+            return [
+                frame(M, 240, w, 336, 'hairline'),
+                frame(M + w + G, 240, w, 336, 'hairline'),
+                frame(M + w * 2 + G * 2, 240, w, 336, 'hairline'),
+                frame(M + w * 3 + G * 3, 240, w, 336, 'hairline'),
+                text('SEQUENCE', M, 600, 400, 28, { fontSize: 12, letterSpacing: 8, color: '#8a8578', fontFamily: 'DM Sans' })
+            ]
+        }
+    },
+    {
+        id: 'pf-spread-band',
+        name: 'Overview Band',
+        category: 'Series',
+        pageCount: 2,
+        description: 'A hero print on one page, a strip of detail shots opposite.',
+        build: () => {
+            const w = (ONE_W - M * 2 - G) / 2
+            const y = ONE_H - M - 276
+            return [
+                frame(ONE_W + 24 + M, M, ONE_W - M * 2, 720, 'mat'),
+                text('DETAILS', M, M + 8, 300, 24, { fontSize: 11, letterSpacing: 6, color: '#8a8578', fontFamily: 'DM Sans' }),
+                frame(M, y, w, 276, 'hairline'),
+                frame(M + w + G, y, w, 276, 'hairline')
+            ]
+        }
+    },
+    {
+        id: 'pf-spread-statement',
+        name: 'Statement',
+        category: 'Editorial',
+        pageCount: 2,
+        description: 'A single frame with a large pull quote opposite.',
         build: () => [
-            frame(48, 208, 144, 108, 'hairline'),
-            frame(216, 208, 144, 108, 'hairline'),
-            frame(384, 208, 144, 108, 'hairline'),
-            frame(552, 208, 144, 108, 'hairline'),
-            text('SEQUENCE', 48, 132, 648, 28, { fontSize: 12, letterSpacing: 8, color: '#8a8578', fontFamily: 'DM Sans' })
+            frame(M, M, ONE_W - M * 2, ONE_H - M * 2, 'mat'),
+            text('Light does the editing for you.', ONE_W + 24 + M, 300, ONE_W - M * 2 - 40, 180, { fontSize: 32, color: '#141414', fontFamily: 'Playfair Display', lineHeight: 1.25, italic: true }),
+            hairline(ONE_W + 24 + M, 510, 96, '#b7b0a2')
         ]
     },
     {
-        id: 'pf-contrast-spread',
+        id: 'pf-spread-mosaic',
+        name: 'Spread Mosaic',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'One dominant image with a supporting stack.',
+        build: () => {
+            const sideX = ONE_W + 24 + M
+            const sideW = ONE_W - M * 2
+            const h = (ONE_H - M * 2 - G) / 2
+            return [
+                frame(M, M, sideW, ONE_H - M * 2, 'mat'),
+                frame(sideX, M, sideW, h, 'hairline'),
+                frame(sideX, M + h + G, sideW, h, 'hairline')
+            ]
+        }
+    },
+    {
+        id: 'pf-spread-contrast',
         name: 'Contrast',
         category: 'Editorial',
-        orientation: 'landscape',
+        pageCount: 2,
         description: 'A small print against a large one — scale as emphasis.',
         build: () => [
-            frame(56, 120, 340, 432, 'mat'),
-            frame(456, 240, 216, 272, 'black-mat'),
-            caption(56, 580, 340, 'PLATE I')
+            frame(M, 96, ONE_W - M * 2, ONE_H - 192, 'mat'),
+            frame(ONE_W + 24 + M, 264, ONE_W - M * 2, 288, 'black-mat'),
+            caption(M, 756, ONE_W - M * 2, 'PLATE I')
         ]
+    },
+    {
+        id: 'pf-spread-mirror',
+        name: 'Mirror',
+        category: 'Spread',
+        pageCount: 2,
+        description: 'Two prints of equal size meeting at a centre rule.',
+        build: () => [
+            frame(M, 96, ONE_W - M * 2, 624, 'mat'),
+            frame(ONE_W + 24 + M, 96, ONE_W - M * 2, 624, 'mat'),
+            caption(M, 748, ONE_W - M * 2, '01'),
+            caption(ONE_W + 24 + M, 748, ONE_W - M * 2, '02')
+        ]
+    },
+    {
+        id: 'pf-contact-sheet',
+        name: 'Contact Sheet',
+        category: 'Series',
+        pageCount: 2,
+        description: 'Six frames, three rows across both pages — a sequence at a glance.',
+        build: () => {
+            const w = (ONE_W - M * 2 - G) / 2
+            const h = (ONE_H - M * 2 - G * 2) / 3
+            const items = []
+            for (let row = 0; row < 3; row += 1) {
+                for (let col = 0; col < 2; col += 1) {
+                    items.push(frame(M + col * (w + G), M + row * (h + G), w, h, 'hairline'))
+                    items.push(frame(ONE_W + 24 + M + col * (w + G), M + row * (h + G), w, h, 'hairline'))
+                }
+            }
+            items.push(text('CONTACT SHEET', M, M - 24, 400, 24, { fontSize: 11, letterSpacing: 5, color: '#8a8578', fontFamily: 'DM Sans' }))
+            return items
+        }
     }
 ]
+
 
 const buildTextElement = (descriptor, index) => ({
     id: uid('el'),

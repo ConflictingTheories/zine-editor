@@ -22,8 +22,8 @@ import { useVP } from '../../context/VPContext.jsx'
  * still drawn to a digest rectangle, so the arrangement the user approved was
  * not the arrangement they got. Preview and reality are now the same call.
  */
-const PREVIEW_H = 124
-const PREVIEW_MAX_W = 220
+const PREVIEW_H = 96
+const PREVIEW_MAX_W = 140
 const PREVIEW_PAD = 8
 
 const LayoutPreview = ({ layout, paperSize, assets = [] }) => {

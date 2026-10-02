@@ -7,10 +7,10 @@ const shape = (shapeName, x, y, width, height, fill, props = {}) => ({ type: 'sh
 const panel = (x, y, width, height, props = {}) => ({ type: 'panel', x, y, width, height, fill: 'transparent', ...props })
 
 const themeTokens = theme => ({
-    bg: theme === 'editorial' ? '#f7f8fb' : theme === 'cyberpunk' ? '#050505' : theme === 'comics' ? '#ffffff' : '#fdfaf1',
-    ink: theme === 'editorial' ? '#1c2430' : theme === 'cyberpunk' ? '#f0f0f0' : '#1a1a1a',
-    accent: theme === 'cyberpunk' ? '#00f3ff' : theme === 'comics' ? '#ff0000' : theme === 'fantasy' ? '#ffd700' : '#8b0000',
-    muted: theme === 'editorial' ? '#5c667a' : '#7f8c8d'
+    bg: theme === 'editorial' ? '#f7f8fb' : theme === 'cyberpunk' ? '#06070a' : theme === 'comics' ? '#ffffff' : theme === 'fantasy' ? '#f4ead8' : theme === 'arcane' ? '#f5effa' : theme === 'conspiracy' ? '#e8e4d9' : theme === 'worldbuilding' ? '#eef1f2' : '#fdfaf3',
+    ink: theme === 'editorial' ? '#1c2430' : theme === 'cyberpunk' ? '#e8ecf1' : theme === 'arcane' ? '#241335' : theme === 'worldbuilding' ? '#22323f' : '#1c1a17',
+    accent: theme === 'cyberpunk' ? '#00d8e6' : theme === 'comics' ? '#d91e18' : theme === 'fantasy' ? '#b8912f' : theme === 'worldbuilding' ? '#1f6f6b' : theme === 'arcane' ? '#6d28a8' : theme === 'conspiracy' ? '#6b1f1f' : '#8b2f2f',
+    muted: theme === 'editorial' ? '#5c667a' : theme === 'cyberpunk' ? '#8a93a3' : theme === 'arcane' ? '#6b5a7a' : '#6f6a60'
 })
 
 const makePage = (id, background, elements, extra = {}) => ({ id, elements, background, texture: null, ...extra })

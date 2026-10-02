@@ -28,7 +28,8 @@ import { LtRenderer } from './ltRenderer.js'
 import StorageManager from '../StorageManager.jsx'
 import { filesToAssets, commitAssets, measureAssets } from '../../utils/photoImport.js'
 import { PHOTO_ACCEPT } from '../../lib/rawPhoto.js'
-import { isRawAsset, developRawAsset, DEFAULT_DEVELOP } from '../../lib/rawDevelop.js'
+import { isRawAsset, developRawAsset, developRawAsset16, DEFAULT_DEVELOP, wbMultipliersFromPatch } from '../../lib/rawDevelop.js'
+import { buildTiff16 } from '../../lib/tiff16.js'
 
 /** A storage/box glyph for the library manager button. */
 const StorageIcon = () => (
@@ -169,12 +170,8 @@ function LightTable() {
     const [rawDraft, setRawDraft] = useState(DEFAULT_DEVELOP)
     const [appliedRaw, setAppliedRaw] = useState(DEFAULT_DEVELOP)
     const [rawDecode, setRawDecode] = useState('idle') // idle|decoding|ready|fallback
-
-    useEffect(() => {
-        setRawDraft(DEFAULT_DEVELOP)
-        setAppliedRaw(DEFAULT_DEVELOP)
-        setRawDecode('idle')
-    }, [selectedId])
+    const [pickingWb, setPickingWb] = useState(false)
+    const [tiffBusy, setTiffBusy] = useState(false)
 
     const canvasRef = useRef(null)
     const rendererRef = useRef(null)
@@ -187,6 +184,17 @@ function LightTable() {
         () => gallery.find(a => a.id === selectedId) || vpState.lightTableAsset || null,
         [gallery, selectedId, vpState.lightTableAsset]
     )
+
+    // New photo: restore its persisted develop settings, otherwise defaults.
+    useEffect(() => {
+        const persisted = isRawAsset(selectedAsset) && selectedAsset?.develop
+            ? { ...DEFAULT_DEVELOP, ...selectedAsset.develop }
+            : DEFAULT_DEVELOP
+        setRawDraft(persisted)
+        setAppliedRaw(persisted)
+        setRawDecode('idle')
+        setPickingWb(false)
+    }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // The active recipe is the draft for the selected image, restored from
     // any recipe already saved onto the asset.
@@ -460,6 +468,35 @@ function LightTable() {
         setActivePreset('none')
         toast('Recipe reset', 'info')
     }, [updateRecipe, toast])
+
+    // ── Custom WB sampling ───────────────────────────────────────────────
+    // Click a neutral area in the preview: render the current grade offscreen,
+    // average the clicked patch, and derive LibRaw WB multipliers. That keeps
+    // the mapping click→pixels unambiguous even though the stage canvas may
+    // be WebGL-backed.
+    const handlePickWb = (event) => {
+        if (!pickingWb || !canvasRef.current || !imageRef.current) return
+        const rect = canvasRef.current.getBoundingClientRect()
+        const fx = (event.clientX - rect.left) / rect.width
+        const fy = (event.clientY - rect.top) / rect.height
+        const out = document.createElement('canvas')
+        renderRecipe(imageRef.current, out, recipeRef.current, { maxWidth: 1200, maxHeight: 1200 })
+        const ctx = out.getContext('2d', { willReadFrequently: true })
+        if (!ctx) return
+        const sx = Math.min(Math.max(0, Math.round(fx * out.width) - 4), out.width - 8)
+        const sy = Math.min(Math.max(0, Math.round(fy * out.height) - 4), out.height - 8)
+        const patch = ctx.getImageData(sx, sy, 8, 8)
+        let r = 0, g = 0, b = 0
+        for (let i = 0; i < patch.data.length; i += 4) { r += patch.data[i]; g += patch.data[i + 1]; b += patch.data[i + 2] }
+        const n = patch.data.length / 4
+        const userMul = wbMultipliersFromPatch(r / n, g / n, b / n)
+        const next = { ...rawDraft, userMul }
+        setRawDraft(next)
+        setAppliedRaw(next)
+        if (selectedAsset?.id) updateImportedAsset(selectedAsset.id, { develop: next })
+        setPickingWb(false)
+        toast('White balance set from picked point', 'success')
+    }
 
     // ── Output ───────────────────────────────────────────────────────────
     /**
@@ -893,7 +930,7 @@ function LightTable() {
                                 }}
                             >
                                 <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: 'transform .12s ease' }}>
-                                    <canvas ref={canvasRef} />
+                                    <canvas ref={canvasRef} onClick={handlePickWb} style={pickingWb ? { cursor: 'crosshair' } : undefined} />
                                 </div>
                                 {cropping && (
                                     <LtCropOverlay
@@ -991,11 +1028,64 @@ function LightTable() {
                                         <button
                                             className="lt-btn"
                                             disabled={rawDecode === 'decoding'}
-                                            onClick={() => setAppliedRaw({ ...rawDraft })}
+                                            onClick={() => {
+                                                const next = { ...rawDraft }
+                                                setAppliedRaw(next)
+                                                if (selectedAsset?.id) updateImportedAsset(selectedAsset.id, { develop: next })
+                                            }}
                                         >
                                             {rawDecode === 'decoding' ? 'Developing…' : 'Develop raw'}
                                         </button>
-                                        {rawDecode === 'ready' && <p className="lt-help">Developed from raw sensor data via LibRaw.</p>}
+                                        <button
+                                            className={`lt-btn${pickingWb ? ' active' : ''}`}
+                                            onClick={() => setPickingWb(v => !v)}
+                                            title="Click a neutral grey in the preview to set white balance"
+                                        >
+                                            {pickingWb ? 'Click a neutral area…' : 'Pick neutral point'}
+                                        </button>
+                                        {rawDraft.userMul && (
+                                            <button
+                                                className="lt-btn"
+                                                onClick={() => setRawDraft(d => ({ ...d, userMul: null }))}
+                                            >
+                                                Reset custom WB
+                                            </button>
+                                        )}
+                                        <button
+                                            className="lt-btn"
+                                            disabled={tiffBusy}
+                                            title="Full-resolution develop with the Light Table grade and geometry crop baked in as 16-bit TIFF for print."
+                                            onClick={async () => {
+                                                if (!selectedAsset || tiffBusy) return
+                                                setTiffBusy(true)
+                                                try {
+                                                    const rawFrame = await developRawAsset16(selectedAsset, appliedRaw, recipeRef.current.geometry?.crop || null)
+                                                    if (!rawFrame) { toast('16-bit develop failed — no frame to export', 'error'); return }
+                                                    const frame = await new Promise((resolve, reject) => {
+                                                        const worker = new Worker(new URL('../../lib/gradeWorker.js', import.meta.url), { type: 'module' })
+                                                        worker.onmessage = ({ data }) => {
+                                                            worker.terminate()
+                                                            data?.error ? reject(new Error(data.error)) : resolve(data.frame)
+                                                        }
+                                                        worker.onerror = (err) => { worker.terminate(); reject(new Error(err.message)) }
+                                                        worker.postMessage({ id: 0, frame: rawFrame, recipe: recipeRef.current }, [rawFrame.data.buffer])
+                                                    })
+                                                    const tiff = buildTiff16(frame.width, frame.height, frame.data)
+                                                    const link = document.createElement('a')
+                                                    link.href = URL.createObjectURL(tiff)
+                                                    link.download = `${(selectedAsset.name || 'image').replace(/\.[^.]+$/, '')}-developed-16bit.tiff`
+                                                    link.click()
+                                                    setTimeout(() => URL.revokeObjectURL(link.href), 5000)
+                                                    toast('Graded 16-bit TIFF exported for print', 'success')
+                                                } finally {
+                                                    setTiffBusy(false)
+                                                }
+                                            }}
+                                        >
+                                            {tiffBusy ? 'Developing 16-bit…' : 'Export 16-bit TIFF (print)'}
+                                        </button>
+                                        {rawDecode === 'ready' && <p className="lt-help">Developed from raw sensor data via LibRaw.{rawDraft.userMul ? ' Custom WB active.' : ''}</p>}
+                                        {rawDecode === 'fallback' && <p className="lt-help">Raw bytes not available for this photo — showing the embedded preview.</p>}
                                         {rawDecode === 'fallback' && <p className="lt-help">Raw bytes not available for this photo — showing the embedded preview.</p>}
                                     </div>
                                 )}

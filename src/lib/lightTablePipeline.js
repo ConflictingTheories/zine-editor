@@ -67,6 +67,23 @@ const curveValue = (value, points = []) => {
     return sorted[sorted.length - 1][1]
 }
 
+/**
+ * The reference per-pixel grade, in 0..1 RGB. Both the 8-bit CPU renderer
+ * and the 16-bit print path run this on every pixel so the TIFF matches the
+ * staged grade exactly.
+ */
+export function gradePixel(rgb, x, y, recipe, params = recipe?.params || {}) {
+    const exposure = Math.pow(2, Number(params.exposure || 0)), contrast = Number(params.contrast ?? 1), saturation = Number(params.saturation ?? 1), lum = luma(...rgb)
+    rgb = rgb.map(v => ((v * exposure - .5) * contrast + .5)); rgb = rgb.map(v => lum + (v - lum) * saturation)
+    const curves = recipe?.curves
+    rgb = rgb.map((v, c) => curveValue(clamp(curves?.[c === 0 ? 'r' : c === 1 ? 'g' : c === 2 ? 'b' : 'rgb'] || curves), curves?.rgb || curves))
+    const luts = recipe?.luts || (recipe?.lut ? [recipe.lut] : [])
+    luts.forEach(entry => { const lutRgb = applyLut(rgb, entry); const strength = Number(entry.strength ?? 1); rgb = rgb.map((v, c) => v + (lutRgb[c] - v) * strength) })
+    const layers = recipe?.effects || []
+    layers.filter(layer => layer.enabled !== false).slice(0, 8).forEach(layer => { const weight = channelWeight(layer.channel || 'all', ...rgb) * maskWeight(luma(...rgb), layer.mask); const next = effect(rgb, layer.id || layer.typeId, Number(layer.strength ?? 1), x, y, layer.params || {}); rgb = rgb.map((v, c) => v + (next[c] - v) * weight) })
+    return rgb
+}
+
 export function renderLightTable(source, target, recipe) {
     if (!source?.naturalWidth || !target) return
     const scale = Math.min(1, 1400 / source.naturalWidth, 900 / source.naturalHeight)
@@ -77,16 +94,27 @@ export function renderLightTable(source, target, recipe) {
     const pixels = ctx.getImageData(0, 0, target.width, target.height), data = pixels.data, params = recipe?.params || {}
     for (let i = 0; i < data.length; i += 4) {
         const x = (i / 4 % target.width) / target.width, y = Math.floor(i / 4 / target.width) / target.height
-        let rgb = [data[i] / 255, data[i + 1] / 255, data[i + 2] / 255]
-        const exposure = Math.pow(2, Number(params.exposure || 0)), contrast = Number(params.contrast ?? 1), saturation = Number(params.saturation ?? 1), lum = luma(...rgb)
-        rgb = rgb.map(v => ((v * exposure - .5) * contrast + .5)); rgb = rgb.map(v => lum + (v - lum) * saturation)
-        const curves = recipe?.curves
-        rgb = rgb.map((v, c) => curveValue(clamp(curves?.[c === 0 ? 'r' : c === 1 ? 'g' : c === 2 ? 'b' : 'rgb'] || curves), curves?.rgb || curves))
-        const luts = recipe?.luts || (recipe?.lut ? [recipe.lut] : [])
-        luts.forEach(entry => { const lutRgb = applyLut(rgb, entry); const strength = Number(entry.strength ?? 1); rgb = rgb.map((v, c) => v + (lutRgb[c] - v) * strength) })
-        const layers = recipe?.effects || []
-        layers.filter(layer => layer.enabled !== false).slice(0, 8).forEach(layer => { const weight = channelWeight(layer.channel || 'all', ...rgb) * maskWeight(luma(...rgb), layer.mask); const next = effect(rgb, layer.id || layer.typeId, Number(layer.strength ?? 1), x, y, layer.params || {}); rgb = rgb.map((v, c) => v + (next[c] - v) * weight) })
+        const rgb = gradePixel([data[i] / 255, data[i + 1] / 255, data[i + 2] / 255], x, y, recipe, params)
         data[i] = clamp(rgb[0]) * 255; data[i + 1] = clamp(rgb[1]) * 255; data[i + 2] = clamp(rgb[2]) * 255
     }
     ctx.putImageData(pixels, 0, 0); return target
+}
+
+/**
+ * Same reference grade, applied to a 16-bit print frame in place-ish fashion.
+ * Scale is 65535 instead of 255; Quantisation noise replaces canvas clamps.
+ */
+export function gradeFrame16(frame, recipe) {
+    const { data, width, height } = frame
+    const channels = frame.channels || 3
+    const out = new Uint16Array(data.length)
+    for (let i = 0; i < out.length; i += channels) {
+        const px = i / channels
+        const x = (px % width) / width, y = Math.floor(px / width) / height
+        const rgb = gradePixel([data[i] / 65535, data[i + 1] / 65535, data[i + 2] / 65535], x, y, recipe)
+        out[i] = clamp(rgb[0]) * 65535
+        if (channels > 1) out[i + 1] = clamp(rgb[1]) * 65535
+        if (channels > 2) out[i + 2] = clamp(rgb[2]) * 65535
+    }
+    return { ...frame, data: out }
 }

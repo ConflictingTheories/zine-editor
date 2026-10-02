@@ -292,6 +292,18 @@ function PropertyPanel({ activeTab = 'props' }) {
                         {element.lightTableRecipe && (
                             <p className="prop-hint">Developed — the grade is live and non-destructive.</p>
                         )}
+                        {(() => {
+                            const asset = (vpState.library?.imported || []).find(a => a.id === element.assetId)
+                            const d = asset?.develop
+                            if (!d) return null
+                            return (
+                                <p className="prop-hint">
+                                    Raw develop · {asset.format || 'RAW'} · {Number(d.expShift ?? 1).toFixed(2)}× exposure ·{' '}
+                                    {d.userMul ? 'custom WB' : d.useCameraWb ? 'camera WB' : 'auto WB'} ·{' '}
+                                    {d.halfSize ? 'preview size' : 'full resolution'}
+                                </p>
+                            )
+                        })()}
                     </div>
                 )}
                 <div className="prop-section">
