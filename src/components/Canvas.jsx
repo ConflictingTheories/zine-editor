@@ -26,16 +26,21 @@ import { resolvePublicationAsset } from '../utils/assets.js'
  *   image or changing how it fills is not an action the zine editor offers —
  *   without this, right-clicking a photograph in a portfolio would silently
  *   fall back to zine-only tools.
+ * - pageSize: the page's pixel dimensions. Optional, and deliberately so: the
+ *   zine editor has a fixed trim, but a portfolio book's page comes from its
+ *   paper size. When it is absent the legacy zine page is used, so the editor
+ *   keeps working unchanged.
  */
 
 const styles = {
-    canvas: (page) => {
-        const landscape = page.orientation === 'landscape'
-        return { background: page.background || '#fff', width: landscape ? PAGE_H : PAGE_W, height: landscape ? PAGE_W : PAGE_H }
+    canvas: (page, size) => {
+        const w = size?.width ?? (page.orientation === 'landscape' ? PAGE_H : PAGE_W)
+        const h = size?.height ?? (page.orientation === 'landscape' ? PAGE_W : PAGE_H)
+        return { background: page.background || '#fff', width: w, height: h }
     }
 }
 
-function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, importFiles, onRequestImage, onDropAsset, renderContextMenu }) {
+function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, importFiles, onRequestImage, onDropAsset, renderContextMenu, pageSize }) {
     const { vpState, updateVpState, addImportedAsset, setPageAudio } = useVP()
     const { selection } = vpState
     const { startDrag, startResize, startRotate, updateElement } = useEditor(zoom, snapOn)
@@ -102,8 +107,8 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
     return (
         <>
             <div
-                className={`ed-canvas ${page.orientation || 'portrait'} ${gridOn ? 'show-grid' : ''}`}
-                style={styles.canvas(page)}
+                className={`ed-canvas ${page.orientation || 'portrait'} ${gridOn ? 'show-grid' : ''} ${pageSize ? 'is-sized' : ''}`}
+                style={styles.canvas(page, pageSize)}
                 onClick={handleCanvasClick}
                 onContextMenu={e => handleContextMenu(e, null)}
                 onDragOver={event => event.preventDefault()}

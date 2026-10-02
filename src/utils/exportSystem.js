@@ -1,6 +1,7 @@
 // Adapted from old version's editor.js export methods
 import MCPClient from './mcpClient.js'
 import { PAGE_W, PAGE_H } from '../constants.js'
+import { bookGeometry } from '../lib/bookGeometry.js'
 import { resolvePublicationAsset } from './assets.js'
 import { printElements } from './publication.js'
 import { packSvrn, unpackSvrn } from '../../packages/svrn-format/src/index.js'
@@ -419,19 +420,33 @@ export const exportToPDF = async (project, embedAssets = false) => {
         } catch (e) { console.warn('Failed to load mushu for PDF export', e); }
 
         const { jsPDF } = window.jspdf;
-        const firstLandscape = project.pages[0]?.orientation === 'landscape'
-        const pdf = new jsPDF({ orientation: firstLandscape ? 'landscape' : 'portrait', unit: 'px', format: firstLandscape ? [PAGE_H, PAGE_W] : [PAGE_W, PAGE_H] });
+        // The PDF is authored in INCHES at the book's real trim size. It used to
+        // be authored in CSS pixels with a hardcoded 528x816, which only came
+        // out at 5.5x8.5in by the accident that CSS px is 96dpi — so any other
+        // paper size was impossible, and a printer received a page of the wrong
+        // physical size with no indication anything was wrong.
+        const firstPage = project.pages[0] || null
+        const geo0 = bookGeometry(project, firstPage)
+        const pdf = new jsPDF({
+            orientation: geo0.landscape ? 'landscape' : 'portrait',
+            unit: 'in',
+            format: [geo0.inchW, geo0.inchH],
+            // Trim marks are what a print shop needs to cut the bleed off.
+            precision: 2
+        });
 
         const container = document.createElement('div');
-        container.style.cssText = `position:absolute;left:-9999px;top:0;width:${PAGE_W}px;height:${PAGE_H}px;overflow:hidden;background:#fff`;
+        // The render container works in print pixels, so matte ratios measured
+        // on the 150dpi canvas hold at 300dpi in the output.
+        container.style.cssText = `position:absolute;left:-9999px;top:0;width:${geo0.width}px;height:${geo0.height}px;overflow:hidden;background:#fff`;
         document.body.appendChild(container);
 
         try {
             for (let i = 0; i < project.pages.length; i++) {
                 const p = project.pages[i];
-                const landscape = p.orientation === 'landscape'
-                const pageWidth = landscape ? PAGE_H : PAGE_W
-                const pageHeight = landscape ? PAGE_W : PAGE_H
+                const geo = bookGeometry(project, p)
+                const pageWidth = geo.width
+                const pageHeight = geo.height
                 ld.innerHTML = `<div>Generating PDF... Page ${i + 1}/${project.pages.length}</div>`;
 
                 if (mushu) {
@@ -468,12 +483,14 @@ export const exportToPDF = async (project, embedAssets = false) => {
                 });
                 const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
-                if (i > 0) pdf.addPage([pageWidth, pageHeight], landscape ? 'landscape' : 'portrait');
-                pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
+                if (i > 0) pdf.addPage([geo.inchW, geo.inchH], geo.landscape ? 'landscape' : 'portrait');
+                // Placed in inches, matching the page box, so the image fills the
+                // trim exactly rather than being scaled by a px->in guess.
+                pdf.addImage(imgData, 'JPEG', 0, 0, geo.inchW, geo.inchH);
 
                 p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; });
             }
-            pdf.save('svrn-zine.pdf');
+            pdf.save(`${(project.title || 'svrn-book').replace(/[^\w-]+/g, '-').toLowerCase()}.pdf`);
         } finally {
             container.remove();
         }

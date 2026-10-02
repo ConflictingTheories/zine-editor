@@ -15,7 +15,8 @@ import PortfolioLayouts from './PortfolioLayouts.jsx'
 import Canvas from '../Canvas.jsx'
 import { FRAME_PRESETS, FIT_MODES, IMAGE_POSITIONS, createPhotoFrame, findFreeSlot } from '../../lib/photoLibrary.js'
 import { filesToAssets, commitAssets } from '../../utils/photoImport.js'
-import { PAGE_W, PAGE_H } from '../../constants.js'
+import { PAPER_SIZES } from '../../constants.js'
+import { bookGeometry, formatTrim } from '../../lib/bookGeometry.js'
 
 /** Quick frame styles rendered as a compact strip above the canvas. */
 const FrameStrip = ({ element, onApply, onOpenMenu }) => {
@@ -60,6 +61,13 @@ const FrameStrip = ({ element, onApply, onOpenMenu }) => {
     )
 }
 
+/**
+ * Typefaces offered for book captions. Deliberately short: a photo book sets
+ * captions in one or two faces, and a 30-item dropdown only makes choosing
+ * slower. These are all bundled in `public/fonts`, so every option renders.
+ */
+const CAPTION_FONTS = ['DM Sans', 'Playfair Display', 'Source Serif 4', 'Inter', 'Roboto Mono']
+
 /** Right-hand inspector for the selected photo frame. */
 const FrameInspector = ({ element, pageIdx, usage, onChange, onDevelop, onReplace, onDelete, onFillEmpty }) => {
     if (!element) {
@@ -78,6 +86,8 @@ const FrameInspector = ({ element, pageIdx, usage, onChange, onDevelop, onReplac
             </div>
         )
     }
+
+    const matColour = /^#[0-9a-f]{6}$/i.test(element.frameColor || '') ? element.frameColor : '#faf8f4'
 
     return (
         <div className="pf-inspector">
@@ -126,6 +136,54 @@ const FrameInspector = ({ element, pageIdx, usage, onChange, onDevelop, onReplac
                 />
             </div>
 
+            {/* Typography is inline rather than behind a tab: a caption's size,
+                weight and alignment are judged against the image next to them,
+                so the controls have to be visible while the frame is on screen. */}
+            <div className="pf-field">
+                <label>Caption type</label>
+                <div className="pf-caption-type">
+                    <select
+                        className="pf-ct-font"
+                        aria-label="Caption font"
+                        value={element.fontFamily || 'DM Sans'}
+                        onChange={e => onChange({ fontFamily: e.target.value })}
+                    >
+                        {CAPTION_FONTS.map(font => <option key={font} value={font}>{font}</option>)}
+                    </select>
+                    <input
+                        type="number"
+                        aria-label="Caption size"
+                        className="pf-ct-size"
+                        min="6"
+                        max="72"
+                        value={element.fontSize ?? 11}
+                        onChange={e => onChange({ fontSize: Math.min(72, Math.max(6, Number(e.target.value) || 6)) })}
+                    />
+                    <select
+                        className="pf-ct-weight"
+                        aria-label="Caption weight"
+                        value={element.fontWeight || '400'}
+                        onChange={e => onChange({ fontWeight: e.target.value })}
+                    >
+                        <option value="300">Light</option>
+                        <option value="400">Regular</option>
+                        <option value="500">Medium</option>
+                        <option value="600">Semibold</option>
+                        <option value="700">Bold</option>
+                    </select>
+                    <select
+                        className="pf-ct-align"
+                        aria-label="Caption alignment"
+                        value={element.align || 'left'}
+                        onChange={e => onChange({ align: e.target.value })}
+                    >
+                        <option value="left">Left</option>
+                        <option value="center">Centre</option>
+                        <option value="right">Right</option>
+                    </select>
+                </div>
+            </div>
+
             <div className="pf-field">
                 <label htmlFor="pf-mat">Mat width</label>
                 <input
@@ -154,12 +212,18 @@ const FrameInspector = ({ element, pageIdx, usage, onChange, onDevelop, onReplac
 
             <div className="pf-field">
                 <label htmlFor="pf-mat-colour">Mat colour</label>
-                <input
-                    id="pf-mat-colour"
-                    type="color"
-                    value={/^#[0-9a-f]{6}$/i.test(element.frameColor || '') ? element.frameColor : '#faf8f4'}
-                    onChange={e => onChange({ frameColor: e.target.value })}
-                />
+                {/* The colour input is wrapped in a swatch so the current mat is
+                    visible as a chip, not hidden behind a swatch the OS paints. */}
+                <label className="pf-colour-chip" htmlFor="pf-mat-colour">
+                    <span className="pf-colour-swatch" style={{ background: matColour }} />
+                    <span className="pf-colour-value">{matColour.toUpperCase()}</span>
+                    <input
+                        id="pf-mat-colour"
+                        type="color"
+                        value={matColour}
+                        onChange={e => onChange({ frameColor: e.target.value })}
+                    />
+                </label>
             </div>
 
             <div className="pf-field">
@@ -216,6 +280,26 @@ const FrameInspector = ({ element, pageIdx, usage, onChange, onDevelop, onReplac
                 <p className="prop-hint">This photograph appears {usage.count}× in the book.</p>
             )}
 
+            {/* Shot info: the EXIF a photographer actually wants on the frame
+                when they come back to it. Read-only, because it describes the
+                file rather than the layout. */}
+            {(element.exif?.location || element.shotInfo?.location || element.exif?.date || element.shotInfo?.date || element.exif?.camera || element.shotInfo?.camera) && (
+                <div className="pf-field pf-shot-info">
+                    <label>Shot info</label>
+                    <dl>
+                        {(element.exif?.location || element.shotInfo?.location) && (
+                            <><dt>Location</dt><dd>{element.exif?.location || element.shotInfo?.location}</dd></>
+                        )}
+                        {(element.exif?.date || element.shotInfo?.date) && (
+                            <><dt>Date</dt><dd>{element.exif?.date || element.shotInfo?.date}</dd></>
+                        )}
+                        {(element.exif?.camera || element.shotInfo?.camera) && (
+                            <><dt>Camera</dt><dd>{element.exif?.camera || element.shotInfo?.camera}</dd></>
+                        )}
+                    </dl>
+                </div>
+            )}
+
             <div className="pf-inspector-row">
                 <button type="button" className="pf-btn danger" onClick={onDelete}>✕ Remove from spread</button>
             </div>
@@ -228,6 +312,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
         vpState,
         updateVpState,
         updateElement,
+        updateProjectSettings,
         addElement,
         deleteElement,
         addPage,
@@ -236,6 +321,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
         previewProject,
         addImportedAssetsWithRoom,
         replaceElementImage,
+        saveCurrentSpreadAsLayout,
         openLightTableFor,
         fillEmptyFrames,
         undo,
@@ -248,6 +334,9 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     const pages = project?.pages || []
     const safeIdx = Math.min(Math.max(pageIdx ?? 0, 0), Math.max(pages.length - 1, 0))
     const page = pages[safeIdx] || { id: 'empty', elements: [], background: '#ffffff' }
+    const geo = useMemo(() => bookGeometry(project, page), [project, page])
+    const pageWidth = geo.width
+    const pageHeight = geo.height
 
     // Photographers work spread-by-spread: the next question is almost always
     // "what's on the next page", not "what's in the library". The library is one
@@ -256,6 +345,9 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     const [rightTab, setRightTab] = useState('frame')
     const [zoom, setZoom] = useState(70)
     const [snapOn, setSnapOn] = useState(true)
+    // On by default: a book is trimmed, so knowing where the trim falls is not
+    // an edge case, it is the thing that decides whether a composition prints.
+    const [guides, setGuides] = useState(true)
     const [ctxMenu, setCtxMenu] = useState({ visible: false, x: 0, y: 0, element: null })
 
     const selection = vpState.selection
@@ -283,10 +375,9 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
 
     // ── Placement shortcuts ─────────────────────────────────────────────────
     const addFrame = useCallback((presetId = 'mat', asset = null) => {
-        const landscape = page.orientation === 'landscape'
         const slot = findFreeSlot(page.elements, {
-            pageWidth: landscape ? PAGE_H : PAGE_W,
-            pageHeight: landscape ? PAGE_W : PAGE_H
+            pageWidth,
+            pageHeight
         })
         const element = createPhotoFrame({
             asset,
@@ -298,7 +389,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
             zIndex: (page.elements || []).length
         })
         addElement(safeIdx, element)
-    }, [page, safeIdx, addElement])
+    }, [page, pageWidth, pageHeight, safeIdx, addElement])
 
     const addText = useCallback((preset = {}) => {
         // Text defaults to a quiet caption rail rather than a headline: in a
@@ -329,12 +420,11 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     ]
 
     const addTextPreset = useCallback((preset) => {
-        const landscape = page.orientation === 'landscape'
-        const w = landscape ? PAGE_H : PAGE_W
+        const w = pageWidth
         // Sit the block in the lower third: the classic caption position, and
         // it never collides with the frames templates put in the upper area.
-        addText({ ...preset, x: Math.round((w - (preset.width ?? 320)) / 2), y: preset.y ?? (landscape ? 700 : 700) })
-    }, [addText, page.orientation])
+        addText({ ...preset, x: Math.round((w - (preset.width ?? 320)) / 2), y: preset.y ?? Math.round(pageHeight - 116) })
+    }, [addText, pageWidth, pageHeight])
 
     const handleRequestImage = useCallback((element) => {
         if (assets.length) {
@@ -439,12 +529,43 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     }
 
     const emptyFrames = (page.elements || []).filter(el => el.type === 'photo-frame' && !el.src).length
+    // A book is a physical object. Every dimension on screen — the canvas, the
+    // zoom, the grid, the status readout — is derived from the paper size, so
+    // the preview is the book rather than an approximation of it.
+    /**
+     * Saving a layout prompts for a name rather than inventing one: "Grid 3×2"
+     * is only recognisable to the person who made it, and every unnamed spread
+     * called "Custom layout" is a layout nobody opens again.
+     */
+    const handleSaveLayout = useCallback(() => {
+        const suggested = project?.title ? `${project.title} layout` : 'Custom layout'
+        const name = prompt('Name this layout:', suggested)
+        if (name === null) return
+        saveCurrentSpreadAsLayout(name)
+    }, [project, saveCurrentSpreadAsLayout])
+
+    /**
+     * Change the book's paper. Every dimension on the canvas is derived from it,
+     * so existing elements are left exactly where they are: a frame placed at
+     * x=200 keeps its relationship to the page rather than jumping, and the user
+     * re-composes against the new trim. Reflowing every element automatically
+     * would be more impressive and completely wrong — it would silently move
+     * photographs the user had composed by hand.
+     */
+    const handlePaperChange = useCallback((paperSize) => {
+        if (!project) return
+        updateProjectSettings({ paperSize })
+        toast(`Trim set to ${PAPER_SIZES[paperSize]?.label || paperSize}`, 'info')
+    }, [project, updateProjectSettings, toast])
 
     return (
         <div className="pf-workspace">
-            {/* ── Top bar ────────────────────────────────────────────── */}
-            <header className="pf-topbar">
-                <div className="pf-topbar-left">
+            {/* No pf-topbar: the mode switcher in TopNav owns navigation, and a
+                second header here disagreed with it about which mode you were
+                in. What remains is a slim spread bar carrying only book-local
+                actions that have no equivalent in the editor. */}
+            <div className="pf-spreadbar">
+                <div className="pf-spreadbar-left">
                     <button type="button" className="pf-btn ghost" onClick={undo} title="Undo (Ctrl+Z)">↩</button>
                     <button type="button" className="pf-btn ghost" onClick={redo} title="Redo (Ctrl+Shift+Z)">↪</button>
                     <span className="pf-topbar-divider" />
@@ -469,10 +590,33 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                     <span className="pf-topbar-divider" />
                     <button type="button" className={`pf-btn ${snapOn ? 'active' : ''}`} onClick={() => setSnapOn(v => !v)} title="Snap to grid">Snap</button>
                 </div>
-                <div className="pf-topbar-center">
+                <div className="pf-spreadbar-center">
                     <span className="pf-spread-label">Spread {safeIdx + 1} / {pages.length}</span>
+                    {/* Trim size lives here rather than in a settings pane: a book
+                        is a physical object, and choosing the paper is the first
+                        decision that changes every measurement on screen. */}
+                    <label className="pf-paper-picker" title={`Print at ${formatTrim(geo)}`}>
+                        <span className="pf-paper-label">Trim</span>
+                        <select
+                            value={geo.key}
+                            onChange={e => handlePaperChange(e.target.value)}
+                            aria-label="Book trim size"
+                        >
+                            {Object.entries(PAPER_SIZES).map(([id, s]) => (
+                                <option key={id} value={id}>{s.label} — {s.w} × {s.h} in</option>
+                            ))}
+                        </select>
+                    </label>
                 </div>
-                <div className="pf-topbar-right">
+                <div className="pf-spreadbar-right">
+                    <button
+                        type="button"
+                        className="pf-btn ghost"
+                        onClick={handleSaveLayout}
+                        title="Save this arrangement of frames as a reusable layout"
+                    >
+                        ⊞ Save layout
+                    </button>
                     <button type="button" className="pf-btn ghost" onClick={saveProject}>Save</button>
                     <button type="button" className="pf-btn" onClick={() => showModal('exportModal')}>
                         Export
@@ -482,7 +626,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                     </button>
                     <button type="button" className="pf-btn primary" onClick={() => previewProject()}>Preview book</button>
                 </div>
-            </header>
+            </div>
 
             <div className="pf-body">
                 {/* ── Library / layouts ──────────────────────────────── */}
@@ -511,7 +655,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                         />
                     )}
 
-                    {leftTab === 'layouts' && <PortfolioLayouts onApplied={() => setLeftTab('spreads')} />}
+                    {leftTab === 'layouts' && <PortfolioLayouts onApplied={() => setLeftTab('spreads')} paperSize={project?.paperSize} />}
 
                     {leftTab === 'spreads' && (
                         <div className="pf-spreads">
@@ -560,42 +704,82 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
                         <div
                             className="pf-canvas-zoom"
                             style={{
-                                width: `${(page.orientation === 'landscape' ? PAGE_H : PAGE_W) * zoom / 100}px`,
-                                height: `${(page.orientation === 'landscape' ? PAGE_W : PAGE_H) * zoom / 100}px`,
-                                '--canvas-scale': zoom / 100
+                                // The box occupies the page's *visual* size, and
+                                // the page inside is laid out at full size then
+                                // scaled to match. Previously the box was sized
+                                // down but nothing scaled the contents, so
+                                // zooming just cropped a fixed-size page — the
+                                // "zoom is messed up" symptom.
+                                width: `${pageWidth * zoom / 100}px`,
+                                height: `${pageHeight * zoom / 100}px`
                             }}
                         >
-                            <Canvas
-                                page={page}
-                                pageIdx={safeIdx}
-                                snapOn={snapOn}
-                                zoom={zoom}
-                                importFiles={handleImport}
-                                onRequestImage={handleRequestImage}
-                                onDropAsset={handleDropAsset}
-                                renderContextMenu={props => (
-                                    <PortfolioContextMenu
-                                        {...props}
-                                        onPageAction={handlePageAction}
-                                    />
+                            <div
+                                className="pf-page"
+                                style={{
+                                    width: `${pageWidth}px`,
+                                    height: `${pageHeight}px`,
+                                    transform: `scale(${zoom / 100})`
+                                }}
+                            >
+                                <Canvas
+                                    page={page}
+                                    pageIdx={safeIdx}
+                                    pageSize={{ width: pageWidth, height: pageHeight }}
+                                    snapOn={snapOn}
+                                    zoom={zoom}
+                                    importFiles={handleImport}
+                                    onRequestImage={handleRequestImage}
+                                    onDropAsset={handleDropAsset}
+                                    renderContextMenu={props => (
+                                        <PortfolioContextMenu
+                                            {...props}
+                                            bookSize={{ width: pageWidth, height: pageHeight }}
+                                            onPageAction={handlePageAction}
+                                        />
+                                    )}
+                                />
+                                {/* Trim and safe-area guides. They live inside the
+                                    scaled page layer so their offsets are page
+                                    pixels: as a sibling of it they laid out against
+                                    the scroll container, which put the gutter stripe
+                                    down the far left of the window, not the page. */}
+                                {guides && (
+                                    <div className="pf-guides" aria-hidden="true">
+                                        <div className="pf-guide-safe" style={{ inset: `${geo.bleed}px` }} />
+                                        <div
+                                            className="pf-guide-gutter"
+                                            style={{
+                                                left: `${geo.gutter}px`,
+                                                width: `${Math.max(1, geo.gutter - geo.bleed)}px`
+                                            }}
+                                        />
+                                    </div>
                                 )}
-                            />
+                            </div>
                         </div>
-                    </div>
-                    <div className="pf-zoombar">
-                        <button type="button" onClick={() => setZoom(z => Math.max(20, z - 10))}>−</button>
-                        <span>{zoom}%</span>
-                        <button type="button" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
-                        <button type="button" onClick={() => {
-                            const wrap = document.getElementById('canvasWrap')
-                            if (!wrap) return
-                            const landscape = page.orientation === 'landscape'
-                            const scale = Math.min(
-                                (wrap.clientWidth - 80) / (landscape ? PAGE_H : PAGE_W),
-                                (wrap.clientHeight - 80) / (landscape ? PAGE_W : PAGE_H),
-                                1)
-                            setZoom(Math.round(scale * 100))
-                        }}>Fit</button>
+                        <div className="pf-zoombar">
+                            <button type="button" onClick={() => setZoom(z => Math.max(20, z - 10))}>−</button>
+                            <span>{zoom}%</span>
+                            <button type="button" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
+                            <button
+                                type="button"
+                                className={guides ? 'active' : ''}
+                                onClick={() => setGuides(v => !v)}
+                                title="Show trim and safe-area guides"
+                            >
+                                Guides
+                            </button>
+                            <button type="button" onClick={() => {
+                                const wrap = document.getElementById('canvasWrap')
+                                if (!wrap) return
+                                const scale = Math.min(
+                                    (wrap.clientWidth - 80) / pageWidth,
+                                    (wrap.clientHeight - 80) / pageHeight,
+                                    1)
+                                setZoom(Math.round(scale * 100))
+                            }}>Fit</button>
+                        </div>
                     </div>
                 </main>
 
@@ -668,6 +852,10 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
             <footer className="pf-statusbar">
                 <span>{assets.length} in library</span>
                 <span>{emptyFrames} empty frame{emptyFrames === 1 ? '' : 's'}</span>
+                <span className="pf-status-paper" title={`Trim ${formatTrim(geo)} · working at ${geo.dpi} DPI · ${geo.bleed / geo.dpi}" bleed`}>
+                    {geo.label} · {formatTrim(geo)}
+                </span>
+                <span>{pageWidth} × {pageHeight} px · {page.orientation || 'portrait'}</span>
                 <span className="spacer" />
                 <span>F frame · T text · R frame options · double-click a photo to place</span>
             </footer>

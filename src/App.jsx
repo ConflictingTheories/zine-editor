@@ -55,8 +55,8 @@ class ViewErrorBoundary extends React.Component {
                     <div className="view-crash-card">
                         <h2>{this.state.view || 'This view'} stopped responding</h2>
                         <p>
-                            Your work is saved — nothing has been lost. Switch modes with
-                            <kbd>⌘1</kbd> <kbd>⌘2</kbd> <kbd>⌘3</kbd>, or try again.
+                            Your work is saved — nothing has been lost. Go back with
+                            <kbd>⌘[</kbd>, or return to the Library with <kbd>⌘0</kbd>.
                         </p>
                         <pre className="view-crash-detail">{String(this.state.error?.message || this.state.error)}</pre>
                         <button type="button" onClick={() => this.setState({ error: null, view: null })}>
@@ -72,7 +72,7 @@ class ViewErrorBoundary extends React.Component {
 
 /** Human names for the crash card, keyed by view id. */
 const VIEW_LABELS = {
-    dashboard: 'Publisher',
+    dashboard: 'The Library',
     editor: 'The editor',
     portfolio: 'Portfolio',
     lighttable: 'Light Table',
@@ -87,18 +87,18 @@ const VIEW_LABELS = {
  * explains itself and offers the one action that gets you moving.
  */
 function EmptyMode({ mode }) {
-    const { showView } = useVP()
+    const { goHome } = useVP()
 
     const COPY = {
         portfolio: {
             title: 'No book open',
             body: 'Portfolio books are where developed photographs get arranged into spreads — mats, layouts, captions and print sizes.',
-            cta: 'Choose a book from Publisher'
+            cta: 'Choose a book from the Library'
         },
         editor: {
             title: 'Nothing open',
-            body: 'Pick up a zine or a book from the Publisher hub, or start something new.',
-            cta: 'Open the Publisher hub'
+            body: 'Pick up a zine or a book from the Library, or start something new.',
+            cta: 'Open the Library'
         }
     }[mode] || {}
 
@@ -107,7 +107,7 @@ function EmptyMode({ mode }) {
             <div className="empty-mode-card">
                 <h2>{COPY.title}</h2>
                 <p>{COPY.body}</p>
-                <button type="button" onClick={() => showView('dashboard')}>{COPY.cta}</button>
+                <button type="button" onClick={goHome}>{COPY.cta}</button>
             </div>
         </div>
     )

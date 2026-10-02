@@ -58,6 +58,15 @@
     gap: var(--space-md);
 }
 
+/* The whole card is the target: these are the three things you came here to
+   do, and making the reader aim at a small button inside a card is the extra
+   click the hub used to charge for every new project. */
+button.dash-shortcut-card {
+    font-family: var(--font-ui);
+    text-align: left;
+    cursor: pointer;
+}
+
 .dash-shortcut-card {
     display: flex;
     flex-direction: column;
@@ -68,6 +77,11 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.dash-shortcut-card:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 2px;
 }
 
 .dash-shortcut-card:hover {
@@ -105,6 +119,8 @@
     flex: 1;
 }
 
+/* Now a label inside a button rather than a button itself, so it must not
+   carry its own pointer or hover affordance. */
 .dash-shortcut-btn {
     margin-top: var(--space-md);
     padding: 6px 14px;
@@ -114,11 +130,10 @@
     background: var(--surface-2);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sm);
-    cursor: pointer;
     transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 
-.dash-shortcut-btn:hover {
+button.dash-shortcut-card:hover .dash-shortcut-btn {
     background: var(--surface-3);
     border-color: var(--accent-line);
 }

@@ -18,14 +18,14 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { curveValue } from '../../lib/lightTableEngine.js'
 
-const W = 240
-const H = 150
+const W = 320
+const H = 210
 const PAD = 0.04
 const MAX_POINTS = 12
 const SAMPLES = 96
 
 const CHANNELS = [
-    { id: 'rgb', label: 'RGB', color: '#dfe4ea' },
+    { id: 'rgb', label: 'Luma', color: '#dfe4ea' },
     { id: 'r', label: 'R', color: '#ef6b73' },
     { id: 'g', label: 'G', color: '#70cb91' },
     { id: 'b', label: 'B', color: '#6f9cff' }
@@ -115,7 +115,10 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
     const onPointerDown = (event) => {
         event.currentTarget.setPointerCapture?.(event.pointerId)
         const { nx, ny } = toLocal(event)
-        let index = nearestIndex(nx)
+        // Shift forces a new point even when the pointer lands on an existing
+        // one, so a point can be inserted at an exact position without first
+        // nudging whatever is already there out of the way.
+        let index = event.shiftKey ? -1 : nearestIndex(nx)
         // Clicking empty canvas inserts a point at that position.
         if (index === -1) {
             if (points.length >= MAX_POINTS) return
@@ -177,6 +180,13 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                 tabIndex={0}
                 onKeyDown={(event) => {
             if (activeIndex.current === null) return
+            // Delete/Backspace removes the selected point; the end points are
+            // pinned so a curve can never be emptied into an invalid shape.
+            if (event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault()
+                removePoint(activeIndex.current)
+                return
+            }
             const step = event.shiftKey ? 0.01 : 0.001
             const delta = {
                 ArrowLeft: [-step, 0], ArrowRight: [step, 0],
@@ -205,7 +215,7 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                     if (index >= 0) removePoint(index)
                 }}
             >
-                <path className="lt-curve-grid" d={`M60 0V${H}M120 0V${H}M180 0V${H}M0 37.5H${W}M0 75H${W}M0 112.5H${W}M0 0L${W} ${H}`} />
+                <path className="lt-curve-grid" d={`M80 0V${H}M160 0V${H}M240 0V${H}M0 52.5H${W}M0 105H${W}M0 157.5H${W}M0 0L${W} ${H}`} />
 
                 {ghosts.map(ghost => (
                     <path key={ghost.id} className="lt-curve-ghost" d={ghost.d} style={{ stroke: ghost.color }} />
@@ -276,8 +286,9 @@ function LtCurveEditor({ curves, activeChannel, onChannelChange, onChange }) {
                     </>
                 ) : (
                     <p className="lt-help">
-                        Click to add a point · drag to shape · arrow keys nudge ·
-                        double-click a point to remove it.
+                        Click to add a point · shift-click to insert on an existing one ·
+                        drag to shape · arrow keys nudge (shift for larger steps) ·
+                        delete a point with <kbd>⌫</kbd>.
                     </p>
                 )}
             </div>

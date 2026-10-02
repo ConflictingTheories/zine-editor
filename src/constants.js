@@ -91,6 +91,58 @@ export const THEMES = {
 export const PAGE_W = 528
 export const PAGE_H = 816
 
+/**
+ * Print sizes for Portfolio books, in inches, and their bleed.
+ *
+ * A photography book is not a screen layout that gets exported to a PDF. It is a
+ * bound object: the page is trim size, the margin is what the binding eats, and
+ * a photograph that runs to the edge needs bleed so the trim does not leave a
+ * white hairline. Without this the canvas size was a hardcoded pixel number, so
+ * every "export" produced pages that were the wrong physical size and could not
+ * be printed without white edges.
+ *
+ * Sizes are the standard photographic ones a photographer would actually ask
+ * for. `spread` is the *page*; a landscape spread is two pages side by side.
+ */
+export const PAPER_SIZES = {
+    'digest': { label: 'Digest', w: 5.5, h: 8.5 },
+    'a5': { label: 'A5', w: 5.83, h: 8.27 },
+    'a4': { label: 'A4', w: 8.27, h: 11.69 },
+    'letter': { label: 'US Letter', w: 8.5, h: 11 },
+    'tabloid': { label: 'Tabloid', w: 11, h: 17 },
+    'square': { label: 'Square', w: 10, h: 10 },
+    'wide': { label: 'Wide landscape', w: 10, h: 8 },
+    'panorama': { label: 'Panorama', w: 13.33, h: 7.5 }
+}
+
+/** Default bleed added outside the trim, in inches. */
+export const DEFAULT_BLEED = 0.125
+
+/** Default inside margin lost to the binding, in inches. */
+export const DEFAULT_GUTTER = 0.25
+
+/**
+ * Convert a paper size to canvas pixels at the given DPI.
+ *
+ * 150 DPI is the working resolution for on-screen layout and matte compositing;
+ * export raises it to 300 for print. Keeping the two explicit stops the classic
+ * bug where a layout is composed at one scale and exported at another, so the
+ * matte ratios in the preview do not match the book.
+ */
+export const paperToPixels = (sizeKey, dpi = 150) => {
+    const size = PAPER_SIZES[sizeKey] || PAPER_SIZES.digest
+    return {
+        width: Math.round(size.w * dpi),
+        height: Math.round(size.h * dpi),
+        dpi,
+        bleed: Math.round(DEFAULT_BLEED * dpi),
+        gutter: Math.round(DEFAULT_GUTTER * dpi)
+    }
+}
+
+/** The default paper size a new portfolio book starts on. */
+export const DEFAULT_PAPER = 'digest'
+
 // Toast notification durations (ms)
 export const TOAST_DURATION = {
     SHORT: 2000,

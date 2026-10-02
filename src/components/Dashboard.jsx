@@ -156,7 +156,7 @@ function ProjectCard({ project, index, onOpen, onRename, onDelete }) {
 /* ── Main Dashboard ─────────────────────────────────────────────────────────── */
 function Dashboard() {
     const {
-        vpState, updateVpState, showModal, createProject,
+        vpState, updateVpState, showModal, createProject, showView,
         openProject, saveLocal, deleteProject, toast
     } = useVP()
 
@@ -184,7 +184,7 @@ function Dashboard() {
         createProject('editorial', 'photo-portfolio')
     }
 
-    const handleOpenLightTable = () => updateVpState({ currentView: 'lighttable' })
+    const handleOpenLightTable = () => showView('lighttable')
 
     const handleOpenProject = (index) => openProject(index)
 
@@ -214,30 +214,39 @@ function Dashboard() {
     return (
         <div className="dashboard">
             {/* ── Hero / Mode shortcuts ───────────────────────────────── */}
-            <section className="dash-hero" aria-label="Publisher hub">
+            <section className="dash-hero" aria-label="Library">
                 <div className="dash-hero-text">
-                    <h1 className="dash-hero-title">Publisher Hub</h1>
-                    <p className="dash-hero-sub">Create, develop, and publish your work across three modes.</p>
+                    <h1 className="dash-hero-title">Your Library</h1>
+                    <p className="dash-hero-sub">Everything you are making, in one place.</p>
                 </div>
                 <div className="dash-shortcuts">
-                    <div className="dash-shortcut-card">
-                        <div className="dash-shortcut-icon"><IconZine /></div>
-                        <h3>Publisher</h3>
-                        <p>Zines, magazines, interactive fiction, and print materials.</p>
-                        <button className="dash-shortcut-btn" onClick={handleCreateZine}>New Zine</button>
-                    </div>
-                    <div className="dash-shortcut-card accent">
-                        <div className="dash-shortcut-icon"><IconLightTable /></div>
+                    <button
+                        className="dash-shortcut-card"
+                        onClick={handleCreateZine}
+                    >
+                        <span className="dash-shortcut-icon"><IconZine /></span>
+                        <h3>Publication</h3>
+                        <p>Zines, magazines, novels and interactive fiction.</p>
+                        <span className="dash-shortcut-btn">New publication</span>
+                    </button>
+                    <button
+                        className="dash-shortcut-card accent"
+                        onClick={handleOpenLightTable}
+                    >
+                        <span className="dash-shortcut-icon"><IconLightTable /></span>
                         <h3>Light Table</h3>
-                        <p>Develop, grade, crop, and catalogue your photographs.</p>
-                        <button className="dash-shortcut-btn" onClick={handleOpenLightTable}>Open Light Table</button>
-                    </div>
-                    <div className="dash-shortcut-card">
-                        <div className="dash-shortcut-icon"><IconPortfolio /></div>
-                        <h3>Portfolio</h3>
-                        <p>Arrange and finish photography books and web portfolios.</p>
-                        <button className="dash-shortcut-btn" onClick={handleCreatePortfolio}>New Portfolio Book</button>
-                    </div>
+                        <p>Develop, grade and crop photographs. Everything you make here is available to your books.</p>
+                        <span className="dash-shortcut-btn">Develop photographs</span>
+                    </button>
+                    <button
+                        className="dash-shortcut-card"
+                        onClick={handleCreatePortfolio}
+                    >
+                        <span className="dash-shortcut-icon"><IconPortfolio /></span>
+                        <h3>Book</h3>
+                        <p>Arrange developed photographs into spreads and print a book.</p>
+                        <span className="dash-shortcut-btn">New book</span>
+                    </button>
                 </div>
             </section>
 

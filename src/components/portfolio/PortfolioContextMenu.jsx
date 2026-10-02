@@ -114,7 +114,7 @@ const PageMenuItems = ({ pageIdx, onClose, onFillEmpty }) => {
     )
 }
 
-export default function PortfolioContextMenu({ x, y, visible, onClose, pageIdx, element, page, onPageAction }) {
+export default function PortfolioContextMenu({ x, y, visible, onClose, pageIdx, element, page, onPageAction, bookSize }) {
     const {
         vpState,
         updateElement,
@@ -188,6 +188,9 @@ export default function PortfolioContextMenu({ x, y, visible, onClose, pageIdx, 
     const empty = isEmptyFrame(element)
 
     const pageSize = () => {
+        // Prefer the paper-derived size the workspace passes in; fall back to
+        // the legacy page so the menu still works outside Portfolio.
+        if (bookSize) return { pageWidth: bookSize.width, pageHeight: bookSize.height }
         const landscape = currentPage?.orientation === 'landscape'
         return { pageWidth: landscape ? PAGE_H : PAGE_W, pageHeight: landscape ? PAGE_W : PAGE_H }
     }

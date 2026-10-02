@@ -55,6 +55,25 @@
     --statusbar-h: 24px;
     --rail-w: 260px;
     --inspector-w: 300px;
+
+    /* Width of the 3-mode switcher. Fixed rather than content-sized so the
+       wordmark stays optically centred: with three equal tabs, the centre
+       column is the only way the logo does not shift when a mode's label
+       changes length or the window is resized. */
+    --topnav-mode-w: 104px;
+
+    /* ── Icons ─────────────────────────────────────────────────────────────
+       There is no icon font. Icons are inline SVG drawn with
+       `stroke="currentColor"` and sized by the control, so they inherit
+       colour from the active/hover/disabled state for free and cost no
+       network request. Three conventions keep them consistent:
+         · 24×24 viewBox, 1.3 stroke, round caps and joins
+         · `aria-hidden="true"` — the adjacent label or title carries meaning
+         · `width: 1em; height: 1em` when an icon sits inline with text
+       Components that need a shared glyph import the primitive from the
+       component that owns it rather than redefining the path. */
+    --icon-stroke: 1.3;
+    --icon-size: 16px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

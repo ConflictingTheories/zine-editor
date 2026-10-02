@@ -33,11 +33,48 @@ import LtPresetStrip from './LtPresetStrip.jsx'
 
 const TABS = [
     { id: 'develop', label: 'Develop' },
+    { id: 'detail', label: 'Detail' },
     { id: 'effects', label: 'Effects' },
     { id: 'curves', label: 'Curves' },
-    { id: 'crop', label: 'Crop' },
+    { id: 'geometry', label: 'Geometry' },
     { id: 'lut', label: 'LUT' }
 ]
+
+const DEVELOP_GROUPS = ['tone', 'presence', 'colour'].map(
+    id => CONTROL_GROUPS.find(g => g.id === id)
+).filter(Boolean)
+
+const DETAIL_GROUP = CONTROL_GROUPS.filter(g => g.id === 'detail')
+
+/**
+ * Effects are presented as named looks (Vignette, Grain, …) rather than one
+ * flat list, because that is how they are reached for: "more grain", not
+ * "nudge the fifth slider". Ranges are the ones the engine's Effects group
+ * already declared, so nothing here widens or narrows what a slider can do.
+ */
+const FX_CONTROL_SPEC = Object.fromEntries(
+    CONTROL_GROUPS.find(g => g.id === 'effects').controls
+)
+
+const FX_GROUPS = [
+    { id: 'vignette', label: 'Vignette', controls: ['vignette'] },
+    { id: 'grain', label: 'Grain', controls: ['grain'] },
+    { id: 'light', label: 'Light Leaks', controls: ['bloom', 'halation'] },
+    { id: 'film', label: 'Film Stock', controls: ['chroma', 'posterize', 'splitTone'] }
+]
+
+/**
+ * The value a parameter rests at: zero for bipolar, and the top of its range
+ * for "amount of" controls where the pipeline treats the maximum as the
+ * neutral (contrast, saturation, LUT strength).
+ */
+const NEUTRAL = {
+    contrast: 1,
+    saturation: 1,
+    fade: 0
+}
+
+const neutralFor = (key) => (key in NEUTRAL ? NEUTRAL[key] : 0)
 
 const ASPECTS = [
     { id: 'free', label: 'Free' },
@@ -47,6 +84,34 @@ const ASPECTS = [
     { id: '16:9', label: '16:9' },
     { id: '2:3', label: '2:3' }
 ]
+
+/** Renders one collapsible-ish titled group of sliders from shared defaults. */
+function SliderGroup({ label, controls, values, onChange, onReset, onInteraction }) {
+    return (
+        <div className="lt-group">
+            <div className="lt-group-head">
+                {label}
+                {onReset && (
+                    <button className="lt-btn ghost" onClick={onReset}>Reset</button>
+                )}
+            </div>
+            {controls.map(([key, name, min, max, step, bipolar]) => (
+                <LtSlider
+                    key={key}
+                    label={name}
+                    value={values[key] ?? (bipolar ? 0 : min)}
+                    onChange={v => onChange(key, v)}
+                    onInteraction={onInteraction}
+                    spec={{
+                        min, max, step, bipolar,
+                        defaultAtZero: bipolar,
+                        neutral: bipolar ? 0 : min
+                    }}
+                />
+            ))}
+        </div>
+    )
+}
 
 function LightTable() {
     const { vpState, updateVpState, addImportedAssets, addElement, updateImportedAsset, applyRecipeToElement, toast } = useVP()
@@ -67,6 +132,7 @@ function LightTable() {
     const [inspectorOpen, setInspectorOpen] = useState(false)
     const [dragging, setDragging] = useState(false)
     const [rendererMode, setRendererMode] = useState('pending')
+    const [adjusting, setAdjusting] = useState(false)
     const [zoom, setZoom] = useState(1)
 
     const canvasRef = useRef(null)
@@ -112,9 +178,16 @@ function LightTable() {
     }, [updateRecipe])
 
     // ── Renderer lifecycle ───────────────────────────────────────────────
+    // The canvas is only rendered once an asset is selected (`{selectedAsset ?`
+    // guards it), so on a cold mount `canvasRef.current` is null and the
+    // renderer never came up. That left the stage stuck at the 300x150 default
+    // canvas, the status bar reading "initialising" forever, and every edit
+    // falling through to a null renderer — which is what "the Light Table is
+    // slow and nothing renders" actually felt like. Keying on the presence of
+    // the canvas means the renderer is built the moment the stage appears.
     useEffect(() => {
         const canvas = canvasRef.current
-        if (!canvas) return
+        if (!canvas || rendererRef.current) return
         const renderer = new LtRenderer(canvas)
         // If WebGL2 turns out to be unusable the renderer swaps in a fresh
         // 2D-capable canvas; the ref has to follow it or every later draw
@@ -128,7 +201,7 @@ function LightTable() {
             renderer.destroy()
             rendererRef.current = null
         }
-    }, [])
+    }, [selectedAsset])
 
     // ── Image loading for the selected asset ──────────────────────────────
     useEffect(() => {
@@ -140,11 +213,16 @@ function LightTable() {
         img.crossOrigin = 'anonymous'
         img.onload = () => {
             imageRef.current = img
+            // The renderer may not exist yet on a cold mount (it is created when
+            // the canvas mounts, which happens after the image is chosen). The
+            // lifecycle effect uploads a pending image once it comes up, but
+            // guard here too so a late-loading image never draws into null.
             rendererRef.current?.uploadImage(img)
             draw()
         }
         img.src = selectedAsset.src
-    }, [selectedAsset])
+        return () => { img.onload = null }
+    }, [selectedAsset, rendererMode])
 
     const imageStats = useMemo(() => {
         const img = imageRef.current
@@ -153,7 +231,8 @@ function LightTable() {
         if (!info) return null
         return {
             clippedShadows: info.blacks < -0.3,
-            clippedHighlights: info.whites > 0.35
+            clippedHighlights: info.whites > 0.35,
+            meanLuma: info.meanLuma
         }
     }, [selectedAsset])
 
@@ -161,14 +240,13 @@ function LightTable() {
     // Animated effects (grain) need a continuous loop; everything else is
     // drawn once per recipe change. Compare mode renders the untouched
     // original, so it must always bypass the loop.
-    const needsAnimation = recipe.fx.grain > 0.001
-
     const sizeCanvas = useCallback(() => {
         const canvas = canvasRef.current
         const img = imageRef.current
         if (!canvas || !img?.naturalWidth) return
         const [ow, oh] = outputSize(img.naturalWidth, img.naturalHeight, recipeRef.current.geometry)
-        const maxW = 1600, maxH = 1100
+        const maxW = rendererMode === 'gpu' ? 1600 : 1400
+        const maxH = rendererMode === 'gpu' ? 1100 : 1000
         const scale = Math.min(1, maxW / ow, maxH / oh)
         const w = Math.max(1, Math.round(ow * scale))
         const h = Math.max(1, Math.round(oh * scale))
@@ -176,7 +254,7 @@ function LightTable() {
             canvas.width = w
             canvas.height = h
         }
-    }, [])
+    }, [rendererMode])
 
     const draw = useCallback((time = 0) => {
         const renderer = rendererRef.current
@@ -193,13 +271,17 @@ function LightTable() {
             if (renderer.supported) {
                 renderer.draw(recipeRef.current, time)
             } else {
-                renderer.drawCpu(img, recipeRef.current)
+                renderer.drawCpu(img, recipeRef.current, {
+                    maxWidth: adjusting ? 480 : 1400,
+                    maxHeight: adjusting ? 320 : 1000
+                })
             }
         } catch (err) {
             // One bad frame must never take the workspace down with it.
             console.warn('[LightTable] render failed:', err)
         }
-    }, [compare, sizeCanvas])
+    }, [adjusting, compare, sizeCanvas])
+    const needsAnimation = rendererMode === 'gpu' && recipe.fx.grain > 0.001
 
     // Redraw whenever anything that affects the pixels changes.
     useEffect(() => {
@@ -527,10 +609,10 @@ function LightTable() {
 
             {/* ── Header ─────────────────────────────────────────────── */}
             <header className="lt-header">
-                        {/* No back arrow: TopNav owns navigation. A second, mode-specific
+                {/* No back arrow: TopNav owns navigation. A second, mode-specific
                             way out was a leftover from before the three-mode shell, and it
                             disagreed with the nav about where "back" even meant. */}
-                        <div className="lt-title">
+                <div className="lt-title">
                     <strong>LIGHT TABLE</strong>
                     <span className="lt-file">
                         {selectedAsset?.name || 'No image selected'}
@@ -756,65 +838,57 @@ function LightTable() {
                                     onApply={applyPreset}
                                 />
                             </div>
-                            {CONTROL_GROUPS.filter(g => g.id === 'tone' || g.id === 'colour').map(group => (
-                                <div className="lt-group" key={group.id}>
-                                    <div className="lt-group-head">
-                                        {group.label}
-                                        <button
-                                            className="lt-btn ghost"
-                                            onClick={() => group.controls.forEach(([key]) => updateParam(
-                                                key,
-                                                GRADE_DEFAULTS[key]
-                                            ))}
-                                        >
-                                            Reset
-                                        </button>
-                                    </div>
-                                    {group.controls.map(([key, label, min, max, step, bipolar]) => (
-                                        <LtSlider
-                                            key={key}
-                                            label={label}
-                                            value={recipe.params[key]}
-                                            onChange={v => updateParam(key, v)}
-                                            spec={{ min, max, step, bipolar, defaultAtZero: bipolar, neutral: GRADE_DEFAULTS[key] }}
-                                        />
-                                    ))}
-                                </div>
+                            {DEVELOP_GROUPS.map(group => (
+                                <SliderGroup
+                                    key={group.id}
+                                    label={group.label}
+                                    controls={group.controls}
+                                    values={recipe.params}
+                                    onChange={updateParam}
+                                    onInteraction={setAdjusting}
+                                    onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
+                                />
                             ))}
+                        </>
+                    )}
+
+                    {/* ── Detail ──────────────────────────────────── */}
+                    {tab === 'detail' && (
+                        <>
+                            {DETAIL_GROUP.map(group => (
+                                <SliderGroup
+                                    key={group.id}
+                                    label={group.label}
+                                    controls={group.controls}
+                                    values={recipe.params}
+                                    onChange={updateParam}
+                                    onInteraction={setAdjusting}
+                                    onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
+                                />
+                            ))}
+                            <p className="lt-help">
+                                The pipeline drives one sharpening pass and one noise-reduction
+                                pass. Radius, Detail, Masking and the per-channel breakdown
+                                need separable stages in the shader before their sliders
+                                would move a pixel — they arrive with that, not before.
+                            </p>
                         </>
                     )}
 
                     {/* ── Effects ─────────────────────────────────── */}
                     {tab === 'effects' && (
                         <>
-                            {CONTROL_GROUPS.filter(g => g.id === 'detail' || g.id === 'effects').map(group => {
-                                const isDetail = group.id === 'detail'
-                                const values = isDetail ? recipe.params : recipe.fx
-                                return (
-                                    <div className="lt-group" key={group.id}>
-                                        <div className="lt-group-head">
-                                            {group.label}
-                                            <button
-                                                className="lt-btn ghost"
-                                                onClick={() => group.controls.forEach(([key]) => isDetail
-                                                    ? updateParam(key, GRADE_DEFAULTS[key])
-                                                    : updateFx(key, FX_DEFAULTS[key]))}
-                                            >
-                                                Reset
-                                            </button>
-                                        </div>
-                                        {group.controls.map(([key, label, min, max, step, bipolar]) => (
-                                            <LtSlider
-                                                key={key}
-                                                label={label}
-                                                value={values[key]}
-                                                onChange={v => (isDetail ? updateParam(key, v) : updateFx(key, v))}
-                                                spec={{ min, max, step, bipolar, defaultAtZero: bipolar, neutral: (isDetail ? GRADE_DEFAULTS : FX_DEFAULTS)[key] }}
-                                            />
-                                        ))}
-                                    </div>
-                                )
-                            })}
+                            {FX_GROUPS.map(group => (
+                                <SliderGroup
+                                    key={group.id}
+                                    label={group.label}
+                                    controls={group.controls.map(key => FX_CONTROL_SPEC[key])}
+                                    values={recipe.fx}
+                                    onInteraction={setAdjusting}
+                                    onChange={updateFx}
+                                    onReset={() => group.controls.forEach(key => updateFx(key, 0))}
+                                />
+                            ))}
                             <div className="lt-group">
                                 <div className="lt-group-head">Monochrome</div>
                                 <div className="lt-row">
@@ -854,63 +928,72 @@ function LightTable() {
                         </div>
                     )}
 
-                    {/* ── Crop ────────────────────────────────────── */}
-                    {tab === 'crop' && (
-                        <div className="lt-group">
-                            <div className="lt-group-head">Aspect Ratio</div>
-                            <div className="lt-crop-grid">
-                                {ASPECTS.map(a => (
-                                    <button key={a.id} className="lt-btn" onClick={() => applyAspect(a.id)}>{a.label}</button>
-                                ))}
-                            </div>
-                            <div className="lt-group-head" style={{ marginTop: 14 }}>Orientation</div>
-                            <div className="lt-row">
-                                <label>Rotate</label>
-                                <button className="lt-btn" onClick={() => rotate(-90)}>↺ 90°</button>
-                                <button className="lt-btn" onClick={() => rotate(90)}>↻ 90°</button>
-                            </div>
-                            <div className="lt-row">
-                                <label>Flip horizontal</label>
+                    {/* ── Geometry ───────────────────────────────── */}
+                    {tab === 'geometry' && (
+                        <>
+                            <div className="lt-group">
+                                <div className="lt-group-head">Crop</div>
                                 <button
-                                    className={`lt-switch${recipe.geometry.flipH ? ' on' : ''}`}
-                                    onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
-                                    aria-pressed={recipe.geometry.flipH}
-                                    aria-label="Flip horizontal"
-                                />
+                                    className={`lt-btn${cropping ? ' active' : ''}`}
+                                    style={{ width: '100%' }}
+                                    onClick={() => setCropping(v => !v)}
+                                >
+                                    {cropping ? 'Apply crop' : 'Crop on canvas'}
+                                </button>
+                                <div className="lt-row" style={{ marginTop: 8 }}>
+                                    <label>Clear crop</label>
+                                    <button className="lt-btn" onClick={() => updateGeometry({ crop: null })}>Reset</button>
+                                </div>
                             </div>
-                            <div className="lt-row">
-                                <label>Flip vertical</label>
-                                <button
-                                    className={`lt-switch${recipe.geometry.flipV ? ' on' : ''}`}
-                                    onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
-                                    aria-pressed={recipe.geometry.flipV}
-                                    aria-label="Flip vertical"
-                                />
+                            <div className="lt-group">
+                                <div className="lt-group-head">Aspect Ratio</div>
+                                <div className="lt-crop-grid">
+                                    {ASPECTS.map(a => (
+                                        <button key={a.id} className="lt-btn" onClick={() => applyAspect(a.id)}>{a.label}</button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="lt-row">
-                                <label>Rotation</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max="359"
-                                    value={recipe.geometry.rotate || 0}
-                                    onChange={e => updateGeometry({ rotate: Number(e.target.value) || 0 })}
-                                />
-                                <span className="lt-crop-info">degrees</span>
+                            <div className="lt-group">
+                                <div className="lt-group-head">Rotate</div>
+                                <div className="lt-row">
+                                    <label>Rotation</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="359"
+                                        value={recipe.geometry.rotate || 0}
+                                        onChange={e => updateGeometry({ rotate: Number(e.target.value) || 0 })}
+                                    />
+                                    <span className="lt-crop-info">degrees</span>
+                                </div>
+                                <div className="lt-row">
+                                    <label>Rotate by</label>
+                                    <button className="lt-btn" onClick={() => rotate(-90)}>↺ 90°</button>
+                                    <button className="lt-btn" onClick={() => rotate(90)}>↻ 90°</button>
+                                </div>
                             </div>
-                            <div className="lt-group-head" style={{ marginTop: 14 }}>Interactive Crop</div>
-                            <button
-                                className={`lt-btn${cropping ? ' active' : ''}`}
-                                style={{ width: '100%' }}
-                                onClick={() => setCropping(v => !v)}
-                            >
-                                {cropping ? 'Apply crop' : 'Crop on canvas'}
-                            </button>
-                            <div className="lt-row" style={{ marginTop: 8 }}>
-                                <label>Clear crop</label>
-                                <button className="lt-btn" onClick={() => updateGeometry({ crop: null })}>Reset</button>
+                            <div className="lt-group">
+                                <div className="lt-group-head">Flip</div>
+                                <div className="lt-row">
+                                    <label>Flip horizontal</label>
+                                    <button
+                                        className={`lt-switch${recipe.geometry.flipH ? ' on' : ''}`}
+                                        onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
+                                        aria-pressed={recipe.geometry.flipH}
+                                        aria-label="Flip horizontal"
+                                    />
+                                </div>
+                                <div className="lt-row">
+                                    <label>Flip vertical</label>
+                                    <button
+                                        className={`lt-switch${recipe.geometry.flipV ? ' on' : ''}`}
+                                        onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
+                                        aria-pressed={recipe.geometry.flipV}
+                                        aria-label="Flip vertical"
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        </>
                     )}
 
                     {/* ── LUT ─────────────────────────────────────── */}

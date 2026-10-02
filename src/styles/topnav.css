@@ -1,14 +1,12 @@
 /*
- * Top navigation — the app's primary spine.
+ * Top navigation — the app's spine.
  *
- * The three modes are the only persistent navigation in the product, so they
- * are a segmented control rather than a row of tabs: modes are exclusive at a
- * time (unlike tabs, which are views within a page), and rendering them as a
- * segmented group makes that relationship legible instead of implied.
- *
- * `.topnav-mode` replaced `.topnav-tab`, which used to style the pre-mode
- * Dashboard/Editor tab pair. The old rules were left in styles.css for the
- * legacy `.topnav-tab` selector; nothing renders that selector any more.
+ * Layout is left / right, not the three-column centred arrangement the old bar
+ * used. A centred wordmark forced a fixed mode-tab width to keep it optically
+ * centred, which is what produced the 104px tokens and the dead gap in the
+ * middle at narrow widths. With a breadcrumb instead of a mode switcher the
+ * brand belongs on the left with the rest of the identity, and the right rail
+ * simply anchors the other end.
  */
 
 .topnav {
@@ -26,29 +24,23 @@
     flex-shrink: 0;
 }
 
-/* ── Mode switcher ─────────────────────────────────────────────────────────── */
-.topnav-modes {
+/* ── Left cluster: back · brand · location ─────────────────────────────────── */
+
+.topnav-lead {
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 2px;
-    background: var(--surface-sunken);
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
+    gap: var(--space-sm);
+    min-width: 0;
 }
 
-.topnav-mode {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 28px;
-    padding: 4px 11px;
-    font-family: var(--font-ui);
-    font-size: var(--type-sm);
-    font-weight: 500;
-    line-height: 1;
-    white-space: nowrap;
-    color: var(--text-dim);
+/* A square icon button that lines up with the brand's optical height. */
+.topnav-back {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    color: var(--text-muted);
     background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
@@ -56,59 +48,167 @@
     transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 
-.topnav-mode:hover {
+.topnav-back:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface-2);
+    border-color: var(--line);
 }
 
-.topnav-mode.active {
-    color: var(--text);
-    background: var(--surface-2);
-    border-color: var(--line-strong);
-    box-shadow: var(--shadow-sm);
+.topnav-back:disabled {
+    opacity: .28;
+    cursor: default;
 }
 
-.topnav-mode:focus-visible {
+.topnav-back:focus-visible {
     outline: 2px solid var(--accent-line);
     outline-offset: 1px;
 }
 
-.topnav-mode svg {
+/* ── Brand ────────────────────────────────────────────────────────────────────
+   The mark carries the identity; the text is a quiet second line. The old
+   wordmark was a bare <div> with an 8px subtitle, which the fixed 48px bar
+   clipped at the top: two content lines plus a 1px gap exceeded the line
+   boxes. Explicit line-heights and a smaller subtitle keep both lines whole. */
+.topnav-brand {
+    display: flex;
+    align-items: center;
+    gap: 7px;
     flex-shrink: 0;
-    opacity: .75;
+    padding: 3px 7px 3px 3px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text);
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 
-.topnav-mode.active svg {
-    opacity: 1;
+.topnav-brand:hover {
+    background: var(--surface-2);
+    border-color: var(--line);
 }
 
-/* ── Wordmark ──────────────────────────────────────────────────────────────── */
-.topnav-logo {
+.topnav-brand:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+/* The mark is the only element allowed the accent colour, so the brand reads as
+   one object rather than an icon sitting next to some text. */
+.topnav-mark-svg {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.topnav-brand-text {
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
-    gap: 1px;
-    flex-shrink: 0;
-    cursor: pointer;
-    user-select: none;
+    line-height: 1;
 }
 
-.topnav-logo-sub {
+.topnav-brand-name {
     font-family: var(--font-ui);
-    font-size: 8px;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    line-height: 1.05;
 }
 
-/* ── Right rail ────────────────────────────────────────────────────────────── */
+.topnav-brand-sub {
+    font-family: var(--font-ui);
+    font-size: 7.5px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    line-height: 1.15;
+    color: var(--text-faint);
+}
+
+/* ── Location ─────────────────────────────────────────────────────────────────
+   A breadcrumb, not a mode indicator. It answers "where am I, and what am I
+   looking at" — the question the mode tabs raised and never resolved. */
+.topnav-crumbs {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    margin-left: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 1px solid var(--line);
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    line-height: 1;
+}
+
+.topnav-crumb-place {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.topnav-crumb-sep {
+    color: var(--text-faint);
+}
+
+.topnav-crumb-detail {
+    min-width: 0;
+    /* Long book titles must not push the right rail off the bar. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+/* ── Right cluster ──────────────────────────────────────────────────────────── */
+
 .topnav-right {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
     flex-shrink: 0;
+}
+
+.topnav-rule {
+    width: 1px;
+    height: 18px;
+    background: var(--line);
+    flex-shrink: 0;
+}
+
+/* The Light Table is a global tool, not a peer mode, so it is a launcher. */
+.topnav-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.topnav-launch:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--line-strong);
+}
+
+.topnav-launch:disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.topnav-launch:focus-visible,
+.topnav-icon-btn:focus-visible,
+.topnav-text-btn:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
 }
 
 .topnav-icon-btn {
@@ -128,11 +228,6 @@
     color: var(--text);
     background: var(--surface-2);
     border-color: var(--line);
-}
-
-.topnav-icon-btn:focus-visible {
-    outline: 2px solid var(--accent-line);
-    outline-offset: 1px;
 }
 
 /* Connection state is a live signal, so it is one of the few places the
@@ -192,22 +287,33 @@
     user-select: none;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
     .topnav {
         padding: 0 var(--space-md);
     }
 
-    /* Labels are the first thing to go: the icons plus tooltips still identify
-       the modes, and the bar has to survive a narrow window. */
-    .topnav-mode span {
+    /* The brand sub-line is the first thing to go; the mark and the location
+       still identify the app and the place. */
+    .topnav-brand-sub {
         display: none;
     }
 
-    .topnav-mode {
-        padding: 4px 8px;
+    .topnav-crumbs {
+        margin-left: 0;
+        padding-left: var(--space-sm);
+    }
+}
+
+@media (max-width: 720px) {
+
+    /* The launcher's label goes; its icon and tooltip remain. */
+    .topnav-launch span {
+        display: none;
     }
 
-    .topnav-logo-sub {
-        display: none;
+    .topnav-launch {
+        width: 28px;
+        padding: 0;
+        justify-content: center;
     }
 }

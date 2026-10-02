@@ -9,8 +9,12 @@ import { getAdditionalDefaultZines } from '../data/defaultZines.js'
 import { BUILT_IN_TEMPLATES, createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
 import { EDITOR_MODE_PHOTO_PORTFOLIO, EDITOR_MODE_ZINE, defaultThemeForMode } from '../data/editorModes.js'
 import { getPortfolioLayout, createLayoutPage } from '../data/portfolioTemplates.js'
+import { bookGeometry } from '../lib/bookGeometry.js'
 import { packSvrn } from '../../packages/svrn-format/src/index.js'
 import { getPhotoBlob, putPhoto, deletePhotos, storedPhotoIds, makeThumbnail } from '../lib/photoStore.js'
+
+/** Element and layout ids share one generator so they can never collide. */
+const uid = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
 /**
  * VPContext
@@ -335,28 +339,41 @@ const VPProvider = ({ children }) => {
         updateAssetLibrary({ fonts })
     }
 
+    /**
+     * Library cap. Photographers routinely import whole shoots, so the
+     * photography workspace keeps far more than the audio cap and drops the
+     * oldest entries only once a limit is genuinely exceeded.
+     */
+    const LIBRARY_LIMITS = { imported: 600, audio: 60 }
+
     const addImportedAssets = (assets) => {
         const validAssets = (assets || []).filter(asset => asset?.src)
         if (!validAssets.length) return
         setVpState(prev => {
             const library = { ...prev.library }
-            validAssets.forEach(asset => {
+            // Group first, then prepend once per collection. This used to
+            // reassign `library[collection]` inside a forEach, so every asset
+            // after the first was written over by the next and a 40-file
+            // import kept exactly one photo — which is what "the assets are
+            // lost" turned out to be.
+            const groups = { imported: [], audio: [] }
+            for (const asset of validAssets) {
                 const collection = asset.kind === 'audio' ? 'audio' : 'imported'
-                library[collection] = [asset, ...(library[collection] || []).filter(value => value.id !== asset.id)].slice(0, 60)
-            })
+                groups[collection].push(asset)
+            }
+            for (const [collection, incoming] of Object.entries(groups)) {
+                if (!incoming.length) continue
+                const ids = new Set(incoming.map(a => a.id))
+                const kept = (library[collection] || []).filter(v => !ids.has(v.id))
+                const limit = LIBRARY_LIMITS[collection]
+                library[collection] = [...incoming, ...kept].slice(0, limit)
+            }
             persistLibrary(library)
             return { ...prev, library }
         })
     }
 
     const addImportedAsset = (asset) => addImportedAssets([asset])
-
-    /**
-     * Library cap. Photographers routinely import whole shoots, so the
-     * photography workspace keeps far more than the 60-asset zine cap and
-     * drops the oldest entries only once the limit is genuinely exceeded.
-     */
-    const LIBRARY_LIMITS = { imported: 600, audio: 60 }
 
     const addImportedAssetsWithRoom = (assets) => {
         const validAssets = (assets || []).filter(asset => asset?.src)
@@ -367,12 +384,19 @@ const VPProvider = ({ children }) => {
         }
         setVpState(prev => {
             const library = { ...prev.library }
-            validAssets.forEach(asset => {
+            // Same grouping as addImportedAssets: assign once per collection
+            // rather than once per asset, so a multi-file import keeps them all.
+            const groups = { imported: [], audio: [] }
+            for (const asset of validAssets) {
                 const collection = asset.kind === 'audio' ? 'audio' : 'imported'
-                const kept = (library[collection] || []).filter(value => value.id !== asset.id)
-                library[collection] = [...validAssets.filter(a => (a.kind === 'audio' ? 'audio' : 'imported') === collection), ...kept]
-                    .slice(0, collection === 'audio' ? LIBRARY_LIMITS.audio : limit)
-            })
+                groups[collection].push(asset)
+            }
+            for (const [collection, incoming] of Object.entries(groups)) {
+                if (!incoming.length) continue
+                const ids = new Set(incoming.map(a => a.id))
+                const kept = (library[collection] || []).filter(v => !ids.has(v.id))
+                library[collection] = [...incoming, ...kept].slice(0, LIBRARY_LIMITS[collection])
+            }
             persistLibrary(library)
             return { ...prev, library }
         })
@@ -515,11 +539,67 @@ const VPProvider = ({ children }) => {
     const bgmRef = useRef(null)
 
     /**
+     * Navigation history.
+     *
+     * The three modes are not mutually exclusive — the Light Table is reached
+     * from a Publisher frame *and* from a Portfolio frame, and either has to
+     * hand the user back to where they came from. A single `currentView` string
+     * cannot express "where were you", which is why the old mode switcher left
+     * people stranded and why the back button kept disagreeing with the nav.
+     *
+     * This is a bounded trail of view keys. It is intentionally *not* a router:
+     * back is a single step, and the trail is truncated at the dashboard so it
+     * can never accumulate a dead end.
+     */
+    const [navTrail, setNavTrail] = useState([])
+    // Mirrored into a ref so `goBack` can read the destination without
+    // becoming a function that changes identity on every navigation.
+    const navTrailRef = useRef([])
+    navTrailRef.current = navTrail
+
+    /**
      * Set the active app view (dashboard/editor/reader/...)
      * @param {string} name view key
+     * @param {object} [opts] `{ replace }` to swap the current entry instead of
+     *        pushing. Used when arriving somewhere from a mode switch that should
+     *        not be undoable (e.g. opening a project from the hub).
      */
-    const showView = (name) => {
-        setVpState(prev => ({ ...prev, currentView: name, ...(name !== 'reader' ? { readerMode: null } : {}) }))
+    const showView = (name, opts = {}) => {
+        setVpState(prev => {
+            const from = prev.currentView
+            // `prev` is read here, but the trail is updated outside the state
+            // updater: calling a setState from inside another component's
+            // updater is a render-phase side effect, and under StrictMode the
+            // updater runs twice — which would push a duplicate history entry.
+            if (from && from !== name) {
+                setNavTrail(trail => {
+                    if (opts.replace && trail.length) return trail
+                    return [...trail, from].slice(-12)
+                })
+            }
+            return { ...prev, currentView: name, ...(name !== 'reader' ? { readerMode: null } : {}) }
+        })
+    }
+
+    /**
+     * Step back one view. Returns false when there is nowhere to go, so the
+     * caller can fall back to the hub rather than doing nothing.
+     */
+    const goBack = () => {
+        const target = navTrailRef.current[navTrailRef.current.length - 1]
+        if (!target) return false
+        setNavTrail(trail => trail.slice(0, -1))
+        setVpState(prev => ({ ...prev, currentView: target, ...(target !== 'reader' ? { readerMode: null } : {}) }))
+        return true
+    }
+
+    /** True when there is somewhere to go back to. */
+    const canGoBack = navTrail.length > 0
+
+    /** Abandon the trail — the hub is always a safe, absolute destination. */
+    const goHome = () => {
+        setNavTrail([])
+        setVpState(prev => ({ ...prev, currentView: 'dashboard', readerMode: null }))
     }
 
     /**
@@ -1072,7 +1152,9 @@ const VPProvider = ({ children }) => {
             return false
         }
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        const page = createLayoutPage(layout, { background })
+        // Lay the layout out against the book's actual paper, not the legacy
+        // page the templates were authored on.
+        const geo = bookGeometry(project, { orientation: layout?.orientation || 'portrait' })        const page = createLayoutPage(layout, { background, pageSize: { width: geo.width, height: geo.height } })
         const pool = (fillWith || []).filter(asset => asset?.src)
         if (pool.length) {
             const frames = page.elements.filter(el => el.type === 'photo-frame')
@@ -1094,6 +1176,75 @@ const VPProvider = ({ children }) => {
             ? `${layout?.name || 'Layout'} added with ${Math.min(pool.length, page.elements.filter(el => el.type === 'photo-frame').length)} photos`
             : `${layout?.name || 'Layout'} added`, 'success')
         return true
+    }
+
+    /**
+     * Save the current spread as a reusable layout. Stored on the project
+     * rather than in the shared asset library, because a layout is a decision
+     * about *this* book — a grid that works for a portrait series does not
+     * belong in the toolbox of every book on the account.
+     *
+     * Only frames and rules survive; text is stripped, because a saved layout
+     * is a set of empty mats waiting to be filled, not a page of prose.
+     */
+    const saveCurrentSpreadAsLayout = (name) => {
+        const project = vpState.currentProject
+        if (!project) {
+            toast('Open a portfolio before saving a layout', 'error')
+            return null
+        }
+        const pages = project.pages || []
+        if (!pages.length) {
+            toast('This book has no spreads yet', 'error')
+            return null
+        }
+        const pageIdx = vpState.selection?.pageIdx ?? 0
+        const source = pages[Math.min(Math.max(pageIdx, 0), pages.length - 1)]
+        if (!source) return null
+
+        const frames = (source.elements || []).filter(el => el.type === 'photo-frame')
+        if (!frames.length) {
+            toast('A saved layout needs at least one photo frame', 'error')
+            return null
+        }
+
+        const landscape = source.orientation === 'landscape'
+        const pageWidth = landscape ? PAGE_H : PAGE_W
+        const pageHeight = landscape ? PAGE_W : PAGE_H
+        const minX = Math.min(...frames.map(f => f.x ?? 0))
+        const minY = Math.min(...frames.map(f => f.y ?? 0))
+        const maxX = Math.max(...frames.map(f => (f.x ?? 0) + (f.width ?? 0)))
+        const maxY = Math.max(...frames.map(f => (f.y ?? 0) + (f.height ?? 0)))
+
+        const layout = {
+            id: uid('layout'),
+            name: (name || 'Custom layout').trim().slice(0, 60),
+            description: `${frames.length} frame${frames.length === 1 ? '' : 's'} · saved from spread ${(pageIdx ?? 0) + 1}`,
+            category: 'Saved',
+            orientation: source.orientation || 'portrait',
+            custom: true,
+            build: () => frames.map(f => ({
+                __frame: true,
+                preset: f.framePreset || 'mat',
+                // Rebased onto a full page so the arrangement is not stuck
+                // wherever it happened to sit on the spread it came from.
+                x: Math.round(f.x - minX + (pageWidth - (maxX - minX)) / 2),
+                y: Math.round(f.y - minY + (pageHeight - (maxY - minY)) / 2),
+                width: Math.round(f.width),
+                height: Math.round(f.height)
+            }))
+        }
+
+        const updated = {
+            ...project,
+            customLayouts: [...(project.customLayouts || []), layout],
+            _dirty: true
+        }
+        setVpState(prev => ({ ...prev, currentProject: updated, projects: prev.projects.map(p => p.id === updated.id ? updated : p) }))
+        pushHistory(updated)
+        saveLocal(updated)
+        toast(`Saved “${layout.name}” to this book's layouts`, 'success')
+        return layout
     }
 
     /**
@@ -1948,6 +2099,9 @@ const VPProvider = ({ children }) => {
         vpState,
         updateVpState,
         showView,
+        goBack,
+        canGoBack,
+        goHome,
         previewProject,
         api,
         login,
@@ -2007,6 +2161,7 @@ const VPProvider = ({ children }) => {
         updateElements,
         findElement,
         addPageFromPortfolioLayout,
+        saveCurrentSpreadAsLayout,
         publishZine,
         publishToNode,
         themes,

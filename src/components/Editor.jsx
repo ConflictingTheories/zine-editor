@@ -298,8 +298,6 @@ function Editor() {
                     ))}
                 </div>
 
-                <span className="ed-toolbar-sep" />
-
                 {/* Context tools — vary by workspace mode */}
                 <div className="ed-toolbar-context">
                     {workspaceMode === 'compose' && (

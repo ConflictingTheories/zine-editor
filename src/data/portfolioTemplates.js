@@ -379,9 +379,29 @@ const buildShapeElement = (descriptor, index) => ({
  * Instantiate a portfolio layout into a page object. Frames are created as
  * empty photo frames so the user can fill them by clicking, or in one go via
  * "Fill frames with library photos".
+ *
+ * `pageSize` scales the layout into the book's actual trim. The templates are
+ * authored against the legacy 528x816 page, so applying one to a 10x10 square
+ * book used to put every frame in the wrong place and off the paper. Descriptors
+ * are treated as fractions of the page and remapped, which means a layout keeps
+ * its composition at any trim size.
  */
-export const createLayoutPage = (layout, { background = '#ffffff' } = {}) => {
+export const createLayoutPage = (layout, { background = '#ffffff', pageSize = null } = {}) => {
     const descriptors = (layout?.build?.() || []).filter(Boolean)
+    const landscape = (layout?.orientation || 'portrait') === 'landscape'
+    // The legacy page the descriptors were authored against.
+    const baseW = landscape ? PAGE_H : PAGE_W
+    const baseH = landscape ? PAGE_W : PAGE_H
+    const targetW = pageSize?.width || baseW
+    const targetH = pageSize?.height || baseH
+    const scaleX = targetW / baseW
+    const scaleY = targetH / baseH
+
+    // Uniform scale keeps the composition's proportions instead of stretching
+    // the frames when the target page is not the same aspect as the template.
+    const scale = Math.min(scaleX, scaleY)
+    const remap = (value, base, target) => Math.round(value * scale + (target - base * scale) / 2)
+
     const page = {
         id: Date.now() + Math.random(),
         orientation: layout?.orientation || 'portrait',
@@ -395,10 +415,10 @@ export const createLayoutPage = (layout, { background = '#ffffff' } = {}) => {
             return {
                 id: uid('el'),
                 type: 'photo-frame',
-                x: descriptor.x,
-                y: descriptor.y,
-                width: descriptor.width,
-                height: descriptor.height,
+                x: remap(descriptor.x, baseW, targetW),
+                y: remap(descriptor.y, baseH, targetH),
+                width: Math.round(descriptor.width * scale),
+                height: Math.round(descriptor.height * scale),
                 rotation: 0,
                 opacity: 1,
                 zIndex: index,

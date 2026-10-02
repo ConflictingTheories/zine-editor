@@ -13,6 +13,8 @@ import './styles.css'
 import './styles/tokens.css'
 import './styles/topnav.css'
 import './styles/dashboard.css'
+import './styles/lighttable.css'
+import './styles/editor.css'
 import './styles/portfolio.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(

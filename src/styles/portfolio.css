@@ -16,7 +16,10 @@
 
 .pf-workspace {
     display: grid;
-    grid-template-rows: 48px minmax(0, 1fr) 26px;
+    /* The spread bar is deliberately shorter than the TopNav above it: two
+       48px stacked header bands left the canvas with too little height on a
+       laptop, and only one of them navigates. */
+    grid-template-rows: 40px minmax(0, 1fr) 26px;
     height: calc(100vh - var(--topnav-h));
     min-height: 0;
     background: var(--bg);
@@ -50,10 +53,13 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Top bar
+   Spread bar
+   The workspace's own action row. TopNav already carries mode navigation, so
+   this bar exists only for book-local actions with no editor equivalent —
+   which is also why it is 40px rather than a second full-height header.
    ══════════════════════════════════════════════════════════════════════════ */
 
-.pf-topbar {
+.pf-spreadbar {
     display: flex;
     align-items: center;
     gap: var(--space-md);
@@ -62,25 +68,63 @@
     background: var(--surface-0);
 }
 
-.pf-topbar-left,
-.pf-topbar-right {
+.pf-spreadbar-left,
+.pf-spreadbar-right {
     display: flex;
     align-items: center;
     gap: var(--space-xs);
     flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
-.pf-topbar-right {
+.pf-spreadbar-right {
     justify-content: flex-end;
 }
 
-.pf-topbar-center {
+.pf-spreadbar-center {
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
     font-variant-numeric: tabular-nums;
     letter-spacing: .08em;
     text-transform: uppercase;
     font-size: var(--type-xs);
     color: var(--text-dim);
+}
+
+/* Trim size. Not a settings-pane field: it is the one choice that changes
+   every measurement on the canvas, so it belongs next to the spread number. */
+.pf-paper-picker {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 4px 2px 7px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.pf-paper-label {
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.pf-paper-picker select {
+    font-family: var(--font-ui);
+    font-size: var(--type-xs);
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-xs);
+    padding: 2px 4px;
+    max-width: 170px;
 }
 
 .pf-topbar-divider,
@@ -750,6 +794,10 @@
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
     background: var(--surface-sunken);
+    /* The preview is a fixed-size miniature scaled from a full page, so a
+       portrait layout is much narrower than its 108px-tall box. Without this
+       the widest frame in a wide layout paints outside the card. */
+    overflow: hidden;
 }
 
 .pf-layout-canvas {
@@ -886,14 +934,31 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    /* NOT `place-items: center`. A centred grid item that is larger than its
+       track overflows in *both* directions, and the overflow on the start side
+       is unreachable — the page drifts out of reach instead of scrolling to it,
+       which is the misaligned, unreachable-canvas behaviour on a large trim.
+       `safe center` centres while still allowing scroll in the start direction. */
     display: grid;
-    place-items: center;
+    place-items: safe center;
     padding: var(--space-2xl);
 }
 
 .pf-canvas-zoom {
     position: relative;
     flex: 0 0 auto;
+}
+
+/* The page is laid out at its true trim size and scaled to fit the zoom box.
+   Because the transform is on this element, every child — elements, guides,
+   handles — scales together and keeps its page-pixel coordinates, which is what
+   lets the drag maths stay in page space regardless of zoom. */
+.pf-page {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+    will-change: transform;
 }
 
 .pf-zoombar {
@@ -1130,10 +1195,134 @@
     gap: var(--space-xs);
 }
 
+/* Caption typography sits on one row: font, size, weight and alignment are
+   judged against the image beside them, so stacking them into four stacked
+   fields would push everything else out of the inspector. The four columns are
+   explicitly sized because the inspector rail is ~280px — `1fr auto auto auto`
+   let the font name claim the space and clipped the alignment select against
+   the panel edge. */
+.pf-caption-type {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px 74px 68px;
+    gap: var(--space-xs);
+}
+
+.pf-ct-font,
+.pf-ct-weight,
+.pf-ct-align {
+    min-width: 0;
+    padding-inline: 5px;
+    font-size: var(--type-xxs);
+}
+
+.pf-ct-size {
+    font-variant-numeric: tabular-nums;
+    padding-inline: 5px;
+}
+
+/* The native colour input paints its own swatch and cannot be restyled, so it
+   is layered transparently over a chip that shows the value in text too. */
+.pf-colour-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 3px 6px 3px 3px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    cursor: pointer;
+}
+
+.pf-colour-chip:hover {
+    border-color: var(--text-faint);
+}
+
+.pf-colour-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid rgb(0 0 0 / .18);
+    flex: 0 0 auto;
+}
+
+.pf-colour-value {
+    font-size: var(--type-xxs);
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .04em;
+}
+
+.pf-colour-chip input[type="color"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.pf-colour-chip input[type="color"]:focus-visible {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip: auto;
+}
+
+/* Shot info is read-only reference, so it is set as a definition list rather
+   than editable fields — nothing here should invite a click that does nothing. */
+.pf-shot-info dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px var(--space-sm);
+    margin: 0;
+    font-size: var(--type-xxs);
+}
+
+.pf-shot-info dt {
+    color: var(--text-faint);
+}
+
+.pf-shot-info dd {
+    margin: 0;
+    color: var(--text-dim);
+    overflow-wrap: anywhere;
+}
+
 .pf-preset-row {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-xs);
+}
+
+/* ── Trim guides ─────────────────────────────────────────────────────────────
+   Drawn in the zoom layer so the insets are literal canvas pixels scaled by
+   zoom — the same numbers the export uses, at the same scale. */
+.pf-guides {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.pf-guide-safe {
+    position: absolute;
+    border: 1px dashed var(--accent-line);
+    opacity: .75;
+}
+
+/* The binding eats the inner edge of a spread, so it is called out separately
+   from the general safe area. */
+.pf-guide-gutter {
+    position: absolute;
+    background: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--accent) 12%, transparent) 0 4px,
+        transparent 4px 8px
+    );
+    border-right: 1px solid var(--accent-line);
 }
 
 .pf-layers {

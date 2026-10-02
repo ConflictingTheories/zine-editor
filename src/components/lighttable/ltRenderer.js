@@ -41,6 +41,7 @@ export class LtRenderer {
         this.lutKey = null
         this.curveKey = null
         this.cpuCanvas = null
+        this.previewCanvas = null
         this.mode = 'none'
     }
 
@@ -76,61 +77,61 @@ export class LtRenderer {
     /** Build the program, buffers and textures. Throws on any GPU failure. */
     startGpu(gl) {
         const program = gl.createProgram()
-            gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE))
-            gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE))
-            gl.linkProgram(program)
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                throw new Error(gl.getProgramInfoLog(program) || 'link failed')
-            }
-            this.gl = gl
-            this.program = program
+        gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE))
+        gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE))
+        gl.linkProgram(program)
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            throw new Error(gl.getProgramInfoLog(program) || 'link failed')
+        }
+        this.gl = gl
+        this.program = program
 
-            // Full-screen triangle.
-            const buffer = gl.createBuffer()
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
-            const pos = gl.getAttribLocation(program, 'p')
-            gl.enableVertexAttribArray(pos)
-            gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0)
+        // Full-screen triangle.
+        const buffer = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+        const pos = gl.getAttribLocation(program, 'p')
+        gl.enableVertexAttribArray(pos)
+        gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0)
 
-            this.texture = gl.createTexture()
-            gl.bindTexture(gl.TEXTURE_2D, this.texture)
-            for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
-                gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
-            }
-            for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
-                gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
-            }
+        this.texture = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, this.texture)
+        for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
+            gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
+        }
+        for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
+            gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
+        }
 
-            this.lutTexture = gl.createTexture()
-            gl.bindTexture(gl.TEXTURE_2D, this.lutTexture)
-            for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
-                gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
-            }
-            for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
-                gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
-            }
+        this.lutTexture = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, this.lutTexture)
+        for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
+            gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
+        }
+        for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
+            gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
+        }
 
-            this.curveTexture = gl.createTexture()
-            gl.activeTexture(gl.TEXTURE2)
-            gl.bindTexture(gl.TEXTURE_2D, this.curveTexture)
-            // A 1D curve needs NEAREST-independent linear filtering to hide the
-            // sampling step, but CLAMP_TO_EDGE so 0 and 1 stay anchored.
-            for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
-                gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
-            }
-            for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
-                gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
-            }
+        this.curveTexture = gl.createTexture()
+        gl.activeTexture(gl.TEXTURE2)
+        gl.bindTexture(gl.TEXTURE_2D, this.curveTexture)
+        // A 1D curve needs NEAREST-independent linear filtering to hide the
+        // sampling step, but CLAMP_TO_EDGE so 0 and 1 stay anchored.
+        for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
+            gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR)
+        }
+        for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) {
+            gl.texParameteri(gl.TEXTURE_2D, param, gl.CLAMP_TO_EDGE)
+        }
 
-            const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS)
-            for (let i = 0; i < count; i++) {
-                const info = gl.getActiveUniform(program, i)
-                const name = info.name.replace(/\[0\]$/, '')
-                this.uniforms[name] = gl.getUniformLocation(program, name)
-            }
+        const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS)
+        for (let i = 0; i < count; i++) {
+            const info = gl.getActiveUniform(program, i)
+            const name = info.name.replace(/\[0\]$/, '')
+            this.uniforms[name] = gl.getUniformLocation(program, name)
+        }
 
-            gl.useProgram(program)
+        gl.useProgram(program)
         gl.uniform1i(this.uniforms.uSource, 0)
         gl.uniform1i(this.uniforms.uLut, 1)
         gl.uniform1i(this.uniforms.uCurveLut, 2)
@@ -291,9 +292,21 @@ export class LtRenderer {
     }
 
     /** CPU fallback: render the recipe with the 2D pipeline instead. */
-    drawCpu(image, recipe) {
+    drawCpu(image, recipe, options = {}) {
         if (!image?.naturalWidth) return
-        renderRecipe(image, this.canvas, recipe, { maxWidth: 1400, maxHeight: 1000 })
+        const maxWidth = options.maxWidth ?? 1400
+        const maxHeight = options.maxHeight ?? 1000
+        if (maxWidth < this.canvas.width || maxHeight < this.canvas.height) {
+            this.previewCanvas ||= document.createElement('canvas')
+            renderRecipe(image, this.previewCanvas, recipe, { maxWidth, maxHeight })
+            const context = this.canvas.getContext('2d')
+            context?.drawImage(this.previewCanvas, 0, 0, this.canvas.width, this.canvas.height)
+            return
+        }
+        renderRecipe(image, this.canvas, recipe, {
+            maxWidth,
+            maxHeight
+        })
     }
 
     destroy() {

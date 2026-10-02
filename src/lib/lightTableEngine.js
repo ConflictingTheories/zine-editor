@@ -67,23 +67,36 @@ export const CONTROL_GROUPS = [
         ]
     },
     {
+        // Tone is the light: where the image sits and how far apart its
+        // extremes are. Every one of these is bipolar except contrast, which is
+        // a ratio around 1 — so the slider shows a centre detent for five of six.
+        id: 'presence',
+        label: 'Presence',
+        controls: [
+            ['clarity', 'Clarity', -1, 1, pct, true],
+            ['dehaze', 'Dehaze', -1, 1, pct, true],
+            ['vibrance', 'Vibrance', -1, 1, pct, true],
+            ['saturation', 'Saturation', 0, 2.5, pct, false]
+        ]
+    },
+    {
         id: 'colour',
         label: 'Colour',
         controls: [
             ['temperature', 'Temp', -1, 1, pct, true],
-            ['tint', 'Tint', -1, 1, pct, true],
-            ['saturation', 'Saturation', 0, 2.5, pct, false],
-            ['vibrance', 'Vibrance', -1, 1, pct, true]
+            ['tint', 'Tint', -1, 1, pct, true]
         ]
     },
     {
+        // Detail is texture, not tone. The renderer exposes one sharpen and one
+        // denoise control, so this stays honest about what actually moves the
+        // pixels rather than adding sub-controls that would silently do nothing.
         id: 'detail',
         label: 'Detail',
         controls: [
-            ['clarity', 'Clarity', -1, 1, pct, true],
-            ['dehaze', 'Dehaze', -1, 1, pct, true],
-            ['sharpen', 'Sharpen', 0, 1, pct, false],
-            ['denoise', 'Denoise', 0, 1, pct, false]
+            ['sharpen', 'Sharpening', 0, 1, pct, false],
+            ['denoise', 'Noise Reduction', 0, 1, pct, false],
+            ['fade', 'Fade', 0, 1, pct, false]
         ]
     },
     {
@@ -530,101 +543,158 @@ function boxBlur(source, target, radius) {
 
 // The grading stage, per pixel. Kept separate so bloom/halation can re-grade
 // the untouched source for their light-spread samples.
-function gradePixel(r, g, b, p) {
+/**
+ * Grade one pixel. `out` is written in place and returned.
+ *
+ * This is the innermost loop of the CPU render path — it runs once per output
+ * pixel, so at 1400x1000 that is 1.4M calls per frame. It originally built a
+ * fresh array for nearly every stage (`.map` eight times), which allocated
+ * roughly 11M short-lived arrays per frame and put the fallback path well over
+ * a second per edit. Everything here is now scalar math into `out`.
+ */
+function gradePixel(r, g, b, p, out = [0, 0, 0]) {
     // Exposure in linear light
-    const gain = Math.pow(2, p.exposure || 0)
-    let c = [linearToSrgb(srgbToLinear(r) * gain), linearToSrgb(srgbToLinear(g) * gain), linearToSrgb(srgbToLinear(b) * gain)]
+    const gain = p.exposureGain ?? Math.pow(2, p.exposure || 0)
+    let cr = r, cg = g, cb = b
+    if (gain !== 1) {
+        cr = linearToSrgb(srgbToLinear(r) * gain)
+        cg = linearToSrgb(srgbToLinear(g) * gain)
+        cb = linearToSrgb(srgbToLinear(b) * gain)
+    }
 
     // White balance
     const temp = p.temperature || 0, tint = p.tint || 0
-    c[0] *= 1 + temp * 0.18
-    c[2] *= 1 - temp * 0.18
-    c[1] *= 1 - Math.abs(tint) * 0.10
-    c[0] *= 1 + tint * 0.06
-    c[2] *= 1 + tint * 0.06
+    cr *= 1 + temp * 0.18
+    cb *= 1 - temp * 0.18
+    cg *= 1 - Math.abs(tint) * 0.10
+    cr *= 1 + tint * 0.06
+    cb *= 1 + tint * 0.06
 
-    let l = luma(c[0], c[1], c[2])
+    let l = luma(cr, cg, cb)
 
     // Tone: contrast, then luma-driven region weights
     const contrast = p.contrast ?? 1
-    c = c.map(v => (v - 0.5) * contrast + 0.5)
-    l = luma(c[0], c[1], c[2])
+    if (contrast !== 1) {
+        cr = (cr - 0.5) * contrast + 0.5
+        cg = (cg - 0.5) * contrast + 0.5
+        cb = (cb - 0.5) * contrast + 0.5
+    }
+    l = luma(cr, cg, cb)
     const shadows = p.shadows || 0, highlights = p.highlights || 0
-    c = c.map(v => v + (1 - l) * shadows * 0.24 + l * highlights * 0.18)
+    if (shadows || highlights) {
+        const ds = (1 - l) * shadows * 0.24
+        const dh = l * highlights * 0.18
+        cr += ds + dh; cg += ds + dh; cb += ds + dh
+    }
 
     // Whites / blacks endpoints
     const whites = p.whites || 0, blacks = p.blacks || 0
-    l = luma(c[0], c[1], c[2])
-    const highMask = smoothstep(0.75, 1, l), lowMask = 1 - smoothstep(0, 0.25, l)
-    c = c.map(v => v + highMask * whites * 0.20 + lowMask * blacks * 0.20)
+    if (whites || blacks) {
+        l = luma(cr, cg, cb)
+        const highMask = smoothstep(0.75, 1, l), lowMask = 1 - smoothstep(0, 0.25, l)
+        const d = highMask * whites * 0.20 + lowMask * blacks * 0.20
+        cr += d; cg += d; cb += d
+    }
 
     // Fade (lifted blacks)
     const fade = p.fade || 0
-    if (fade) c = c.map(v => v * (1 - fade) + fade * 0.10)
+    if (fade) {
+        const k = 1 - fade, lift = fade * 0.10
+        cr = cr * k + lift; cg = cg * k + lift; cb = cb * k + lift
+    }
 
     // Vibrance then saturation
-    l = luma(c[0], c[1], c[2])
-    const sat = Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2])
+    l = luma(cr, cg, cb)
+    const sat = Math.max(cr, cg, cb) - Math.min(cr, cg, cb)
     const vibrance = p.vibrance || 0
     if (vibrance) {
         const k = 1 + vibrance * (1 - sat)
-        c = c.map(v => l + (v - l) * k)
+        cr = l + (cr - l) * k; cg = l + (cg - l) * k; cb = l + (cb - l) * k
     }
     const saturation = p.saturation ?? 1
-    const l2 = luma(c[0], c[1], c[2])
-    c = c.map(v => l2 + (v - l2) * saturation)
+    if (saturation !== 1) {
+        const l2 = luma(cr, cg, cb)
+        cr = l2 + (cr - l2) * saturation
+        cg = l2 + (cg - l2) * saturation
+        cb = l2 + (cb - l2) * saturation
+    }
 
     // Clarity
     const clarity = p.clarity || 0
-    if (clarity) c = c.map(v => (v - 0.5) * (1 + clarity * 0.35) + 0.5)
+    if (clarity) {
+        const k = 1 + clarity * 0.35
+        cr = (cr - 0.5) * k + 0.5
+        cg = (cg - 0.5) * k + 0.5
+        cb = (cb - 0.5) * k + 0.5
+    }
 
     // Dehaze
     const dehaze = p.dehaze || 0
     if (dehaze) {
-        const dl = luma(c[0], c[1], c[2])
-        c = c.map(v => (dl + (v - dl) * (1 + dehaze * 0.5)) + dehaze * 0.06 * (dl - 0.5))
+        const dl = luma(cr, cg, cb)
+        const k = 1 + dehaze * 0.5
+        const add = dehaze * 0.06 * (dl - 0.5)
+        cr = (dl + (cr - dl) * k) + add
+        cg = (dl + (cg - dl) * k) + add
+        cb = (dl + (cb - dl) * k) + add
     }
 
-    return c
+    out[0] = cr; out[1] = cg; out[2] = cb
+    return out
 }
 
 // Geometry: map a destination pixel back to source coordinates, applying
 // crop, rotation, zoom and flip. Returns null when the sample is off-image.
-function mapGeometry(x, y, w, h, geo) {
+//
+// The rotation terms are the same for every pixel, so they are hoisted and
+// memoised rather than recomputed 1.4M times per frame.
+const geoCache = { key: null, cos: 1, sin: 0, zoom: 1 }
+function geoTerms(geo) {
+    const key = `${geo?.rotate || 0}|${geo?.zoom ?? 1}`
+    if (geoCache.key !== key) {
+        geoCache.key = key
+        geoCache.cos = Math.cos((geo?.rotate || 0) * Math.PI / 180)
+        geoCache.sin = Math.sin((geo?.rotate || 0) * Math.PI / 180)
+        geoCache.zoom = Math.max(0.01, geo?.zoom ?? 1)
+    }
+    return geoCache
+}
+function mapGeometry(x, y, w, h, geo, out = [0, 0]) {
     const crop = geo?.crop || [0, 0, 1, 1]
     let u = crop[0] + (x / w) * (crop[2] - crop[0])
     let v = crop[1] + (y / h) * (crop[3] - crop[1])
 
-    const rad = (geo?.rotate || 0) * Math.PI / 180
-    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const { cos, sin, zoom } = geoTerms(geo)
     const ox = u - 0.5, oy = v - 0.5
     let dx = ox * cos - oy * sin
     let dy = ox * sin + oy * cos
 
-    const zoom = Math.max(0.01, geo?.zoom ?? 1)
     dx /= zoom
     dy /= zoom
     if (geo?.flipH) dx = -dx
     if (geo?.flipV) dy = -dy
-    return [dx + 0.5, dy + 0.5]
+    out[0] = dx + 0.5
+    out[1] = dy + 0.5
+    return out
 }
 
 // Trilinear 3D LUT lookup, matching sampleLut() in the shader.
+// Writes into `rgb` in place and returns it — the original allocated four
+// arrays per pixel (one per `at` call plus a `.map`), which dominated any
+// LUT-using export.
 export function applyLut(rgb, lut, strength = 1) {
     if (!lut?.size || !lut?.data?.length) return rgb
     const n = lut.size
-    const at = (r, g, b) => {
-        const ri = Math.round(clamp(r) * (n - 1))
-        const gi = Math.round(clamp(g) * (n - 1))
-        const bi = Math.round(clamp(b) * (n - 1))
-        const i = ((bi * n + gi) * n + ri) * 3
-        return [lut.data[i], lut.data[i + 1], lut.data[i + 2]]
-    }
-    const out = [0, 1, 2].map(ch => {
-        const s = at(...rgb)[ch]
-        return rgb[ch] + (s - rgb[ch]) * strength
-    })
-    return out
+    const last = n - 1
+    const ri = Math.round(clamp(rgb[0]) * last)
+    const gi = Math.round(clamp(rgb[1]) * last)
+    const bi = Math.round(clamp(rgb[2]) * last)
+    const base = ((bi * n + gi) * n + ri) * 3
+    const d = lut.data
+    rgb[0] += (d[base] - rgb[0]) * strength
+    rgb[1] += (d[base + 1] - rgb[1]) * strength
+    rgb[2] += (d[base + 2] - rgb[2]) * strength
+    return rgb
 }
 
 /**
@@ -661,46 +731,68 @@ export function renderRecipe(source, target, recipe, options = {}) {
     const od = out.data
 
     const params = { ...GRADE_DEFAULTS, ...(recipe?.params || {}) }
+    params.exposureGain = Math.pow(2, params.exposure || 0)
     const fx = { ...FX_DEFAULTS, ...(recipe?.fx || {}) }
     const geo = recipe?.geometry || DEFAULT_RECIPE.geometry
-    const curves = recipe?.curves
-    const rgbCurve = channelCurve(recipe, 'rgb')
-    const rCurve = channelCurve(recipe, 'r')
-    const gCurve = channelCurve(recipe, 'g')
-    const bCurve = channelCurve(recipe, 'b')
+    const crop = geo.crop
+    const fullCrop = !crop || (crop[0] === 0 && crop[1] === 0 && crop[2] === 1 && crop[3] === 1)
+    const identityGeometry = fullCrop
+        && (((geo.rotate || 0) % 360 + 360) % 360) === 0
+        && (geo.zoom ?? 1) === 1
+        && !geo.flipH
+        && !geo.flipV
+    const curveData = curvesAreIdentity(recipe) ? null : bakeCurveLut(recipe).data
+    const curveAt = (value, channel) => {
+        const position = clamp(value) * (CURVE_LUT_SIZE - 1)
+        const low = Math.floor(position)
+        const high = Math.min(CURVE_LUT_SIZE - 1, low + 1)
+        const offset = channel
+        const from = curveData[low * 4 + offset]
+        const to = curveData[high * 4 + offset]
+        return (from + (to - from) * (position - low)) / 255
+    }
     const isBw = Boolean(recipe?.bw)
     const lutStrength = recipe?.lutStrength ?? 1
 
     // Bilinear sample of the resized source at normalised coordinates.
-    const sampleSrc = (u, v) => {
+    // Writes into the caller's buffer rather than allocating, for the same
+    // reason gradePixel does — this runs 1.4M times per frame. The caller must
+    // pass a distinct buffer for any sample it intends to keep: the chroma
+    // pass needs three of them live at once, so a shared scratch would make
+    // the red and blue taps read the same pixel and quietly kill the effect.
+    const sampleSrc = (u, v, sampleOut) => {
         const x = u * (w - 1), y = v * (h - 1)
         const x0 = Math.floor(x), y0 = Math.floor(y)
         const x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1)
         const fx0 = x - x0, fy0 = y - y0
-        const out = [0, 0, 0]
+        const row0 = (y0 * w) * 4, row1 = (y1 * w) * 4
         for (let ch = 0; ch < 3; ch++) {
-            const p00 = sd[(y0 * w + x0) * 4 + ch]
-            const p10 = sd[(y0 * w + x1) * 4 + ch]
-            const p01 = sd[(y1 * w + x0) * 4 + ch]
-            const p11 = sd[(y1 * w + x1) * 4 + ch]
-            out[ch] = (p00 * (1 - fx0) + p10 * fx0) * (1 - fy0) + (p01 * (1 - fx0) + p11 * fx0) * fy0
+            const p00 = sd[row0 + x0 * 4 + ch]
+            const p10 = sd[row0 + x1 * 4 + ch]
+            const p01 = sd[row1 + x0 * 4 + ch]
+            const p11 = sd[row1 + x1 * 4 + ch]
+            sampleOut[ch] = ((p00 * (1 - fx0) + p10 * fx0) * (1 - fy0) + (p01 * (1 - fx0) + p11 * fx0) * fy0) / 255
         }
-        return out.map(v2 => v2 / 255)
+        return sampleOut
     }
 
     // Bloom / halation need blurred, graded versions of the source. Build a
     // downsampled copy once instead of re-grading per pixel later.
     let brightPass = null
     if (fx.bloom > 0.001 || fx.halation > 0.001) {
+        const brightSrc = [0, 0, 0]
+        const brightGrd = [0, 0, 0]
         const bw = Math.max(1, Math.round(w / 2)), bh = Math.max(1, Math.round(h / 2))
         const small = new Uint8ClampedArray(bw * bh * 4)
+        const brightPoint = [0, 0]
         for (let y = 0; y < bh; y++) {
             for (let x = 0; x < bw; x++) {
-                const [su, sv] = mapGeometry((x + 0.5) / bw, (y + 0.5) / bh, 1, 1, geo)
+            const point = mapGeometry((x + 0.5) / bw, (y + 0.5) / bh, 1, 1, geo, brightPoint)
+            const su = point[0], sv = point[1]
                 const o = (y * bw + x) * 4
                 if (su < 0 || su > 1 || sv < 0 || sv > 1) { small[o + 3] = 255; continue }
-                const s = sampleSrc(su, sv)
-                const gr = gradePixel(s[0], s[1], s[2], params)
+                const s = sampleSrc(su, sv, brightSrc)
+                const gr = gradePixel(s[0], s[1], s[2], params, brightGrd)
                 const l = luma(gr[0], gr[1], gr[2])
                 small[o] = clamp(gr[0]) * 255
                 small[o + 1] = clamp(gr[1]) * 255
@@ -714,7 +806,7 @@ export function renderRecipe(source, target, recipe, options = {}) {
     }
 
     const sampleBright = (u, v) => {
-        if (!brightPass) return [0, 0, 0]
+        if (!brightPass) return [0, 0, 0];
         const x = clamp(u) * (brightPass.w - 1), y = clamp(v) * (brightPass.h - 1)
         const x0 = Math.floor(x), y0 = Math.floor(y)
         const x1 = Math.min(brightPass.w - 1, x0 + 1), y1 = Math.min(brightPass.h - 1, y0 + 1)
@@ -737,28 +829,48 @@ export function renderRecipe(source, target, recipe, options = {}) {
         return (s - Math.floor(s)) - 0.5
     }
 
+    // Scratch buffers, reused for every pixel. At 1400x1000 this loop runs 1.4M
+    // times; allocating a fresh [r,g,b] per pixel was the dominant cost and is
+    // what made the CPU fallback feel like it was rendering a slideshow.
+    // Three separate ones: the chroma pass needs the base sample and two
+    // offset taps alive at the same time.
+    const px = [0, 0, 0]
+    const chromaR = [0, 0, 0]
+    const chromaB = [0, 0, 0]
+
+    const point = [0, 0]
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const o = (y * w + x) * 4
             const uvx = (x + 0.5) / w, uvy = (y + 0.5) / h
-            const [su, sv] = mapGeometry(uvx, uvy, 1, 1, geo)
-            if (su < 0 || su > 1 || sv < 0 || sv > 1) {
-                od[o] = 0; od[o + 1] = 0; od[o + 2] = 0; od[o + 3] = 255
-                continue
+            let s
+            if (identityGeometry) {
+                px[0] = sd[o] / 255
+                px[1] = sd[o + 1] / 255
+                px[2] = sd[o + 2] / 255
+                s = px
+            } else {
+                const mapped = mapGeometry(uvx, uvy, 1, 1, geo, point)
+                const su = mapped[0], sv = mapped[1]
+                if (su < 0 || su > 1 || sv < 0 || sv > 1) {
+                    od[o] = 0; od[o + 1] = 0; od[o + 2] = 0; od[o + 3] = 255
+                    continue
+                }
+                s = sampleSrc(su, sv, px)
             }
-            const s = sampleSrc(su, sv)
-            let c = gradePixel(s[0], s[1], s[2], params)
-
-            // Tone curves
-            if (rgbCurve) c = c.map((v, i) => curveValue(v, rgbCurve))
-            if (rCurve) c[0] = curveValue(c[0], rCurve)
-            if (gCurve) c[1] = curveValue(c[1], gCurve)
-            if (bCurve) c[2] = curveValue(c[2], bCurve)
+            const c = gradePixel(s[0], s[1], s[2], params, px)
+            if (curveData) {
+                c[0] = curveAt(c[0], 0)
+                c[1] = curveAt(c[1], 1)
+                c[2] = curveAt(c[2], 2)
+            }
 
             // Bloom
             if (fx.bloom > 0.001) {
                 const bl = sampleBright(uvx, uvy)
-                c = c.map((v, i) => v + Math.max(0, bl[i] - 0.5) * fx.bloom * 1.6)
+                c[0] += Math.max(0, bl[0] - 0.5) * fx.bloom * 1.6
+                c[1] += Math.max(0, bl[1] - 0.5) * fx.bloom * 1.6
+                c[2] += Math.max(0, bl[2] - 0.5) * fx.bloom * 1.6
             }
 
             // Halation — warm red bleed around highlights
@@ -769,13 +881,14 @@ export function renderRecipe(source, target, recipe, options = {}) {
                 c[0] += 1.0 * k; c[1] += 0.42 * k; c[2] += 0.18 * k
             }
 
-            // Chromatic aberration
+            // Chromatic aberration — two offset taps of the *source*, each
+            // graded independently, then the red and blue channels swapped in.
             if (fx.chroma > 0.001) {
                 const d = 0.006 * fx.chroma
-                const sr = sampleSrc(clamp(su + d, 0, 1), sv)
-                const sb = sampleSrc(clamp(su - d, 0, 1), sv)
-                c[0] = gradePixel(sr[0], sr[1], sr[2], params)[0]
-                c[2] = gradePixel(sb[0], sb[1], sb[2], params)[2]
+                const sr = sampleSrc(clamp(su + d, 0, 1), sv, chromaR)
+                const sb = sampleSrc(clamp(su - d, 0, 1), sv, chromaB)
+                c[0] = gradePixel(sr[0], sr[1], sr[2], params, chromaR)[0]
+                c[2] = gradePixel(sb[0], sb[1], sb[2], params, chromaB)[2]
             }
 
             // Split tone
@@ -788,26 +901,34 @@ export function renderRecipe(source, target, recipe, options = {}) {
             }
 
             // LUT
-            if (recipe?.lut && lutStrength > 0.001) c = applyLut(c, recipe.lut, lutStrength)
+            if (recipe?.lut && lutStrength > 0.001) applyLut(c, recipe.lut, lutStrength)
 
             // Vignette — measured on screen space, not source space
             if (fx.vignette > 0.001) {
                 const dist = Math.hypot(uvx - 0.5, uvy - 0.5) * 1.414
                 const k = 1 - smoothstep(0.35, 0.95, dist) * fx.vignette * 0.8
-                c = c.map(v => v * k)
+                c[0] *= k; c[1] *= k; c[2] *= k
             }
 
             // Monochrome
             if (isBw) {
                 const l = luma(c[0], c[1], c[2])
-                c = [l, l, l]
+                c[0] = l; c[1] = l; c[2] = l
             }
 
             // Posterize
-            if (fx.posterize > 0.001) c = c.map(v => v + (Math.floor(v * 8) / 8 - v) * fx.posterize)
+            if (fx.posterize > 0.001) {
+                const k = fx.posterize
+                c[0] += (Math.floor(c[0] * 8) / 8 - c[0]) * k
+                c[1] += (Math.floor(c[1] * 8) / 8 - c[1]) * k
+                c[2] += (Math.floor(c[2] * 8) / 8 - c[2]) * k
+            }
 
             // Grain (deterministic)
-            if (fx.grain > 0.001) c = c.map(v => v + grainSeed(x, y) * 0.14 * fx.grain)
+            if (fx.grain > 0.001) {
+                const g = grainSeed(x, y) * 0.14 * fx.grain
+                c[0] += g; c[1] += g; c[2] += g
+            }
 
             od[o] = clamp(c[0]) * 255
             od[o + 1] = clamp(c[1]) * 255
@@ -894,6 +1015,9 @@ export function analyseImage(image) {
     const white = [0, 1, 2].map(i => percentile(hist[i], 0.98))
     const meanR = sumR / n / 255, meanG = sumG / n / 255, meanB = sumB / n / 255
     const mean = (meanR + meanG + meanB) / 3
+    // Rec. 709 luma, so the EV readout describes perceived brightness rather
+    // than a flat average that a saturated blue would drag down.
+    const meanLuma = meanR * 0.2126 + meanG * 0.7152 + meanB * 0.0722
 
     // Exposure aims to place the average pixel near a pleasing midtone.
     const exposure = clamp(Math.log2(0.45 / Math.max(0.02, mean)), -3, 3)
@@ -912,7 +1036,8 @@ export function analyseImage(image) {
             contrast: Number(contrast.toFixed(2))
         },
         blacks: -clamp(black[1] / 255 * 1.4, 0, 1),
-        whites: clamp((white[1] - 220) / 255 * 1.2, 0, 1)
+        whites: clamp((white[1] - 220) / 255 * 1.2, 0, 1),
+        meanLuma
     }
 }
 
