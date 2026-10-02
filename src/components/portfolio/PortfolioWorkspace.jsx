@@ -16,6 +16,7 @@ import Canvas from '../Canvas.jsx'
 import PropertyPanel from '../PropertyPanel.jsx'
 import { FRAME_PRESETS, FIT_MODES, IMAGE_POSITIONS, createPhotoFrame, findFreeSlot } from '../../lib/photoLibrary.js'
 import { filesToAssets, commitAssets } from '../../utils/photoImport.js'
+import { PHOTO_ACCEPT, isRawPhotoFile } from '../../lib/rawPhoto.js'
 import { PAPER_SIZES } from '../../constants.js'
 import {
     bookGeometry, formatTrim, spreadGeometry,
@@ -559,7 +560,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     }, [assets, safeIdx, replaceElementImage])
 
     const handleImport = useCallback(async (files) => {
-        const list = Array.from(files || []).filter(file => file?.type?.startsWith('image/'))
+        const list = Array.from(files || []).filter(file => file?.type?.startsWith('image/') || isRawPhotoFile(file))
         if (!list.length) return
         const created = await filesToAssets(list)
         if (!created.length) return
@@ -573,7 +574,7 @@ export default function PortfolioWorkspace({ project, pageIdx }) {
     const openReplacePicker = useCallback((element) => {
         const input = document.createElement('input')
         input.type = 'file'
-        input.accept = 'image/*'
+        input.accept = PHOTO_ACCEPT
         input.onchange = async (e) => {
             const file = e.target.files?.[0]
             if (!file) return

@@ -10,6 +10,7 @@ import ContextMenu from './ContextMenu.jsx'
 import CanvasElement from './CanvasElement.jsx'
 import { PAGE_W, PAGE_H } from '../constants.js'
 import { resolvePublicationAsset } from '../utils/assets.js'
+import { isRawPhotoFile } from '../lib/rawPhoto.js'
 
 /**
  * Component: Canvas
@@ -59,7 +60,7 @@ function Canvas({ page, pageIdx, snapOn = true, gridOn = false, zoom = 100, impo
     const handleDrop = useCallback((event) => {
         event.preventDefault()
         const files = Array.from(event.dataTransfer.files || [])
-        const imageFiles = files.filter(file => file.type.startsWith('image/'))
+        const imageFiles = files.filter(file => file.type.startsWith('image/') || isRawPhotoFile(file))
         const audioFiles = files.filter(file => file.type.startsWith('audio/'))
         if (imageFiles.length && importFiles) importFiles(imageFiles)
         audioFiles.forEach((audioFile, index) => {

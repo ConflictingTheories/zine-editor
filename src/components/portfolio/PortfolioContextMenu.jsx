@@ -22,6 +22,7 @@ import {
     createPhotoFrame
 } from '../../lib/photoLibrary.js'
 import { filesToAssets, commitAssets } from '../../utils/photoImport.js'
+import { PHOTO_ACCEPT, isRawPhotoFile } from '../../lib/rawPhoto.js'
 import { PAGE_W, PAGE_H } from '../../constants.js'
 
 /** A compact horizontal picker for frame treatments and fit modes. */
@@ -210,10 +211,10 @@ export default function PortfolioContextMenu({ x, y, visible, onClose, pageIdx, 
     const pickFromDisk = async () => {
         const input = document.createElement('input')
         input.type = 'file'
-        input.accept = 'image/*'
+        input.accept = PHOTO_ACCEPT
         input.multiple = true
         input.onchange = async (e) => {
-            const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'))
+            const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/') || isRawPhotoFile(f))
             if (!files.length) return
             const created = await filesToAssets(files)
             if (!created.length) return

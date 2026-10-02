@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import { filesToAssets, commitAssets, measureAssets } from '../utils/photoImport.js'
+import { PHOTO_ACCEPT } from '../lib/rawPhoto.js'
 import { putPhoto } from '../lib/photoStore.js'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
@@ -352,7 +353,7 @@ function Editor() {
                             <div className="ed-tool-group">
                                 <span className="ed-tool-group-label">Import</span>
                                 <button className="ed-tool icon-tool" title="Import a single image" onClick={handleAddImage}><IcoImport /><span>Image</span></button>
-                                <button className="ed-tool icon-tool" title="Bulk import images to library" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = true; i.onchange = e => importFiles(e.target.files); i.click() }}><IcoImport /><span>Bulk</span></button>
+                                <button className="ed-tool icon-tool" title="Bulk import images to library" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = PHOTO_ACCEPT; i.multiple = true; i.onchange = e => importFiles(e.target.files); i.click() }}><IcoImport /><span>Bulk</span></button>
                                 <button className="ed-tool icon-tool" title="Import audio files" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'audio/*'; i.multiple = true; i.onchange = e => importAudioFiles(e.target.files); i.click() }}><IcoAudio /><span>Audio</span></button>
                             </div>
                             <span className="ed-toolbar-divider" aria-hidden="true" />

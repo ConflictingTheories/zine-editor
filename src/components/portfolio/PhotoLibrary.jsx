@@ -29,6 +29,7 @@ import {
     fitAssetToBox
 } from '../../lib/photoLibrary.js'
 import { filesToAssets, commitAssets } from '../../utils/photoImport.js'
+import { PHOTO_ACCEPT, isRawPhotoFile } from '../../lib/rawPhoto.js'
 import { PAGE_W, PAGE_H } from '../../constants.js'
 
 /**
@@ -111,7 +112,7 @@ function PhotoLibrary({ page, pageIdx, selectedElement, compact = false }) {
      * can start arranging before every import has settled.
      */
     const importPhotos = useCallback(async (files) => {
-        const list = Array.from(files || []).filter(file => file?.type?.startsWith('image/'))
+        const list = Array.from(files || []).filter(file => file?.type?.startsWith('image/') || isRawPhotoFile(file))
         if (!list.length) return
         setImporting(list.length)
         try {
@@ -373,7 +374,7 @@ function PhotoLibrary({ page, pageIdx, selectedElement, compact = false }) {
             <input
                 ref={inputRef}
                 type="file"
-                accept="image/*"
+                accept={PHOTO_ACCEPT}
                 multiple
                 style={{ display: 'none' }}
                 onChange={e => { importPhotos(e.target.files); e.target.value = '' }}
@@ -381,7 +382,7 @@ function PhotoLibrary({ page, pageIdx, selectedElement, compact = false }) {
             <input
                 ref={folderRef}
                 type="file"
-                accept="image/*"
+                accept={PHOTO_ACCEPT}
                 multiple
                 style={{ display: 'none' }}
                 webkitdirectory=""

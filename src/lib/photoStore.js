@@ -129,7 +129,13 @@ export const deletePhotos = async (ids) => {
     const list = Array.isArray(ids) ? ids.filter(Boolean) : [ids].filter(Boolean)
     if (!list.length) return 0
     try {
-        await withStore('readwrite', store => { list.forEach(id => store.delete(id)) })
+        await withStore('readwrite', store => {
+            list.forEach(id => {
+                store.delete(id)
+                // Also drop the raw bytes stored at import time for develop.
+                if (!id.startsWith('raw:')) store.delete(`raw:${id}`)
+            })
+        })
         return list.length
     } catch {
         return 0

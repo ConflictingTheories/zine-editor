@@ -7,6 +7,7 @@
  */
 
 import { makeThumbnail, putPhoto, getPhotoBlob } from '../lib/photoStore.js'
+import { isRawPhotoFile, rawFormatLabel, extractEmbeddedJpeg } from '../lib/rawPhoto.js'
 
 /** Filesystem-friendly, sortable name derived from the original filename. */
 export const photoNameFromFile = (file) =>
@@ -31,6 +32,13 @@ const readAsDataUrl = (file) => new Promise((resolve, reject) => {
     reader.readAsDataURL(file)
 })
 
+/**
+ * Raw bytes held between import and commit, keyed by asset id. The original
+ * file can't live on the asset object — records get JSON-serialised — so
+ * commitAssets moves these into IndexedDB under `raw:${id}` and clears them.
+ */
+const pendingRawFiles = new Map()
+
 const toObjectUrl = async (id) => {
     const blob = await getPhotoBlob(id)
     if (!blob) return null
@@ -47,23 +55,43 @@ const toObjectUrl = async (id) => {
  * long-lived library record never carries base64.
  */
 export const filesToAssets = async (files) => {
-    const images = Array.from(files || []).filter(file => file?.type?.startsWith('image/'))
+    const images = Array.from(files || []).filter(file => file?.type?.startsWith('image/') || isRawPhotoFile(file))
     if (!images.length) return []
 
     const stamp = Date.now()
-    const assets = await Promise.all(images.map(async (file, index) => ({
-        id: `photo-${stamp}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-        name: photoNameFromFile(file),
-        originalName: file.name,
-        shoot: shootFromFile(file),
-        src: await readAsDataUrl(file),
-        bytes: file.size || 0,
-        kind: 'image',
-        addedAt: new Date().toISOString(),
-        favorite: false,
-        flagged: false,
-        tags: []
-    })))
+    const assets = []
+    for (const [index, file] of images.entries()) {
+        let src, kind = 'image', format, rawFile = null
+        if (isRawPhotoFile(file)) {
+            // Browsers can't decode the Bayer data in .NEF/.CR3/… but each
+            // carries a full-resolution JPEG preview — surface that as the
+            // working image and tag the asset as RAW.
+            const preview = await extractEmbeddedJpeg(file)
+            if (!preview) continue
+            src = await readAsDataUrl(new File([preview], file.name, { type: 'image/jpeg' }))
+            format = rawFormatLabel(file)
+            // Stash the original bytes so commitAssets can keep them for develop.
+            rawFile = file
+        } else {
+            src = await readAsDataUrl(file)
+        }
+        const id = `photo-${stamp}-${index}-${Math.random().toString(36).slice(2, 8)}`
+        if (rawFile) pendingRawFiles.set(id, rawFile)
+        assets.push({
+            id,
+            name: photoNameFromFile(file),
+            originalName: file.name,
+            shoot: shootFromFile(file),
+            src,
+            bytes: file.size || 0,
+            kind,
+            format,
+            addedAt: new Date().toISOString(),
+            favorite: false,
+            flagged: false,
+            tags: []
+        })
+    }
     return assets
 }
 
@@ -99,6 +127,11 @@ export const commitAssets = async (assets) => {
         if (!asset?.id || !asset.src) return asset
         const stored = await putPhoto(asset.id, asset.src)
         if (!stored) return asset
+        const rawFile = pendingRawFiles.get(asset.id)
+        if (rawFile) {
+            await putPhoto(`raw:${asset.id}`, rawFile)
+            pendingRawFiles.delete(asset.id)
+        }
         const thumb = asset.thumb || await makeThumbnail(asset.src)
         return { ...asset, thumb, src: await toObjectUrl(asset.id) }
     }))

@@ -27,6 +27,8 @@ import {
 import { LtRenderer } from './ltRenderer.js'
 import StorageManager from '../StorageManager.jsx'
 import { filesToAssets, commitAssets, measureAssets } from '../../utils/photoImport.js'
+import { PHOTO_ACCEPT } from '../../lib/rawPhoto.js'
+import { isRawAsset, developRawAsset, DEFAULT_DEVELOP } from '../../lib/rawDevelop.js'
 
 /** A storage/box glyph for the library manager button. */
 const StorageIcon = () => (
@@ -161,6 +163,18 @@ function LightTable() {
     const [storageOpen, setStorageOpen] = useState(false)
     const [adjusting, setAdjusting] = useState(false)
     const [zoom, setZoom] = useState(1)
+    // Raw develop: draft settings (sliders) and applied settings — only the
+    // latter triggers a decode. A fresh 36 MB NEF must not decode on every
+    // pixel of slider travel.
+    const [rawDraft, setRawDraft] = useState(DEFAULT_DEVELOP)
+    const [appliedRaw, setAppliedRaw] = useState(DEFAULT_DEVELOP)
+    const [rawDecode, setRawDecode] = useState('idle') // idle|decoding|ready|fallback
+
+    useEffect(() => {
+        setRawDraft(DEFAULT_DEVELOP)
+        setAppliedRaw(DEFAULT_DEVELOP)
+        setRawDecode('idle')
+    }, [selectedId])
 
     const canvasRef = useRef(null)
     const rendererRef = useRef(null)
@@ -236,20 +250,41 @@ function LightTable() {
             imageRef.current = null
             return
         }
-        const img = new Image()
-        img.crossOrigin = 'anonymous'
-        img.onload = () => {
-            imageRef.current = img
-            // The renderer may not exist yet on a cold mount (it is created when
-            // the canvas mounts, which happens after the image is chosen). The
-            // lifecycle effect uploads a pending image once it comes up, but
-            // guard here too so a late-loading image never draws into null.
-            rendererRef.current?.uploadImage(img)
-            draw()
+        let cancelled = false
+        const loadImage = (src) => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            img.onload = () => {
+                if (cancelled) return
+                imageRef.current = img
+                // The renderer may not exist yet on a cold mount (it is created
+                // when the canvas mounts, which happens after the image is
+                // chosen). The lifecycle effect uploads a pending image once it
+                // comes up, but guard here too so a late-loading image never
+                // draws into null.
+                rendererRef.current?.uploadImage(img)
+                draw()
+            }
+            img.src = src
         }
-        img.src = selectedAsset.src
-        return () => { img.onload = null }
-    }, [selectedAsset, rendererMode])
+        if (isRawAsset(selectedAsset)) {
+            setRawDecode('decoding')
+            developRawAsset(selectedAsset, appliedRaw).then(developed => {
+                if (cancelled) return
+                if (developed) {
+                    setRawDecode('ready')
+                    loadImage(developed)
+                } else {
+                    setRawDecode('fallback')
+                    loadImage(selectedAsset.src)
+                }
+            })
+        } else {
+            setRawDecode('idle')
+            loadImage(selectedAsset.src)
+        }
+        return () => { cancelled = true }
+    }, [selectedAsset, rendererMode, appliedRaw])
 
     const imageStats = useMemo(() => {
         const img = imageRef.current
@@ -680,7 +715,7 @@ function LightTable() {
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept={PHOTO_ACCEPT}
                     multiple
                     style={{ display: 'none' }}
                     onChange={e => { importFiles(e.target.files); e.target.value = '' }}
@@ -929,6 +964,41 @@ function LightTable() {
                         {/* ── Develop ─────────────────────────────────── */}
                         {tab === 'develop' && (
                             <>
+                                {isRawAsset(selectedAsset) && (
+                                    <div className="lt-group">
+                                        <div className="lt-group-head">Raw Develop · {selectedAsset?.format}</div>
+                                        <LtSlider
+                                            label="Exposure"
+                                            value={rawDraft.expShift}
+                                            onInteraction={setAdjusting}
+                                            onChange={v => setRawDraft(d => ({ ...d, expShift: v }))}
+                                            spec={{ min: 0.25, max: 4, step: 0.05, neutral: 1, format: v => `${v.toFixed(2)}×` }}
+                                        />
+                                        <div className="lt-row">
+                                            <label>Camera white balance</label>
+                                            <button
+                                                className={`lt-switch${rawDraft.useCameraWb ? ' on' : ''}`}
+                                                onClick={() => setRawDraft(d => ({ ...d, useCameraWb: !d.useCameraWb }))}
+                                            />
+                                        </div>
+                                        <div className="lt-row">
+                                            <label>Full-resolution develop (slow)</label>
+                                            <button
+                                                className={`lt-switch${!rawDraft.halfSize ? ' on' : ''}`}
+                                                onClick={() => setRawDraft(d => ({ ...d, halfSize: !d.halfSize }))}
+                                            />
+                                        </div>
+                                        <button
+                                            className="lt-btn"
+                                            disabled={rawDecode === 'decoding'}
+                                            onClick={() => setAppliedRaw({ ...rawDraft })}
+                                        >
+                                            {rawDecode === 'decoding' ? 'Developing…' : 'Develop raw'}
+                                        </button>
+                                        {rawDecode === 'ready' && <p className="lt-help">Developed from raw sensor data via LibRaw.</p>}
+                                        {rawDecode === 'fallback' && <p className="lt-help">Raw bytes not available for this photo — showing the embedded preview.</p>}
+                                    </div>
+                                )}
                                 <div className="lt-group">
                                     <div className="lt-group-head">Presets</div>
                                     <LtPresetStrip
