@@ -2,7 +2,7 @@
   "name": "zine",
   "version": "1.0.0",
   "private": true,
-  "description": "SVRN Publisher - Zine Publishing Platform",
+  "description": "SVRN Publisher - Pixozine Publishing Platform",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -23,7 +23,7 @@
     "migrate": "knex migrate:latest --knexfile server/knexfile.cjs",
     "rollback": "knex migrate:rollback --knexfile server/knexfile.cjs",
     "nuke-db": "rm -f server/data/database.sqlite && knex migrate:latest --knexfile server/knexfile.cjs",
-    "test": "node --test packages/*/test/*.test.js",
+    "test": "node --test packages/*/test/*.test.js server/test/*.test.cjs",
     "dev:reader": "vite --config apps/reader/vite.config.js"
   },
   "repository": {

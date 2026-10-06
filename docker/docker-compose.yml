@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.backend
-    container_name: void-press-backend
+    container_name: svrn-backend
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -36,7 +36,7 @@ services:
       dockerfile: docker/Dockerfile.frontend
       args:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
-    container_name: void-press-frontend
+    container_name: svrn-frontend
     restart: unless-stopped
     ports:
       - "5173:80"

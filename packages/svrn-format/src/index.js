@@ -2,7 +2,9 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 
 export const FORMAT_VERSION = '1.0.0'
 export const MANIFEST_PATH = 'manifest.json'
-export const CONTENT_PATH = 'content/zine.json'
+export const CONTENT_PATH = 'content/pixozine.json'
+/** Archives packed before the pixozine rename used this path; still readable. */
+export const LEGACY_CONTENT_PATH = 'content/zine.json'
 
 const encoder = new TextEncoder()
 const isDataUrl = value => typeof value === 'string' && value.startsWith('data:')
@@ -42,7 +44,7 @@ export function normalizeProject(input) {
     pages: pages.map((page, pageIndex) => ({
       id: String(page.id || `page-${pageIndex + 1}`), background: page.background || '#ffffff', backgroundAudio: page.backgroundAudio || null, texture: page.texture || null,
       orientation: page.orientation || 'portrait', bgm: page.bgm || null, isLocked: Boolean(page.isLocked),
-      password: page.password || null, interactions: Array.isArray(page.interactions) ? page.interactions : [], elements: Array.isArray(page.elements) ? page.elements : []
+      password: page.password || null, lock: page.lock || null, // P10: encrypted page envelope (opaque to the server) interactions: Array.isArray(page.interactions) ? page.interactions : [], elements: Array.isArray(page.elements) ? page.elements : []
     }))
   }
 }
@@ -138,12 +140,13 @@ export async function unpackSvrn(input) {
   else bytes = input instanceof Uint8Array ? input : new Uint8Array(input)
   let entries
   try { entries = unzipSync(bytes) } catch { throw new Error('Invalid .svrn archive') }
-  if (!entries[MANIFEST_PATH] || !entries[CONTENT_PATH]) throw new Error('Invalid .svrn archive: manifest.json and content/zine.json are required')
+  const contentEntry = entries[CONTENT_PATH] || entries[LEGACY_CONTENT_PATH]
+  if (!entries[MANIFEST_PATH] || !contentEntry) throw new Error('Invalid .svrn archive: manifest.json and content/pixozine.json are required')
   const manifest = JSON.parse(strFromU8(entries[MANIFEST_PATH]))
   if (manifest.formatVersion !== FORMAT_VERSION) throw new Error(`Unsupported SVRN format ${manifest.formatVersion}`)
   for (const [file, expected] of Object.entries(manifest.hashes || {})) {
     if (!entries[file]) throw new Error(`Missing package file: ${file}`)
     if (await sha256(entries[file]) !== expected) throw new Error(`Integrity check failed: ${file}`)
   }
-  return { manifest, project: normalizeProject(JSON.parse(strFromU8(entries[CONTENT_PATH]))), entries }
+  return { manifest, project: normalizeProject(JSON.parse(strFromU8(contentEntry))), entries }
 }

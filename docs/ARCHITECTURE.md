@@ -10,7 +10,7 @@
 │  Dashboard ───┐                                                      │
 │    │          │                                                      │
 │    │    ┌─────▼─────────────────────────────────────────┐           │
-│    │    │ Create Zine Modal (Theme Picker)              │           │
+│    │    │ Create Pixozine Modal (Theme Picker)              │           │
 │    │    └──────────────────────────────────────────────┘           │
 │    │                                                                  │
 │    └─────────────────────┐                                           │
@@ -34,7 +34,7 @@
 │   ┌─────────────────┐        ┌──────────────────┐  ┌────────────┐ │
 │   │ VPContext State │        │ Reader Component │  │ Export File│ │
 │   │                 │        │                  │  │            │ │
-│   │ • projects []   │        │ - Display zine  │  │ • HTML    │ │
+│   │ • projects []   │        │ - Display pixozine  │  │ • HTML    │ │
 │   │ • currentProj   │        │ - Navigate      │  │ • PDF     │ │
 │   │ • modals {}     │        │ - Interact      │  │ • Flipbk  │ │
 │   │ • user {}       │        │                  │  │           │ │
@@ -90,7 +90,7 @@
         │ │ Business Logic                   │                    │
         │ ├──────────────────────────────────┤                    │
         │ │ • User management                │                    │
-        │ │ • Zine CRUD operations           │                    │
+        │ │ • Pixozine CRUD operations           │                    │
         │ │ • Publishing workflow            │                    │
         │ │ • Discovery/search               │                    │
         │ └──────────────────────────────────┘                    │
@@ -171,7 +171,7 @@ AFTER:  Reader Close button → showView('discover') → Back to list
 │  ├────────────────────────────────────────────────────────────┤  │
 │  │                                                            │  │
 │  │  currentView = 'dashboard'  ───► Dashboard Component     │  │
-│  │    ├─ Show all user's zines                             │  │
+│  │    ├─ Show all user's pixozines                             │  │
 │  │    ├─ Each card shows Create/Edit/Rename/Delete         │  │
 │  │    ├─ Status badges (Published/Draft)                   │  │
 │  │    └─ Click Edit → switch currentView to 'editor'       │  │
@@ -185,11 +185,11 @@ AFTER:  Reader Close button → showView('discover') → Back to list
 │  │  currentView = 'discover'   ───► Discover Component     │  │
 │  │    ├─ Filter buttons (by genre)                         │  │
 │  │    ├─ Search box                                        │  │
-│  │    ├─ Grid of published zines                           │  │
-│  │    └─ Click card → load zine → currentView='reader'     │  │
+│  │    ├─ Grid of published pixozines                           │  │
+│  │    └─ Click card → load pixozine → currentView='reader'     │  │
 │  │                                                            │  │
 │  │  currentView = 'reader'     ───► Reader Component       │  │
-│  │    ├─ Display full zine                                 │  │
+│  │    ├─ Display full pixozine                                 │  │
 │  │    ├─ Navigation (Prev/Next)                            │  │
 │  │    ├─ Interactive elements (clickable)                  │  │
 │  │    └─ Close → showView('discover') or showView('editor')   │  │
@@ -246,7 +246,7 @@ vpState = {
     {
       id: local_id,
       serverId: backend_id,
-      title: "My Zine",
+      title: "My Pixozine",
       theme: "cyberpunk",
       pages: [
         {
@@ -301,7 +301,7 @@ Everything is wired correctly now. The system is:
 - ✅ **Functional** - All flows work end-to-end
 - ✅ **Connected** - Frontend talks to backend
 - ✅ **Persistent** - Data saves to database
-- ✅ **Discoverable** - Published zines findable
+- ✅ **Discoverable** - Published pixozines findable
 - ✅ **Readable** - Fully interactive reader works
 - ✅ **Extensible** - Ready for new features
 
