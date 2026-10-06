@@ -5,7 +5,7 @@
  * Design note — why there is no mode switcher here any more.
  *
  * The three modes are not mutually exclusive. The Light Table is opened from a
- * photograph inside a Publisher zine and from a frame inside a Portfolio book,
+ * photograph inside a Publisher pixozine and from a frame inside a Portfolio book,
  * and in both cases the user has to be handed back to where they came from. A
  * row of three "mode" tabs asserted an exclusivity the state model does not
  * have, so clicking one did something different depending on invisible state
