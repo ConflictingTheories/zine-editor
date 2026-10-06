@@ -1,6 +1,6 @@
-# SVRN Publisher - Zine Publishing Platform
+# SVRN Publisher - Pixozine Publishing Platform
 
-SVRN Publisher is an all-in-one platform for creating, reading, and publishing interactive narrative zines. From classic layouts to branching mysteries with hidden passwords and rhythmic shaders, SVRN Publisher empowers creators to build rich digital experiences.
+SVRN Publisher is an all-in-one platform for creating, reading, and publishing interactive narrative pixozines. From classic layouts to branching mysteries with hidden passwords and rhythmic shaders, SVRN Publisher empowers creators to build rich digital experiences.
 
 ---
 
@@ -17,7 +17,7 @@ SVRN Publisher is an all-in-one platform for creating, reading, and publishing i
 - **Theme Engine**: Support for multiple visual aesthetics (Classic, Cyberpunk, Arcane, etc.).
 
 ### 📤 Export & Portability
-- **Standard HTML**: Export your zine as a standalone, responsive webpage.
+- **Standard HTML**: Export your pixozine as a standalone, responsive webpage.
 - **Interactive Mode**: A premium flipbook-style export with page-turn animations and ambient sound.
 - **PWA Offline Support**: Fully functional offline with local persistence and background cloud sync.
 
@@ -28,7 +28,7 @@ SVRN Publisher is an all-in-one platform for creating, reading, and publishing i
 - **Frontend**: Vanilla JavaScript (ES6+), HTML5, CSS3.
 - **Rendering**: CSS Flexbox/Grid for layout, WebGL (via Mushu-flow) for shaders.
 - **Backend**: Express.js (Node.js) with SQLite3.
-- **MCP Interface**: Server-side API interface exposing all editor functionalities, authentication, and detailed zine manipulation capabilities for automation and AI integrations.
+- **MCP Interface**: Server-side API interface exposing all editor functionalities, authentication, and detailed pixozine manipulation capabilities for automation and AI integrations.
 - **Offline**: PWA Service Workers + LocalStorage.
 - **Export**: jsPDF for print, custom templates for Interactive HTML.
 
@@ -62,7 +62,7 @@ SVRN Publisher is an all-in-one platform for creating, reading, and publishing i
 3. **Start the editor**: `yarn dev`
 4. **Start the reader**: `yarn dev:reader`
 
-*SVRN Publisher automatically loads a "Making your first Zine" tutorial for new voyagers.*
+*SVRN Publisher automatically loads a "Making your first Pixozine" tutorial for new voyagers.*
 
 ## Desktop Installers
 

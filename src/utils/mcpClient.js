@@ -1,6 +1,6 @@
 /*
  * Utility: MCPClient
- * API client wrapper for MCP server calls and zine/page/element operations.
+ * API client wrapper for MCP server calls and pixozine/page/element operations.
  */
 
 class MCPClient {
@@ -29,7 +29,7 @@ class MCPClient {
         return res.json()
     }
 
-    // Zine operations
+    // Pixozine operations
     async getZine(zineId, token) {
         return this.request(`/zines/${zineId}`, 'GET', null, token)
     }
@@ -212,17 +212,20 @@ class MCPClient {
         return this.addElement(zineId, pageIdx, element)
     }
 
-    async applyThemeToZine(zineId, themeKey) {
-        const zine = await this.getZine(zineId)
+    async applyThemeToZine(zineId, themeKey, token = null) {
+        const zine = await this.getZine(zineId, token)
         // Apply theme colors to existing elements
         const themeColors = this.getThemeColors(themeKey)
+        // Tolerate both legacy data shapes (P1 normalizes server-side, but an
+        // older server may still return the bare pages array).
+        const pages = Array.isArray(zine.data) ? zine.data : zine.data.pages
 
-        for (let pageIdx = 0; pageIdx < zine.data.pages.length; pageIdx++) {
-            const page = zine.data.pages[pageIdx]
+        for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+            const page = pages[pageIdx]
 
             // Update page background if it's a default color
             if (page.background === '#ffffff' || page.background === '#000000') {
-                await this.updatePage(zineId, pageIdx, themeColors.background, page.texture)
+                await this.updatePage(zineId, pageIdx, themeColors.background, page.texture, token)
             }
 
             // Update element colors
@@ -237,7 +240,7 @@ class MCPClient {
                 }
 
                 if (Object.keys(updates).length > 0) {
-                    await this.updateElement(zineId, pageIdx, element.id, updates)
+                    await this.updateElement(zineId, pageIdx, element.id, updates, token)
                 }
             }
         }
@@ -265,11 +268,11 @@ class MCPClient {
     }
 
     // Batch operations for efficiency
-    async batchUpdateElements(zineId, updates) {
+    async batchUpdateElements(zineId, updates, token = null) {
         const results = []
         for (const update of updates) {
             try {
-                const result = await this.updateElement(zineId, update.pageIdx, update.elementId, update.updates)
+                const result = await this.updateElement(zineId, update.pageIdx, update.elementId, update.updates, token)
                 results.push({ success: true, ...result })
             } catch (error) {
                 results.push({ success: false, error: error.message })
@@ -279,7 +282,7 @@ class MCPClient {
     }
 
     // Template application
-    async applyTemplate(zineId, pageIdx, templateType) {
+    async applyTemplate(zineId, pageIdx, templateType, token = null) {
         const templates = {
             cover: {
                 background: '#1a1a1a',
@@ -315,18 +318,19 @@ class MCPClient {
         const template = templates[templateType]
         if (!template) throw new Error('Template not found')
 
-        await this.updatePage(zineId, pageIdx, template.background)
+        await this.updatePage(zineId, pageIdx, template.background, undefined, token)
 
         // Clear existing elements
-        const zine = await this.getZine(zineId)
-        const existingElements = zine.data.pages[pageIdx].elements
+        const zine = await this.getZine(zineId, token)
+        const pages = Array.isArray(zine.data) ? zine.data : zine.data.pages
+        const existingElements = pages[pageIdx].elements
         for (const element of existingElements) {
-            await this.deleteElement(zineId, pageIdx, element.id)
+            await this.deleteElement(zineId, pageIdx, element.id, token)
         }
 
         // Add template elements
         for (const element of template.elements) {
-            await this.addElement(zineId, pageIdx, element)
+            await this.addElement(zineId, pageIdx, element, token)
         }
 
         return { status: 'template applied' }
@@ -350,19 +354,6 @@ class MCPClient {
         return this.request('/prompts/get', 'POST', { name, arguments: args })
     }
 
-    // Batch operations for efficiency
-    async batchUpdateElements(zineId, updates) {
-        const results = []
-        for (const update of updates) {
-            try {
-                const result = await this.updateElement(zineId, update.pageIdx, update.elementId, update.updates)
-                results.push({ success: true, ...result })
-            } catch (error) {
-                results.push({ success: false, error: error.message })
-            }
-        }
-        return results
-    }
 }
 
 export default MCPClient
