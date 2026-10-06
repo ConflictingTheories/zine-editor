@@ -1,6 +1,6 @@
 /*
  * Component: Dashboard
- * Publisher Hub — entry point for all creative projects. Shows zines, portfolio
+ * Publisher Hub — entry point for all creative projects. Shows pixozines, portfolio
  * books, and direct shortcuts into each platform mode.
  */
 
@@ -226,7 +226,7 @@ function Dashboard() {
                     >
                         <span className="dash-shortcut-icon"><IconZine /></span>
                         <h3>Publication</h3>
-                        <p>Zines, magazines, novels and interactive fiction.</p>
+                        <p>Pixozines, magazines, novels and interactive fiction.</p>
                         <span className="dash-shortcut-btn">New publication</span>
                     </button>
                     <button
@@ -254,7 +254,7 @@ function Dashboard() {
             <div className="dash-stats">
                 <div className="dash-stat">
                     <span className="dash-stat-value">{zines.length}</span>
-                    <span className="dash-stat-label">Zines</span>
+                    <span className="dash-stat-label">Pixozines</span>
                 </div>
                 <div className="dash-stat">
                     <span className="dash-stat-value">{portfolios.length}</span>
@@ -292,7 +292,7 @@ function Dashboard() {
                                 <span className="dash-recent-body">
                                     <span className="dash-recent-title">{project.title || 'Untitled Project'}</span>
                                     <span className="dash-recent-meta">
-                                        {project.editorMode === 'photo-portfolio' ? 'Book' : 'Zine'} · edited {relativeTime(at)}
+                                        {project.editorMode === 'photo-portfolio' ? 'Book' : 'Pixozine'} · edited {relativeTime(at)}
                                     </span>
                                 </span>
                             </button>
@@ -301,11 +301,11 @@ function Dashboard() {
                 </section>
             )}
 
-            {/* ── Zines / Publisher projects ─────────────────────────── */}
+            {/* ── Pixozines / Publisher projects ─────────────────────────── */}
             {(zines.length > 0) && (
                 <section className="dash-section">
                     <div className="dash-section-head">
-                        <h2>Zines &amp; Publications</h2>
+                        <h2>Pixozines &amp; Publications</h2>
                         <button className="dash-section-action" onClick={handleCreateZine}>
                             <IconPlus /> New
                         </button>
@@ -314,8 +314,8 @@ function Dashboard() {
                         {zines.length === 0 && (
                             <div className="dash-empty-state">
                                 <IconBook />
-                                <p>No zines yet. Create your first publication.</p>
-                                <button className="dash-shortcut-btn" onClick={handleCreateZine}>Create Zine</button>
+                                <p>No pixozines yet. Create your first publication.</p>
+                                <button className="dash-shortcut-btn" onClick={handleCreateZine}>Create Pixozine</button>
                             </div>
                         )}
                         {zines.map((p, i) => {

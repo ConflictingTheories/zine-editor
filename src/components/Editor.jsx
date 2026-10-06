@@ -384,7 +384,7 @@ function Editor() {
             {/* Left panel */}
             <div className="ed-left">
                 {workspaceMode === 'settings' && <div className="ed-panel-section ed-left-pane zine-settings-pane">
-                    <h4>{isPortfolio ? 'Portfolio book settings' : 'Zine settings'}</h4>
+                    <h4>{isPortfolio ? 'Portfolio book settings' : 'Pixozine settings'}</h4>
                     <div className="form-row">
                         <label>Title</label>
                         <input type="text" value={project.title || ''} onChange={event => updateProjectSettings({ title: event.target.value })} />
@@ -403,7 +403,7 @@ function Editor() {
                     </div>
                     <div className="form-row">
                         <label>Description</label>
-                        <textarea rows="4" value={project.publishSettings?.description || ''} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, description: event.target.value } })} placeholder="What is this zine about?" />
+                        <textarea rows="4" value={project.publishSettings?.description || ''} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, description: event.target.value } })} placeholder="What is this pixozine about?" />
                     </div>
                     <div className="form-row">
                         <label>Monetization</label>
@@ -419,7 +419,7 @@ function Editor() {
                         <label>Tags</label>
                         <input type="text" value={project.publishSettings?.tags || ''} onChange={event => updateProjectSettings({ publishSettings: { ...project.publishSettings, tags: event.target.value } })} placeholder="art, fiction, field-notes" />
                     </div>
-                    <p className="prop-hint">These values prefill the publishing form and are saved with this zine.</p>
+                    <p className="prop-hint">These values prefill the publishing form and are saved with this pixozine.</p>
                 </div>}
                 {workspaceMode === 'media' && <div className="ed-panel-section ed-left-pane media-pane">
                     <h4>Media library</h4>

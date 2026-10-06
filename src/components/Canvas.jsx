@@ -24,12 +24,12 @@ import { isRawPhotoFile } from '../lib/rawPhoto.js'
  * - snapOn, gridOn, zoom: visual/editor flags
  * - renderContextMenu: optional override for the right-click menu. The
  *   photography workspace passes its own menu here, because replacing an
- *   image or changing how it fills is not an action the zine editor offers —
+ *   image or changing how it fills is not an action the pixozine editor offers —
  *   without this, right-clicking a photograph in a portfolio would silently
- *   fall back to zine-only tools.
+ *   fall back to pixozine-only tools.
  * - pageSize: the page's pixel dimensions. Optional, and deliberately so: the
- *   zine editor has a fixed trim, but a portfolio book's page comes from its
- *   paper size. When it is absent the legacy zine page is used, so the editor
+ *   pixozine editor has a fixed trim, but a portfolio book's page comes from its
+ *   paper size. When it is absent the legacy pixozine page is used, so the editor
  *   keeps working unchanged.
  */
 

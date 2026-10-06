@@ -31,10 +31,10 @@ function ExportModal({ onClose }) {
     const hasLandscapePages = currentProject?.pages?.some(page => page.orientation === 'landscape')
     // A portfolio book is a different artefact to a zine: spreads rather than
     // pages, and web presentation is at least as likely as print. Labelling a
-    // photograph book "Export Zine" was the same missing-feature confusion the
+    // photograph book "Export Pixozine" was the same missing-feature confusion the
     // Portfolio toolbar caused, just one click deeper.
     const isPortfolio = currentProject?.editorMode === 'photo-portfolio'
-    const heading = isPortfolio ? 'Export Portfolio Book' : 'Export Zine'
+    const heading = isPortfolio ? 'Export Portfolio Book' : 'Export Pixozine'
     const pageWord = isPortfolio ? 'spread' : 'page'
 
     const handleExportHTML = async () => {
@@ -101,7 +101,7 @@ function ExportModal({ onClose }) {
                 <div className="export-tabs">
                     <button className={`export-tab ${exportTab === 'pdf' ? 'active' : ''}`} onClick={() => setExportTab('pdf')}>PDF (Standard)</button>
                     {!isPortfolio && (
-                        <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (One-Sheet Zine)</button>
+                        <button className={`export-tab ${exportTab === 'foldable' ? 'active' : ''}`} onClick={() => setExportTab('foldable')}>PDF (One-Sheet Pixozine)</button>
                     )}
                     <button className={`export-tab ${exportTab === 'html' ? 'active' : ''}`} onClick={() => setExportTab('html')}>HTML (Web)</button>
                     <button className={`export-tab ${exportTab === 'svrn' ? 'active' : ''}`} onClick={() => setExportTab('svrn')}>SVRN Package</button>
@@ -126,7 +126,7 @@ function ExportModal({ onClose }) {
                         <p style={styles.desc}>
                             Export as a classic single-sheet cut-and-fold zine: one landscape sheet produces an 8-page folded mini-zine.
                             {currentProject?.pages?.length
-                                ? ` This project will produce ${Math.max(1, Math.ceil(currentProject.pages.length / 8))} one-sheet zine${Math.ceil((currentProject.pages.length || 1) / 8) === 1 ? '' : 's'} (${currentProject.pages.length} ${pageWord}s).`
+                                ? ` This project will produce ${Math.max(1, Math.ceil(currentProject.pages.length / 8))} one-sheet pixozine${Math.ceil((currentProject.pages.length || 1) / 8) === 1 ? '' : 's'} (${currentProject.pages.length} ${pageWord}s).`
                                 : ''}
                         </p>
                         <p style={{ fontSize: '11px', color: 'var(--vp-text-dim)', marginBottom: '8px' }}>
