@@ -12,6 +12,7 @@ import { getPortfolioLayout, createLayoutPages } from '../data/portfolioTemplate
 import { bookGeometry, pageKind, PAGE_KIND } from '../lib/bookGeometry.js'
 import { DEFAULT_PAPER } from '../constants.js'
 import { packSvrn } from '../../packages/svrn-format/src/index.js'
+import { isPageLocked, hasLegacyPassword, lockPage, unlockPage, relockPage, migrateLegacyPageLock, derivePageKey } from '../../packages/svrn-format/src/pageCrypto.js'
 import { getPhotoBlob, putPhoto, deletePhotos, storedPhotoIds, makeThumbnail } from '../lib/photoStore.js'
 
 /** Element and layout ids share one generator so they can never collide. */
@@ -849,6 +850,101 @@ const VPProvider = ({ children }) => {
         updateCurrentProject(project)
     }
 
+    // Replace a whole page object (used by page-password lock/migrate, where
+    // stale keys like a plaintext `password` must not survive the update).
+    const replacePage = (pageIdx, page) => {
+        if (!vpState.currentProject?.pages?.[pageIdx]) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        project.pages[pageIdx] = JSON.parse(JSON.stringify(page))
+        updateCurrentProject(project)
+    }
+
+    // P10: session keys for pages unlocked for editing. Memory-only — the
+    // server must never see a password or a plaintext page. Keyed by
+    // `${projectId}:${pageIdx}` so a reload can never resurrect them.
+    const pageKeysRef = useRef({})
+    const sessionKeyFor = (projectId, pageIdx) => pageKeysRef.current[`${projectId}:${pageIdx}`]
+
+    // Encrypt a page with a fresh password and cache the derived key so
+    // later edits can be re-encrypted without re-deriving (PBKDF2 is slow).
+    const lockPageWithPassword = async (pageIdx, password) => {
+        const project = vpState.currentProject
+        const page = project?.pages?.[pageIdx]
+        if (!page) return
+        const locked = await lockPage(page, password)
+        const key = await derivePageKey(password, locked.lock.salt, locked.lock.iter)
+        pageKeysRef.current[`${project.id}:${pageIdx}`] = { key, salt: locked.lock.salt, iter: locked.lock.iter }
+        replacePage(pageIdx, locked)
+        toast('Page locked with encryption', 'success')
+    }
+
+    // Decrypt a page for editing. The working copy replaces the page in
+    // memory; the session key lets sync re-encrypt before anything is sent.
+    const unlockPageForEdit = async (pageIdx, password) => {
+        const project = vpState.currentProject
+        const page = project?.pages?.[pageIdx]
+        if (!page) return
+        let envelope
+        if (isPageLocked(page)) {
+            envelope = page.lock
+        } else if (hasLegacyPassword(page)) {
+            // Transparent migration: the legacy plaintext password encrypts
+            // the page on this unlock; the plaintext never syncs again.
+            envelope = (await migrateLegacyPageLock(page, password)).lock
+            toast('Page password upgraded to encryption', 'success')
+        } else {
+            throw new Error('Incorrect password')
+        }
+        const key = await derivePageKey(password, envelope.salt, envelope.iter)
+        const working = await unlockPage({ ...page, lock: envelope }, password)
+        pageKeysRef.current[`${project.id}:${pageIdx}`] = { key, salt: envelope.salt, iter: envelope.iter }
+        replacePage(pageIdx, working)
+        return working
+    }
+
+    // Re-encrypt the working copy right now (also happens automatically on sync).
+    const relockPageNow = async (pageIdx) => {
+        const project = vpState.currentProject
+        const page = project?.pages?.[pageIdx]
+        const session = project && sessionKeyFor(project.id, pageIdx)
+        if (!page || !session) return
+        const relocked = await relockPage(page, session)
+        delete pageKeysRef.current[`${project.id}:${pageIdx}`]
+        replacePage(pageIdx, relocked)
+        toast('Page re-locked', 'success')
+    }
+
+    // Does this page have a cached session key (unlocked for editing)?
+    const hasPageSession = (pageIdx) => {
+        const project = vpState.currentProject
+        return !!project && !!sessionKeyFor(project.id, pageIdx)
+    }
+
+    // Drop one page's session key (used when removing password protection).
+    const dropPageSession = (pageIdx) => {
+        const project = vpState.currentProject
+        if (project) delete pageKeysRef.current[`${project.id}:${pageIdx}`]
+    }
+
+    // Forget a cached session key without persisting (e.g. project closed).
+    const forgetPageKeys = (projectId) => {
+        for (const k of Object.keys(pageKeysRef.current)) {
+            if (k.startsWith(`${projectId}:`)) delete pageKeysRef.current[k]
+        }
+    }
+
+    // Strip working copies back to their lock envelopes before anything
+    // leaves the device. The in-memory project keeps the editable copies.
+    const pagesForSync = async (project) => {
+        const out = []
+        for (let i = 0; i < project.pages.length; i++) {
+            const page = project.pages[i]
+            const session = sessionKeyFor(project.id, i)
+            out.push(session && !isPageLocked(page) ? await relockPage(page, session) : page)
+        }
+        return out
+    }
+
     const api = async (endpoint, method = 'GET', body = null) => {
         if (!vpState.isOnline) throw new Error('Offline')
         const headers = { 'Content-Type': 'application/json' }
@@ -901,7 +997,7 @@ const VPProvider = ({ children }) => {
                     .map(row => ({
                         id: `remote-${row.id}`,
                         serverId: row.id,
-                        title: row.title || 'Untitled Zine',
+                        title: row.title || 'Untitled Pixozine',
                         theme: 'classic',
                         pages: [],
                         _remote: true,
@@ -986,7 +1082,7 @@ const VPProvider = ({ children }) => {
         }
         const project = {
             id: Date.now(),
-            title: 'Untitled ' + (isPortfolio ? 'Book' : 'Zine'),
+            title: 'Untitled ' + (isPortfolio ? 'Book' : 'Pixozine'),
             theme,
             editorMode,
             // The paper is chosen per book, but it has to exist from the first
@@ -1005,7 +1101,7 @@ const VPProvider = ({ children }) => {
             ...prev,
             projects: [project, ...prev.projects],
             currentProject: project,
-            // A book opens in the Portfolio workspace, not the zine editor. Both
+            // A book opens in the Portfolio workspace, not the pixozine editor. Both
             // keys render <Editor />, which dispatches on editorMode, but
             // setting the correct key keeps the breadcrumb honest.
             currentView: isPortfolio ? 'portfolio' : 'editor',
@@ -1016,16 +1112,16 @@ const VPProvider = ({ children }) => {
         saveLocal()
         closeModal('themePickerModal')
         closeModal('themePicker')
-        toast(isPortfolio ? 'New book created' : 'New zine created!', 'success')
+        toast(isPortfolio ? 'New book created' : 'New pixozine created!', 'success')
     }
 
     const openProject = (idx) => {
         const projects = vpState.projects
         const p = projects[idx]
         if (p._remote) {
-            toast('Downloading zine...', 'info')
+            toast('Downloading pixozine...', 'info')
             api(`/zines/${p.serverId}`).then(res => {
-                // Backend returns { ...zine, data: parsedPages }
+                // Backend returns { ...pixozine, data: parsedPages }
                 // data is the array of pages
                 const pages = Array.isArray(res.data)
                     ? res.data
@@ -1044,7 +1140,7 @@ const VPProvider = ({ children }) => {
                     historyIdx: 0
                 }))
             }).catch(e => {
-                toast('Failed to download zine: ' + e.message, 'error')
+                toast('Failed to download pixozine: ' + e.message, 'error')
             })
             return
         }
@@ -1089,7 +1185,7 @@ const VPProvider = ({ children }) => {
         if (vpState.currentProject?.id === project.id) {
             setVpState(prev => ({ ...prev, currentProject: null, currentView: 'dashboard' }))
         }
-        toast('Zine deleted', 'success')
+        toast('Pixozine deleted', 'success')
     }
 
     const sync = async () => {
@@ -1103,7 +1199,7 @@ const VPProvider = ({ children }) => {
                         const res = await api('/zines', 'POST', {
                             serverId: p.serverId,
                             title: p.title,
-                            data: p.pages,
+                            data: await pagesForSync(p),
                             theme: p.theme
                         })
                         p.serverId = res.id
@@ -1125,6 +1221,13 @@ const VPProvider = ({ children }) => {
 
     const addElements = (pageIdx, elements) => {
         if (!elements?.length) return
+        // P10: never attach plaintext elements to a locked page — unlock it
+        // for editing first, so the content is re-encrypted on sync.
+        const targetPage = vpState.currentProject?.pages?.[pageIdx]
+        if (targetPage && isPageLocked(targetPage) && !sessionKeyFor(vpState.currentProject.id, pageIdx)) {
+            toast('Unlock the page before adding elements', 'error')
+            return
+        }
         setVpState(prev => {
             if (!prev.currentProject) return prev
             const project = JSON.parse(JSON.stringify(prev.currentProject))
@@ -1227,7 +1330,7 @@ const VPProvider = ({ children }) => {
 
     const addPageFromTemplate = (template) => {
         if (!vpState.currentProject) {
-            toast('Open a zine before adding a template page', 'error')
+            toast('Open a pixozine before adding a template page', 'error')
             return false
         }
         if (vpState.currentProject.pages.length >= 32) {
@@ -1871,7 +1974,9 @@ const VPProvider = ({ children }) => {
     const publishToNode = async (nodeUrl, nodeToken = vpState.token) => {
         if (!vpState.currentProject) throw new Error('No project open')
         if (!nodeUrl) throw new Error('Publishing node URL is required')
-        const { archive } = await packSvrn(vpState.currentProject, { baseUrl: window.location.href })
+        const project = vpState.currentProject
+        // P10: re-encrypt any unlocked-for-edit working copies before packing.
+        const { archive } = await packSvrn({ ...project, pages: await pagesForSync(project) }, { baseUrl: window.location.href })
         const response = await fetch(`${nodeUrl.replace(/\/$/, '')}/svrn/v1/issues`, {
             method: 'POST',
             headers: { ...(nodeToken ? { Authorization: `Bearer ${nodeToken}` } : {}), 'Content-Type': 'application/vnd.svrn+zip' },
@@ -1893,7 +1998,7 @@ const VPProvider = ({ children }) => {
         }
         try {
             if (!project.serverId) {
-                const res = await api('/zines', 'POST', { title: formData.title || project.title, data: project.pages, theme: project.theme })
+                const res = await api('/zines', 'POST', { title: formData.title || project.title, data: await pagesForSync(project), theme: project.theme })
                 project.serverId = res.id
                 setVpState(prev => ({
                     ...prev,
@@ -1915,7 +2020,7 @@ const VPProvider = ({ children }) => {
                 setVpState(prev => ({ ...prev, projects: next, currentProject: project }))
             }
             closeModal('publishModal')
-            toast('🚀 Zine published! Go to Discover to see it live.', 'success')
+            toast('🚀 Pixozine published! Go to Discover to see it live.', 'success')
         } catch (e) {
             toast('Publish failed: ' + (e.message || 'Error'), 'error')
         }
@@ -1938,7 +2043,7 @@ const VPProvider = ({ children }) => {
                 };
             });
         } catch (error) {
-            toast('Failed to reload zine: ' + error.message, 'error');
+            toast('Failed to reload pixozine: ' + error.message, 'error');
         }
     };
 
@@ -2289,6 +2394,13 @@ const VPProvider = ({ children }) => {
         addElements,
         updateElement,
         updatePage,
+        replacePage,
+        lockPageWithPassword,
+        unlockPageForEdit,
+        relockPageNow,
+        forgetPageKeys,
+        hasPageSession,
+        dropPageSession,
         deleteElement,
         addPage,
         addPageFromTemplate,
