@@ -54,14 +54,18 @@ const CONFIG = {
         mockMode: !process.env.STRIPE_SECRET_KEY, // Use mock if no Stripe key
     },
 
-    // XRP Ledger
+    // XRP Ledger — DEPRECATED (P5, 2026-10-06): the XRP/token stack was deleted;
+    // Stripe -> credit vault is the live payment rail. Kept as a documented
+    // no-op so old .env files don't break config validation.
     xrp: {
         network: process.env.XRP_NETWORK || 'testnet',
         apiEndpoint: process.env.XRP_API_ENDPOINT || 'https://s.altnet.rippletest.net:51234',
+        deprecated: true,
     },
 
     // Feature Flags
     features: {
+        // DEPRECATED (P5): the XRP/token stack was deleted; this flag is a no-op.
         enableXRP: process.env.ENABLE_XRP !== 'false',
         enableMonetization: process.env.ENABLE_MONETIZATION !== 'false',
         enableReputation: process.env.ENABLE_REPUTATION !== 'false',
@@ -101,7 +105,7 @@ function logConfig() {
     console.log(`Database: ${CONFIG.database.getPath()}`);
     console.log(`JWT Expiry: ${CONFIG.jwt.expiresIn}`);
     console.log(`Payment Mode: ${CONFIG.payment.mockMode ? 'MOCK' : 'STRIPE'}`);
-    console.log(`XRP Network: ${CONFIG.xrp.network}`);
+
     console.log(`CORS Origins: ${CONFIG.cors.origins.length} allowed`);
     console.log(`${'═'.repeat(60)}\n`);
 }

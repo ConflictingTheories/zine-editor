@@ -7,7 +7,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const knexConfig = require('./knexfile.cjs');
 const CONFIG = require('./config.cjs');
-const { DEMO_TOKEN, DEMO_USER } = require('./demoAccount.cjs');
+const { DEMO_TOKEN, DEMO_USER, isDemoAccountAllowed } = require('./demoAccount.cjs');
 
 const { server, jwt: jwtConfig, cors: corsConfig, database } = CONFIG;
 const app = express();
@@ -51,7 +51,7 @@ const authenticateToken = (req, res, next) => {
     // The demo token and the legacy offline token both resolve to the seeded
     // demo user, so every account-scoped route works while signed in as the
     // demo account without a server round trip.
-    if (token === DEMO_TOKEN || token === 'local_offline_token') {
+    if ((token === DEMO_TOKEN || token === 'local_offline_token') && isDemoAccountAllowed()) {
         db('users')
             .where({ email: DEMO_USER.email })
             .first()
