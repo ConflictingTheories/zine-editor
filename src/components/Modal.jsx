@@ -157,7 +157,7 @@ function Modal() {
     )
 
     const isPublishingPortfolio = vpState.currentProject?.editorMode === 'photo-portfolio'
-    const publishNoun = isPublishingPortfolio ? 'Portfolio Book' : 'Zine'
+    const publishNoun = isPublishingPortfolio ? 'Portfolio Book' : 'Pixozine'
 
     const renderPublishModal = () => (
         <div className="modal-overlay active" id="publishModal">
@@ -186,7 +186,7 @@ function Modal() {
                     <div className="form-row">
                         <label>Description</label>
                         <textarea
-                            placeholder={isPublishingPortfolio ? 'What is this body of work about?' : 'What is this zine about?'}
+                            placeholder={isPublishingPortfolio ? 'What is this body of work about?' : 'What is this pixozine about?'}
                             rows="3"
                             value={publishData.description || vpState.currentProject?.publishSettings?.description || ''}
                             onChange={(e) => setPublishData({ ...publishData, description: e.target.value })}
@@ -222,7 +222,7 @@ function Modal() {
                         <label>Tags</label>
                         <input
                             type="text"
-                            placeholder="art, zine, underground... (comma separated)"
+                            placeholder="art, pixozine, underground... (comma separated)"
                             value={publishData.tags || vpState.currentProject?.publishSettings?.tags || ''}
                             onChange={(e) => setPublishData({ ...publishData, tags: e.target.value })}
                         />
@@ -347,7 +347,7 @@ function Modal() {
                     ))}
                 </div>
                 <button className="btn-premium" onClick={() => createProject(vpState.selectedTheme, vpState.modals?.themePicker?.subtype || vpState.modals?.themePickerModal?.subtype || 'zine')} style={{ width: '100%' }}>
-                    Create {(vpState.modals?.themePicker?.subtype === 'photo-portfolio' || vpState.modals?.themePickerModal?.subtype === 'photo-portfolio') ? 'Portfolio' : 'Zine'}
+                    Create {(vpState.modals?.themePicker?.subtype === 'photo-portfolio' || vpState.modals?.themePickerModal?.subtype === 'photo-portfolio') ? 'Portfolio' : 'Pixozine'}
                 </button>
             </div>
         </div>
@@ -401,7 +401,7 @@ function Modal() {
                         <h3 style={{ margin: 0, opacity: 0.6 }}>Standard Voyager</h3>
                         <div style={{ fontSize: '2.5rem', fontWeight: 800, margin: '1rem 0' }}>$0</div>
                         <ul style={{ listStyle: 'none', padding: 0, color: 'var(--vp-text-dim)', lineHeight: 2 }}>
-                            <li>✓ 3 Active published zines</li>
+                            <li>✓ 3 Active published pixozines</li>
                             <li>✓ Core design themes</li>
                             <li>✓ HTML/PDF export</li>
                         </ul>
@@ -411,7 +411,7 @@ function Modal() {
                         <h3 style={{ margin: 0 }}>Void Sovereign</h3>
                         <div style={{ fontSize: '2.5rem', fontWeight: 800, margin: '1rem 0' }}>$5<span style={{ fontSize: '1rem', color: 'var(--vp-text-dim)' }}>/mo</span></div>
                         <ul style={{ listStyle: 'none', padding: 0, lineHeight: 2 }}>
-                            <li>✓ Unlimited zine publishing</li>
+                            <li>✓ Unlimited pixozine publishing</li>
                             <li>✓ Sovereign discovery priority</li>
                             <li>✓ Custom branding & assets</li>
                             <li>✓ Advanced analytics</li>

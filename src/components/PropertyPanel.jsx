@@ -3,8 +3,9 @@
  * Shows editable properties for the currently selected canvas element.
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useVP } from '../context/VPContext.jsx'
+import { isPageLocked, hasLegacyPassword } from '../../packages/svrn-format/src/pageCrypto.js'
 
 /**
  * Component: PropertyPanel
@@ -157,8 +158,92 @@ function PageInteractionEditor({ interaction, index, numPages, knownKeys, onChan
     )
 }
 
+/**
+ * PageLockSection — P10 real page-password encryption (replaces the old
+ * plaintext `page.password` field). Passwords are derived client-side
+ * (PBKDF2) and the server only ever stores the opaque lock envelope.
+ */
+function PageLockSection({ page, pageIdx }) {
+    const { lockPageWithPassword, unlockPageForEdit, relockPageNow, dropPageSession, hasPageSession, toast } = useVP()
+    const [password, setPassword] = useState('')
+    const [busy, setBusy] = useState(false)
+
+    const run = async (fn) => {
+        setBusy(true)
+        try {
+            await fn()
+            setPassword('')
+        } catch (e) {
+            toast(e.message || 'Incorrect password', 'error')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const locked = isPageLocked(page)
+    const legacy = hasLegacyPassword(page)
+    const sessionActive = hasPageSession(pageIdx)
+
+    if (locked && !sessionActive) {
+        return (
+            <div className="prop-section">
+                <div className="form-row"><label>🔒 This page is encrypted</label></div>
+                <div className="form-row">
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" disabled={busy} />
+                </div>
+                <div className="form-row">
+                    <button type="button" className="prop-btn" disabled={busy || !password} onClick={() => run(() => unlockPageForEdit(pageIdx, password))}>Unlock to edit</button>
+                    <button type="button" className="prop-btn" disabled={busy || !password} onClick={() => run(async () => { await unlockPageForEdit(pageIdx, password); dropPageSession(pageIdx); toast('Password removed — page is now unprotected', 'info') })}>Remove password</button>
+                </div>
+                <p className="prop-hint">The server never sees your password. Wrong passwords fail closed.</p>
+            </div>
+        )
+    }
+
+    if (locked && sessionActive) {
+        return (
+            <div className="prop-section">
+                <div className="form-row"><label>🔓 Unlocked for editing</label></div>
+                <p className="prop-hint">Edits are re-encrypted automatically on sync. Re-lock now to clear the session key.</p>
+                <div className="form-row">
+                    <button type="button" className="prop-btn" disabled={busy} onClick={() => run(() => relockPageNow(pageIdx))}>Re-lock now</button>
+                    <button type="button" className="prop-btn" disabled={busy} onClick={() => run(async () => { dropPageSession(pageIdx); toast('Password removed — page is now unprotected', 'info') })}>Remove password</button>
+                </div>
+            </div>
+        )
+    }
+
+    if (legacy) {
+        return (
+            <div className="prop-section">
+                <div className="form-row"><label>⚠️ Legacy plaintext password</label></div>
+                <p className="prop-hint">This page still uses the old plaintext password. Enter it to upgrade to encryption.</p>
+                <div className="form-row">
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Current password" disabled={busy} />
+                </div>
+                <div className="form-row">
+                    <button type="button" className="prop-btn" disabled={busy || !password} onClick={() => run(() => unlockPageForEdit(pageIdx, password))}>Upgrade to encryption</button>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="prop-section">
+            <div className="form-row"><label>Page password</label></div>
+            <div className="form-row">
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mystery code" disabled={busy} />
+            </div>
+            <div className="form-row">
+                <button type="button" className="prop-btn" disabled={busy || !password} onClick={() => run(() => lockPageWithPassword(pageIdx, password))}>Lock page with password</button>
+            </div>
+            <p className="prop-hint">Encrypts the whole page. The password never leaves this device.</p>
+        </div>
+    )
+}
+
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets, openLightTableFor, replaceElementImage, showModal } = useVP()
+    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets, openLightTableFor, replaceElementImage, showModal, hasPageSession } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -192,6 +277,16 @@ function PropertyPanel({ activeTab = 'props' }) {
         const setPageProperty = (key, val) => {
             if (key === 'background') rememberColor(val)
             updatePage(pageIdx, { [key]: val })
+        }
+        // Encrypted pages expose only the lock UI until unlocked for editing —
+        // their content fields don't exist in plaintext.
+        if (isPageLocked(page) && !hasPageSession(pageIdx)) {
+            return (
+                <div className="property-panel">
+                    <h4 style={styles.header}>PAGE PROPERTIES</h4>
+                    <PageLockSection page={page} pageIdx={pageIdx} />
+                </div>
+            )
         }
         return (
             <div className="property-panel">
@@ -227,12 +322,7 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <div className="form-row-checkbox">
                         <label><input type="checkbox" checked={!!page.isLocked} onChange={(e) => setPageProperty('isLocked', e.target.checked)} /> Locked (skip in flow)</label>
                     </div>
-                    {page.isLocked && (
-                        <div className="form-row">
-                            <label>Access Password</label>
-                            <input type="text" value={page.password || ''} onChange={(e) => setPageProperty('password', e.target.value)} placeholder="Mystery code" />
-                        </div>
-                    )}
+                    <PageLockSection page={page} pageIdx={pageIdx} />
                 </div>
             </div>
         )
