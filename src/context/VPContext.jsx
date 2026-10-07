@@ -625,7 +625,7 @@ const VPProvider = ({ children }) => {
      */
     const applyUiTheme = (theme) => {
         const next = theme === 'light' ? 'light' : 'dark'
-        document.documentElement.setAttribute('data-ui-theme', next)
+        document.documentElement.setAttribute('data-theme', next)
         localStorage.setItem('vp_ui_theme', next)
         setVpState(prev => ({ ...prev, uiTheme: next }))
     }
@@ -644,7 +644,7 @@ const VPProvider = ({ children }) => {
     }
 
     useEffect(() => {
-        document.documentElement.setAttribute('data-ui-theme', vpState.uiTheme || 'dark')
+        document.documentElement.setAttribute('data-theme', vpState.uiTheme || 'dark')
     }, [vpState.uiTheme])
 
     const themes = {
