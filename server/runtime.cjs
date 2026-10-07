@@ -28,10 +28,14 @@ app.use((req, res, next) => {
 });
 
 const environment = server.env === 'production' ? 'production' : 'development';
-const db = knex({
-    ...knexConfig[environment],
-    connection: { filename: database.getPath() },
-});
+const knexEnvConfig = knexConfig[environment];
+// The sqlite file path comes from our config; a pg connection (DATABASE_URL)
+// must NOT be overridden with a filename.
+const db = knex(
+    knexEnvConfig.client === 'pg'
+        ? knexEnvConfig
+        : { ...knexEnvConfig, connection: { filename: database.getPath() } }
+);
 
 // Migrations and demo seeding run once, in server.cjs, after this module has
 // finished loading. Running them here as well meant two concurrent

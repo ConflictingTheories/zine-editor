@@ -9,6 +9,9 @@ const vault = require('./vaultService.cjs');
 const accountRoutes = require('./accountRoutes.cjs');
 const { seedDemoUser, DEMO_TOKEN, isDemoAccountAllowed } = require('./demoAccount.cjs');
 const { registerSvrnRoutes } = require('./svrnRoutes.cjs');
+const { registerIdentityRoutes } = require('./identityRoutes.cjs');
+const { registerStorageRoutes } = require('./storageRoutes.cjs');
+const { createAssetStore } = require('./assetStore.cjs');
 const { normalizeZineData, serializeZineData } = require('./zineStore.cjs');
 
 const {
@@ -36,6 +39,12 @@ app.get('/api/health', (req, res) => {
 });
 
 registerSvrnRoutes(app, { authenticateToken, express });
+registerIdentityRoutes(app, { db, authenticateToken });
+
+// Server-side storage: content-hash assets + project sync. The asset store
+// is disk-backed in dev; set ASSET_STORE=s3 (plus S3_* env) for production.
+const assetStore = createAssetStore();
+registerStorageRoutes(app, { db, authenticateToken, express, assetStore });
 
 // API Routes
 
