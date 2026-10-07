@@ -1,0 +1,37 @@
+# electron-builder config — SVRN Reader desktop app.
+appId: network.svrn.reader
+productName: SVRN Reader
+copyright: Copyright © 2026 Kyle Derby MacInnis
+
+directories:
+  output: ../../dist-reader-desktop
+  buildResources: build
+
+files:
+  # The built web reader (includes the bundled player).
+  - ../../dist-reader/**/*
+  - src/**/*
+
+# .svrn / .pxz bundles open with the reader on double-click.
+fileAssociations:
+  - ext:
+      - svrn
+      - pxz
+    name: Pixozine bundle
+    description: SVRN pixozine publication
+    role: Viewer
+    # icon: build/icon.icns (mac) / build/icon.ico (win) — add before release
+
+mac:
+  category: public.app-category.entertainment
+  # hardenedRuntime: true
+  # notarize: { teamId: "..." }  # required for distribution outside the App Store
+
+win:
+  target:
+    - nsis
+
+linux:
+  target:
+    - AppImage
+  category: Graphics

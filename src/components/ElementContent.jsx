@@ -42,7 +42,7 @@ export const getPanelBackground = (el) => {
     return el.fill || 'transparent'
 }
 
-const lightTableFilter = (recipe) => {
+export const lightTableFilter = (recipe) => {
     if (!recipe) return undefined
     const params = recipe.params || {}
     const filters = [`brightness(${Math.pow(2, Number(params.exposure || 0))})`, `contrast(${Number(params.contrast ?? 1)})`, `saturate(${Number(params.saturation ?? 1)})`]

@@ -165,3 +165,19 @@ footer span {
     display: none;
   }
 }
+
+/* Embed mode (?embed=1): chromeless publication view for third-party embeds.
+ * Hides the library/import chrome; the article fills the frame. */
+.app-container.embed-mode header,
+.app-container.embed-mode aside {
+  display: none;
+}
+.app-container.embed-mode .layout {
+  grid-template-columns: 1fr;
+}
+.app-container.embed-mode main {
+  padding: 0;
+}
+.app-container.embed-mode article {
+  max-width: none;
+}

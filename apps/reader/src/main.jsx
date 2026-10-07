@@ -6,6 +6,10 @@ import ShaderElement from '../../../src/components/ShaderElement.jsx'
 import Object3D from '../../../src/components/Object3D.jsx'
 import '../../../src/lib/shaderBridge.js'
 import AudioViz from '../../../src/components/AudioViz.jsx'
+import PlayableEmbed from '../../../src/components/PlayableEmbed.jsx'
+import { PhotoFrameSurface } from '../../../src/components/ElementContent.jsx'
+import { isPageLocked, unlockPage } from '../../../packages/svrn-format/src/pageCrypto.js'
+import { migrateManifest } from '../../../packages/svrn-format/src/index.js'
 import { resolvePublicationAsset } from '../../../src/utils/assets.js'
 import './styles.css'
 
@@ -200,7 +204,14 @@ function App() {
   const [inventory, setInventory] = useState(new Set())
   const [achievements, setAchievements] = useState(new Set())
   const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
+  const [decryptedPages, setDecryptedPages] = useState({}) // pageIdx -> decrypted working copy (session only)
   const [scale, setScale] = useState(1)
+  // Embed mode: `?embed=1` (optionally `&issue=<id>`) renders chromeless —
+  // just the publication, no library/import chrome. Used by the web embed
+  // snippet (see apps/reader/EMBED.md).
+  const [embedMode] = useState(() => {
+    try { return new URLSearchParams(location.search).get('embed') === '1' } catch { return false }
+  })
   const audioRef = useRef(null)
   const audioSourceRef = useRef(null)
 
@@ -304,7 +315,16 @@ function App() {
       setFlags({ ...(unpacked.project.flags || {}) })
       setInventory(new Set(unpacked.project.inventory || []))
       setAchievements(new Set(unpacked.project.achievements || []))
-      setPage(issue.progress || 0)
+      // Embed mode: `?page=n` deep-links to a starting page (1-based).
+      let startPage = issue.progress || 0
+      try {
+        const params = new URLSearchParams(location.search)
+        if (params.get('embed') === '1') {
+          const p = parseInt(params.get('page'), 10)
+          if (!isNaN(p) && p >= 1 && p < unpacked.project.pages.length) startPage = p - 1
+        }
+      } catch { /* ignore */ }
+      setPage(startPage)
     } catch (error) { setMessage(error.message) }
   }
 
@@ -361,7 +381,7 @@ function App() {
     }
   }
 
-  const current = project?.pages?.[page]
+  const current = decryptedPages[page] || project?.pages?.[page]
   useEffect(() => {
     if (!current) return
     current.interactions?.forEach(handleInteraction)
@@ -413,19 +433,31 @@ function App() {
     }
   }
 
-  const handlePasswordSubmit = () => {
+  const handlePasswordSubmit = async () => {
     const targetPage = project.pages[passwordModal.targetIdx]
-    if (targetPage && targetPage.password === passwordModal.value) {
+    if (!targetPage) {
+      alert('Incorrect Password')
+      return
+    }
+    try {
+      if (isPageLocked(targetPage)) {
+        // Real decryption: wrong password fails closed (AES-GCM auth).
+        const working = await unlockPage(targetPage, passwordModal.value)
+        setDecryptedPages(prev => ({ ...prev, [passwordModal.targetIdx]: working }))
+      } else {
+        alert('Incorrect Password')
+        return
+      }
       setUnlockedPages(prev => new Set(prev).add(passwordModal.targetIdx))
       advance(passwordModal.targetIdx, true)
       setPasswordModal({ active: false, targetIdx: -1, value: '' })
-    } else {
+    } catch {
       alert('Incorrect Password')
     }
   }
 
   return (
-    <div className={`app-container ${activeVfx === 'shake' ? 'shake-anim' : ''} ${activeVfx === 'pulse' ? 'pulse-anim' : ''} ${activeVfx === 'glitch' ? 'glitch-anim' : ''}`}>
+    <div className={`app-container ${embedMode ? 'embed-mode' : ''} ${activeVfx === 'shake' ? 'shake-anim' : ''} ${activeVfx === 'pulse' ? 'pulse-anim' : ''} ${activeVfx === 'glitch' ? 'glitch-anim' : ''}`}>
       {activeVfx && (
         <div className={`vfx-overlay ${activeVfx === 'flash' || activeVfx === 'lightning' ? 'active' : ''}`} style={{
           background: activeVfx === 'flash' ? '#fff' : (activeVfx === 'blood' ? 'radial-gradient(circle at 50% 50%, rgba(139,0,0,0.5), rgba(60,0,0,0.8) 60%, rgba(20,0,0,0.9))' : 'transparent'),
@@ -500,6 +532,12 @@ function App() {
                         {el.type === 'image' && (
                           <img src={resolveAsset(el.src)} style={styles.image(el)} alt="" />
                         )}
+                        {el.type === 'photo-frame' && (
+                          <PhotoFrameSurface el={{ ...el, src: resolveAsset(el.src) }} />
+                        )}
+                        {el.type === 'sfx' && (
+                          <div style={{ ...styles.text(el), padding: 4 }} className="el-symbol">{el.content}</div>
+                        )}
                         {el.type === 'panel' && (
                           <div style={styles.panel(el)} />
                         )}
@@ -533,6 +571,9 @@ function App() {
                             width={el.width}
                             height={el.height}
                           />
+                        )}
+                        {el.type === 'playable' && (
+                          <PlayableEmbed playable={el.playable || el} />
                         )}
                       </div>
                     )

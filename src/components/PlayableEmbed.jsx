@@ -18,15 +18,20 @@
  *
  * Player resolution:
  * - `playable.playerBaseUrl` wins, then `window.SVRN_PLAYER_BASE_URL`, then
- *   the same-origin conventional mount `/svrn-player`.
- * - The iframe loads `{base}/v{playerVersion}/?bundle={uri}&manifestHash={hash}`.
- *   The player version is pinned — never "latest".
+ *   the bundled player at `./player` (relative to the reader deployment).
+ * - The iframe loads `{base}/?playerVersion={v}&bundle={uri}&manifestHash={hash}`.
+ *   The player version is pinned — never "latest". The bundled player refuses
+ *   to run on a MAJOR version mismatch (never partial state).
  */
 
 import React, { useState, useCallback } from 'react'
 import '../styles/playable-embed.css'
 
-const DEFAULT_PLAYER_BASE = '/svrn-player'
+// Bundled player: ships INSIDE the reader package (apps/reader/player/),
+// so playables work offline from the same deployment — no separate player
+// deploy. Override per-playable or globally only if you host the player
+// elsewhere.
+const DEFAULT_PLAYER_BASE = './player'
 
 function resolvePlayerBase(playable) {
     return (
@@ -39,10 +44,11 @@ function resolvePlayerBase(playable) {
 function buildPlayerUrl(playable) {
     const base = resolvePlayerBase(playable).replace(/\/+$/, '')
     const params = new URLSearchParams({
+        playerVersion: playable.playerVersion,
         bundle: playable.bundle.uri,
         manifestHash: playable.bundle.manifestHash,
     })
-    return `${base}/v${playable.playerVersion}/?${params.toString()}`
+    return `${base}/?${params.toString()}`
 }
 
 function aspectStyle(playable) {

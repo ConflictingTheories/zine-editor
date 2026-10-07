@@ -134,6 +134,37 @@ export async function packSvrn(projectInput, { baseUrl } = {}) {
   return { archive, manifest, project }
 }
 
+export const LATEST_FORMAT_VERSION = '1.1.0'
+
+/**
+ * Migrate a manifest to the latest format version (migrate-on-load).
+ * v1.0.0 → v1.1.0 is additive-only: `playables` defaults to [], every other
+ * field passes through byte-identical. Pure and idempotent.
+ * Newer MAJOR versions are rejected (never partial state); newer minors are
+ * accepted (additive-only per the compat policy).
+ */
+export function migrateManifest(input) {
+  const manifest = { ...(input || {}) }
+  const version = String(manifest.formatVersion || '1.0.0')
+  const [major] = version.split('.').map(Number)
+  const [latestMajor] = LATEST_FORMAT_VERSION.split('.').map(Number)
+  if (major > latestMajor) {
+    throw new Error(`Unsupported SVRN format ${version}: newer major than ${LATEST_FORMAT_VERSION}`)
+  }
+  const applied = []
+  if (!manifest.formatVersion) {
+    manifest.formatVersion = '1.0.0'
+    applied.push('default-format-version')
+  }
+  if (!Array.isArray(manifest.playables)) {
+    manifest.playables = []
+    applied.push('v1.1.0:playables-default')
+  }
+  if (manifest.formatVersion !== LATEST_FORMAT_VERSION) applied.push(`migrated:${manifest.formatVersion}->${LATEST_FORMAT_VERSION}`)
+  manifest.formatVersion = LATEST_FORMAT_VERSION
+  return { manifest, applied }
+}
+
 export async function unpackSvrn(input) {
   let bytes
   if (input instanceof Blob) bytes = new Uint8Array(await input.arrayBuffer())
@@ -142,8 +173,8 @@ export async function unpackSvrn(input) {
   try { entries = unzipSync(bytes) } catch { throw new Error('Invalid .svrn archive') }
   const contentEntry = entries[CONTENT_PATH] || entries[LEGACY_CONTENT_PATH]
   if (!entries[MANIFEST_PATH] || !contentEntry) throw new Error('Invalid .svrn archive: manifest.json and content/pixozine.json are required')
-  const manifest = JSON.parse(strFromU8(entries[MANIFEST_PATH]))
-  if (manifest.formatVersion !== FORMAT_VERSION) throw new Error(`Unsupported SVRN format ${manifest.formatVersion}`)
+  const rawManifest = JSON.parse(strFromU8(entries[MANIFEST_PATH]))
+  const { manifest } = migrateManifest(rawManifest)
   for (const [file, expected] of Object.entries(manifest.hashes || {})) {
     if (!entries[file]) throw new Error(`Missing package file: ${file}`)
     if (await sha256(entries[file]) !== expected) throw new Error(`Integrity check failed: ${file}`)
