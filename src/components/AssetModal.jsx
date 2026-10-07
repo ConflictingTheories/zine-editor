@@ -16,7 +16,7 @@ import { useVP } from '../context/VPContext.jsx'
  * - onClose: function() called when the modal is dismissed
  */
 function AssetModal({ type: initialType, onClose }) {
-    const { vpState, getAssets, addAsset, addImportedAssets, setBackgroundAudio, setPageAudio, updateElement } = useVP()
+    const { vpState, getAssets, addAsset, importMedia, setBackgroundAudio, setPageAudio, updateElement } = useVP()
     const audioIntent = initialType?.startsWith('audio-page') ? 'page' : initialType?.startsWith('audio-background') ? 'background' : null
     const audioLoop = !initialType?.endsWith('-once')
     const [currentType, setCurrentType] = useState(audioIntent ? 'audio' : (initialType || 'panels'))
@@ -46,11 +46,13 @@ function AssetModal({ type: initialType, onClose }) {
 
     const handleSelect = (asset) => {
         if (currentType === 'audio' && audioIntent) {
-            if (audioIntent === 'page') setPageAudio(vpState.selection?.pageIdx ?? 0, asset.src, asset.name, audioLoop)
-            else setBackgroundAudio(asset.src, asset.name, audioLoop)
+            if (audioIntent === 'page') setPageAudio(vpState.selection?.pageIdx ?? 0, asset.src, asset.name, audioLoop, asset.id)
+            else setBackgroundAudio(asset.src, asset.name, audioLoop, asset.id)
         } else if (currentType === 'imported' && vpState.selection?.type === 'element') {
             const selected = vpState.currentProject?.pages?.[vpState.selection.pageIdx]?.elements?.find(element => element.id === vpState.selection.id)
-            if (selected?.type === 'photo-frame') updateElement(vpState.selection.pageIdx, selected.id, { src: asset.src })
+            // Link by assetId so the src is re-resolved on project open
+            // instead of persisting a dead blob: URL.
+            if (selected?.type === 'photo-frame') updateElement(vpState.selection.pageIdx, selected.id, { src: asset.src, assetId: asset.id, assetName: asset.name || asset.id })
             else addAsset(currentType, asset.id)
         } else {
             addAsset(currentType, asset.id)
@@ -63,15 +65,10 @@ function AssetModal({ type: initialType, onClose }) {
         input.type = 'file'
         input.accept = 'audio/*'
         input.multiple = true
-        input.onchange = event => {
-            const reads = Array.from(event.target.files || []).map(file => new Promise(resolve => {
-                const reader = new FileReader()
-                reader.onload = loadEvent => resolve({ id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: file.name, src: loadEvent.target.result, kind: 'audio', addedAt: new Date().toISOString() })
-                reader.onerror = () => resolve(null)
-                reader.readAsDataURL(file)
-            }))
-            Promise.all(reads).then(assets => addImportedAssets(assets.filter(Boolean)))
-        }
+        // Single pipeline: bytes go to IndexedDB via importMedia, never as
+        // base64 in the library record. The old FileReader path wrote data:
+        // URLs that persistLibrary stripped, orphaning the record.
+        input.onchange = event => importMedia(event.target.files, 'audio')
         input.click()
     }
 

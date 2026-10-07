@@ -5,11 +5,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { useVP } from '../context/VPContext.jsx'
-import { filesToAssets, commitAssets, measureAssets } from '../utils/photoImport.js'
 import { PHOTO_ACCEPT } from '../lib/rawPhoto.js'
-import { putPhoto } from '../lib/photoStore.js'
 import Canvas from './Canvas.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
+import StorageManager from './StorageManager.jsx'
 import ElementContent from './ElementContent.jsx'
 import { BUILT_IN_TEMPLATES } from '../data/pageTemplates.js'
 import PortfolioWorkspace from './portfolio/PortfolioWorkspace.jsx'
@@ -106,7 +105,8 @@ const MemoPageThumbnail = React.memo(
 )
 
 function Editor() {
-    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, addImportedAsset, addImportedAssets, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes, toast, showView } = useVP()
+    const { vpState, updateVpState, updateProjectSettings, addElement, addElements, addPage, addPageFromTemplate, importMedia, deletePage, duplicatePage, undo, redo, saveProject, showModal, closeModal, previewProject, applyTheme, insertTemplate, deleteElement, copyElement, pasteElement, duplicateElement, moveLayer, updateElement, updatePage, setBackgroundAudio, setPageAudio, themes, showView } = useVP()
+    const [storageOpen, setStorageOpen] = useState(false)
     const pageIdx = vpState.selection?.pageIdx ?? 0
     const setCurrentPageIdx = (idx) => {
         const pages = vpState.currentProject?.pages || []
@@ -207,80 +207,36 @@ function Editor() {
         const input = document.createElement('input')
         input.type = 'file'
         input.accept = 'image/*'
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0]
-            if (file) {
-                const reader = new FileReader()
-                reader.onload = (event) => {
-                    const asset = { id: `imported-${Date.now()}`, name: file.name, src: event.target.result, addedAt: new Date().toISOString() }
-                    addImportedAsset(asset)
-                    addElement(pageIdx, {
-                        type: 'image',
-                        src: asset.src,
-                        x: 80,
-                        y: 80,
-                        width: 200,
-                        height: 200
-                    })
-                }
-                reader.readAsDataURL(file)
-            }
+            if (!file) return
+            // Single pipeline: bytes to IndexedDB, metadata to the library.
+            // The element links by assetId; its src is re-resolved from the
+            // blob store on every project open, so it can never be persisted
+            // as a dead blob: URL or a quota-eating base64 blob.
+            const [asset] = await importMedia(e.target.files, 'image')
+            if (!asset) return
+            addElement(pageIdx, {
+                type: 'image',
+                src: asset.src,
+                assetId: asset.id,
+                assetName: asset.name || asset.id,
+                x: 80,
+                y: 80,
+                width: 200,
+                height: 200
+            })
         }
         input.click()
     }
 
     /**
-     * Bulk image import, through the shared photo pipeline.
-     *
-     * This built library records with a base64 `src` and handed them to
-     * `addImportedAssets`. The record is written to localStorage with `src`
-     * stripped, on the understanding the bytes are in IndexedDB — and nothing
-     * here ever put them there, so every bulk-imported photo was listed after a
-     * reload but rendered as a broken image. `commitAssets` is what writes the
-     * bytes, and the Portfolio has always called it.
+     * Image import, through the single shared media pipeline
+     * (importMediaFiles → commitAssets → IndexedDB). Also serves canvas
+     * drag-drop via the `importFiles` prop.
      */
     const importFiles = async (files) => {
-        const created = await filesToAssets(files)
-        if (!created.length) return
-        addImportedAssets(created)
-        measureAssets(created)
-        const settled = await commitAssets(created)
-        addImportedAssets(settled)
-        toast(`${settled.length} image${settled.length === 1 ? '' : 's'} stored in the library`, 'success')
-    }
-
-    /**
-     * Import audio through the blob store, like photographs.
-     *
-     * This was storing every sound as a base64 data URL inside the localStorage
-     * library record. Audio is the worst case for that: a five-minute track is
-     * tens of megabytes of base64, which counts against a quota shared with
-     * project data, and re-serialising it on any metadata change is what made
-     * the editor stall. The bytes belong in IndexedDB like everything else.
-     */
-    const importAudioFiles = async (files) => {
-        const list = Array.from(files || []).filter(file => file.type.startsWith('audio/'))
-        if (!list.length) return
-        const stamp = Date.now()
-        // Pair each record with its File up front, so the blob write and the
-        // library row cannot drift apart.
-        const pairs = list.map((file, i) => ({
-            file,
-            asset: {
-                id: `audio-${stamp}-${i}-${Math.random().toString(36).slice(2, 8)}`,
-                name: file.name,
-                originalName: file.name,
-                src: URL.createObjectURL(file),
-                bytes: file.size || 0,
-                kind: 'audio',
-                addedAt: new Date().toISOString()
-            }
-        }))
-        // Write the real bytes first, so a storage failure never leaves a record
-        // whose pixels are nowhere.
-        await Promise.all(pairs.map(({ asset, file }) => putPhoto(asset.id, file)))
-        addImportedAssets(pairs.map(p => p.asset))
-        toast(`${pairs.length} sound${pairs.length === 1 ? '' : 's'} added to the library`, 'success')
+        await importMedia(files, 'image')
     }
 
     const handleZoomFit = () => {
@@ -354,7 +310,7 @@ function Editor() {
                                 <span className="ed-tool-group-label">Import</span>
                                 <button className="ed-tool icon-tool" title="Import a single image" onClick={handleAddImage}><IcoImport /><span>Image</span></button>
                                 <button className="ed-tool icon-tool" title="Bulk import images to library" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = PHOTO_ACCEPT; i.multiple = true; i.onchange = e => importFiles(e.target.files); i.click() }}><IcoImport /><span>Bulk</span></button>
-                                <button className="ed-tool icon-tool" title="Import audio files" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'audio/*'; i.multiple = true; i.onchange = e => importAudioFiles(e.target.files); i.click() }}><IcoAudio /><span>Audio</span></button>
+                                <button className="ed-tool icon-tool" title="Import audio files" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'audio/*'; i.multiple = true; i.onchange = e => importMedia(e.target.files, 'audio'); i.click() }}><IcoAudio /><span>Audio</span></button>
                             </div>
                             <span className="ed-toolbar-divider" aria-hidden="true" />
                             <div className="ed-tool-group">
@@ -428,6 +384,8 @@ function Editor() {
                     <button className="ed-panel-btn" onClick={() => showView('lighttable')}>✦ Grade images in Light Table</button>
                     <button className="ed-panel-btn" onClick={() => showModal('assetModal', 'audio')}>Browse audio library</button>
                     <div className="media-library-summary"><strong>{vpState.library?.imported?.length || 0}</strong><span>images saved</span><strong>{vpState.library?.audio?.length || 0}</strong><span>audio files saved</span></div>
+                    <button className="ed-panel-btn" onClick={() => setStorageOpen(true)}>Manage storage</button>
+                    {storageOpen && <StorageManager onClose={() => setStorageOpen(false)} />}
                     <div className="settings-divider">Page audio</div>
                     <button className="ed-panel-btn" onClick={() => openAudioPicker('page')}>♫ Choose page audio</button>
                     {(project.backgroundAudio || currentPage.backgroundAudio) && <button className="ed-panel-btn" onClick={() => { if (currentPage.backgroundAudio) setPageAudio(pageIdx, null); else setBackgroundAudio(null) }}>■ Remove Audio</button>}
