@@ -8,7 +8,8 @@ import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 import Object3D from './Object3D.jsx'
 import PlayableEmbed from './PlayableEmbed.jsx'
-import { getPanelBackground, PhotoFrameSurface } from './ElementContent.jsx'
+import AudioViz from './AudioViz.jsx'
+import { getPanelBackground, PhotoFrameSurface, lightTableFilter } from './ElementContent.jsx'
 import { resolvePublicationAsset } from '../utils/assets.js'
 import { bookGeometry, legacyPageSize } from '../lib/bookGeometry.js'
 import { isPageLocked, hasLegacyPassword, unlockPage, migrateLegacyPageLock } from '../../packages/svrn-format/src/pageCrypto.js'
@@ -93,8 +94,16 @@ const styles = {
     image: (el) => ({
         width: '100%', height: '100%',
         objectFit: el.objectFit || 'contain',
-        borderRadius: el.imgRadius ? `${el.imgRadius}px` : '0'
+        borderRadius: el.imgRadius ? `${el.imgRadius}px` : '0',
+        filter: lightTableFilter(el.lightTableRecipe)
     }),
+    imageContainer: (el) => {
+        let pad = 0; let bg = 'transparent'; let shadow = 'none'; let border = 'none';
+        if (el.matStyle === 'thin') { pad = '8px'; bg = '#fff'; shadow = '0 2px 8px rgba(0,0,0,0.2)'; }
+        if (el.matStyle === 'polaroid') { pad = '12px 12px 40px 12px'; bg = '#fff'; shadow = '0 4px 12px rgba(0,0,0,0.3)'; }
+        if (el.matStyle === 'gallery') { pad = '40px'; bg = '#fafafa'; shadow = 'inset 0 0 10px rgba(0,0,0,0.1), 0 10px 25px rgba(0,0,0,0.5)'; border = '4px solid #222'; }
+        return { width: '100%', height: '100%', padding: pad, background: bg, boxShadow: shadow, border, boxSizing: 'border-box' }
+    },
     panel: (el) => ({
         width: '100%', height: '100%',
         border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
@@ -371,8 +380,13 @@ function Reader() {
                                     {el.type === 'text' && (
                                         <div style={styles.text(el)}>{el.content}</div>
                                     )}
+                                    {el.type === 'sfx' && (
+                                        <div style={styles.text(el)}>{el.content}</div>
+                                    )}
                                     {el.type === 'image' && (
-                                        <img src={renderedElement.src} style={styles.image(renderedElement)} alt="" />
+                                        <div style={styles.imageContainer(el)}>
+                                            <img src={renderedElement.src} style={styles.image(renderedElement)} alt="" />
+                                        </div>
                                     )}
                                     {el.type === 'photo-frame' && (
                                         <PhotoFrameSurface el={renderedElement} />
@@ -384,7 +398,7 @@ function Reader() {
                                         <div style={styles.shape(el)} />
                                     )}
                                     {el.type === 'shader' && (
-                                        <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
+                                        <ShaderElement preset={el.shaderPreset} customCode={el.customCode} width={el.width} height={el.height} />
                                     )}
                                     {el.type === 'object' && (
                                         <Object3D
@@ -405,6 +419,14 @@ function Reader() {
                                     )}
                                     {el.type === 'playable' && (
                                         <PlayableEmbed playable={el.playable || el} />
+                                    )}
+                                    {el.type === 'audio-viz' && (
+                                        <AudioViz
+                                            src={renderedElement.src || el.src}
+                                            color={el.color || 'var(--vp-accent)'}
+                                            width={el.width}
+                                            height={el.height}
+                                        />
                                     )}
                                     {el.type === 'audio-log' && (
                                         <div style={styles.audioLog}>
