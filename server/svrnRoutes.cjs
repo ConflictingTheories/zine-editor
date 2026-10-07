@@ -88,11 +88,11 @@ function registerSvrnRoutes(app, { authenticateToken, express }) {
         try {
             if (!req.body?.length) return res.status(400).json({ error: 'A .svrn archive is required' });
             const entries = unzipSync(new Uint8Array(req.body));
-            if (!entries['manifest.json'] || !entries['content/zine.json']) {
+            if (!entries['manifest.json'] || (!entries['content/zine.json'] && !entries['content/pixozine.json'])) {
                 return res.status(400).json({ error: 'Invalid .svrn archive' });
             }
             const manifest = JSON.parse(strFromU8(entries['manifest.json']));
-            if (manifest.formatVersion !== '1.0.0') {
+            if (manifest.formatVersion !== '1.0.0' && manifest.formatVersion !== '1.1.0') {
                 return res.status(422).json({ error: `Unsupported SVRN format ${manifest.formatVersion}` });
             }
             for (const [entry, expectedHash] of Object.entries(manifest.hashes || {})) {
