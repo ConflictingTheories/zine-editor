@@ -243,7 +243,7 @@ function PageLockSection({ page, pageIdx }) {
 }
 
 function PropertyPanel({ activeTab = 'props' }) {
-    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets, openLightTableFor, replaceElementImage, showModal, hasPageSession } = useVP()
+    const { vpState, updateElement, updatePage, updateVpState, playSFX, moveLayer, rememberColor, rememberFont, getAssets, openLightTableFor, replaceElementImage, showModal, hasPageSession, importMedia } = useVP()
     const { selection, currentProject } = vpState
 
     if (!currentProject) {
@@ -753,7 +753,11 @@ function PropertyPanel({ activeTab = 'props' }) {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
                         <button type="button" className="prop-btn" style={{ fontSize: '11px' }} onClick={() => {
                             const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'
-                            input.onchange = e => { const file = e.target.files?.[0]; if (!file) return; const r = new FileReader(); r.onload = ev => handleChange('src', ev.target.result); r.readAsDataURL(file) }
+                            // Single pipeline: the file lands in the library
+                            // (bytes in IndexedDB) and the element links by
+                            // assetId — no more base64 data: URLs baked into
+                            // the project JSON.
+                            input.onchange = async e => { const file = e.target.files?.[0]; if (!file) return; const [asset] = await importMedia([file], 'image'); if (asset) replaceElementImage(pageIdx, element.id, asset) }
                             input.click()
                         }}>↑ Replace image</button>
                         <button
@@ -854,6 +858,38 @@ function PropertyPanel({ activeTab = 'props' }) {
                     </div>
                     <div className="form-row-checkbox">
                         <label><input type="checkbox" checked={element.objSpin !== false} onChange={(e) => handleChange('objSpin', e.target.checked)} /> Auto-Rotate</label>
+                    </div>
+                </div>
+            )}
+
+            {element.type === 'playable' && (
+                <div className="prop-section">
+                    <h4>Playable</h4>
+                    <div className="form-row">
+                        <label>Title</label>
+                        <input type="text" value={element.playable?.title || element.title || ''} onChange={(e) => handleChange('title', e.target.value)} placeholder="My Game" />
+                    </div>
+                    <div className="form-row">
+                        <label>Description</label>
+                        <textarea value={element.playable?.description || element.description || ''} onChange={(e) => handleChange('description', e.target.value)} placeholder="What is this about?" rows={3} />
+                    </div>
+                    <div className="form-row">
+                        <label>Poster image URL</label>
+                        <input type="text" value={element.playable?.poster || element.poster || ''} onChange={(e) => handleChange('poster', e.target.value)} placeholder="https://…" />
+                    </div>
+                    <div className="form-row">
+                        <label>Width</label>
+                        <input type="number" value={element.playable?.dimensions?.width || element.dimensions?.width || 800} onChange={(e) => {
+                            const d = { ...(element.playable?.dimensions || element.dimensions || {}), width: parseInt(e.target.value, 10) || 800 };
+                            handleChange('dimensions', d);
+                        }} min={1} />
+                    </div>
+                    <div className="form-row">
+                        <label>Height</label>
+                        <input type="number" value={element.playable?.dimensions?.height || element.dimensions?.height || 600} onChange={(e) => {
+                            const d = { ...(element.playable?.dimensions || element.dimensions || {}), height: parseInt(e.target.value, 10) || 600 };
+                            handleChange('dimensions', d);
+                        }} min={1} />
                     </div>
                 </div>
             )}

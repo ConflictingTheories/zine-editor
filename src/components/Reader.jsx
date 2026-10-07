@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useVP } from '../context/VPContext.jsx'
 import ShaderElement from './ShaderElement.jsx'
 import Object3D from './Object3D.jsx'
+import PlayableEmbed from './PlayableEmbed.jsx'
 import { getPanelBackground, PhotoFrameSurface } from './ElementContent.jsx'
 import { resolvePublicationAsset } from '../utils/assets.js'
 import { bookGeometry, legacyPageSize } from '../lib/bookGeometry.js'
@@ -401,6 +402,9 @@ function Reader() {
                                         el.src
                                             ? <video src={el.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls autoPlay muted />
                                             : <div style={styles.video}>VIDEO: No Source</div>
+                                    )}
+                                    {el.type === 'playable' && (
+                                        <PlayableEmbed playable={el.playable || el} />
                                     )}
                                     {el.type === 'audio-log' && (
                                         <div style={styles.audioLog}>

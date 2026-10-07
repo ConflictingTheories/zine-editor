@@ -7,6 +7,7 @@ import React from 'react'
 import ShaderElement from './ShaderElement.jsx'
 import AudioViz from './AudioViz.jsx'
 import Object3D from './Object3D.jsx'
+import PlayableEmbed from './PlayableEmbed.jsx'
 
 /**
  * Component: ElementContent
@@ -393,6 +394,8 @@ const ElementContent = ({ el, pageIdx, updateElement, onRequestImage, onDropAsse
             return (
                 <div style={styles.video}>VIDEO: {el.src || 'No Source'}</div>
             )
+        case 'playable':
+            return <PlayableEmbed playable={el.playable || el} />
         case 'audio-log':
         case 'audio-viz':
             return (

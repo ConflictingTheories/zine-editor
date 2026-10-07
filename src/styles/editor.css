@@ -53,7 +53,7 @@
 }
 .ed-tool.active {
     background: var(--vp-accent2);
-    color: #fff;
+    color: var(--accent-contrast);
     border-color: var(--vp-accent2)
 }
 .ed-tool-sep {
@@ -515,10 +515,10 @@
     padding: 0 20px 20px;
 }
 .template-card {
-    border: 1px solid #ddd;
+    border: 1px solid var(--line);
     border-radius: 6px;
     padding: 10px;
-    background: #fff;
+    background: var(--surface-0);
 }
 .template-preview {
     height: 160px;
@@ -527,9 +527,9 @@
     justify-content: center;
     align-items: center;
     text-align: center;
-    border: 1px solid #eee;
+    border: 1px solid var(--line-soft);
     margin-bottom: 10px;
-    color: #333;
+    color: var(--text);
 }
 .template-preview small {
     margin-top: 8px;

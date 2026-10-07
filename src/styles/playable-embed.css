@@ -1,0 +1,180 @@
+/*
+ * PlayableEmbed styles — token-driven, theme-agnostic.
+ * Works in both Gallery dark and light via the token ramp.
+ */
+
+.playable-embed {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--surface-sunken);
+}
+
+.playable-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    transition: opacity var(--dur-slow) var(--ease);
+}
+
+/* ── Poster / click-to-play ─────────────────────────────────────────── */
+.playable-poster-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.playable-poster-blank {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 50% 40%, var(--surface-2), var(--surface-sunken));
+}
+
+.playable-start {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: max-content;
+    height: max-content;
+    max-width: 80%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--line-strong);
+    background: var(--glass);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--type-md);
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.playable-start:hover {
+    transform: scale(1.04);
+    border-color: var(--accent-line);
+}
+
+.playable-start:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.playable-start-icon {
+    font-size: var(--type-lg);
+    line-height: 1;
+}
+
+.playable-start-label {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playable-poster-desc {
+    position: absolute;
+    left: var(--space-md);
+    right: var(--space-md);
+    bottom: var(--space-md);
+    color: var(--text-muted);
+    font-size: var(--type-sm);
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .5);
+    pointer-events: none;
+}
+
+/* ── Loading ───────────────────────────────────────────────────────── */
+.playable-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.playable-spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--line-strong);
+    border-top-color: var(--accent);
+    animation: playable-spin var(--dur-slow) linear infinite;
+}
+
+@keyframes playable-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .playable-spinner { animation: none; }
+    .playable-frame { transition: none; }
+}
+
+/* ── Fallback / error ───────────────────────────────────────────────── */
+.playable-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    text-align: center;
+    background: var(--surface-0);
+}
+
+.playable-fallback-image {
+    max-width: 100%;
+    max-height: 40%;
+    border-radius: var(--radius-sm);
+    object-fit: contain;
+}
+
+.playable-fallback-title {
+    color: var(--text);
+    font-size: var(--type-md);
+    font-weight: 600;
+}
+
+.playable-fallback-body {
+    color: var(--text-muted);
+    font-size: var(--type-sm);
+    max-width: 36ch;
+}
+
+/* ── Empty (editor, nothing configured) ─────────────────────────────── */
+.playable-empty-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-md);
+    margin: var(--space-xs);
+}
+
+.playable-empty-title {
+    color: var(--text-muted);
+    font-size: var(--type-sm);
+    font-weight: 600;
+}
+
+.playable-empty-hint {
+    color: var(--text-dim);
+    font-size: var(--type-xs);
+}

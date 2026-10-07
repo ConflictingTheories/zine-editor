@@ -51,6 +51,7 @@ function Modal() {
     })
     const [publishStep, setPublishStep] = useState(1) // 1 = details, 2 = monetization
     const [helpTab, setHelpTab] = useState('shortcuts')
+    const [isPublishing, setIsPublishing] = useState(false)
 
     useEffect(() => {
         if (!vpState.modals?.publishModal?.active || !vpState.currentProject) return
@@ -77,9 +78,12 @@ function Modal() {
 
     const handlePublishSubmit = async (e) => {
         e.preventDefault()
+        if (isPublishing) return
         if (!document.getElementById('pubGuidelines')?.checked) {
             return
         }
+        setIsPublishing(true)
+        try {
 
         // Prepare publish data with monetization settings
         const fullPublishData = {
@@ -96,6 +100,9 @@ function Modal() {
 
         await publishZine(fullPublishData)
         setPublishData({ title: '', author: '', description: '', genre: 'classic', tags: '', monetizationType: 'free', fundingGoal: '', tokenGate: false })
+        } finally {
+            setIsPublishing(false)
+        }
     }
 
     const renderAuthModal = () => (
@@ -307,8 +314,8 @@ function Modal() {
                         <input type="checkbox" id="pubGuidelines" required style={{ width: 'auto' }} />
                         <label htmlFor="pubGuidelines" style={{ marginBottom: 0 }}>Accept Voyagers' Guidelines</label>
                     </div>
-                    <button className="btn-premium" type="submit" style={{ width: '100%', marginTop: '1rem' }}>
-                        🚀 Launch to SVRN Publishing
+                    <button className="btn-premium" type="submit" style={{ width: '100%', marginTop: '1rem' }} disabled={isPublishing}>
+                        {isPublishing ? 'Publishing…' : '🚀 Launch to SVRN Publishing'}
                     </button>
                 </form>
             </div>

@@ -14,6 +14,8 @@ import { DEFAULT_PAPER } from '../constants.js'
 import { packSvrn } from '../../packages/svrn-format/src/index.js'
 import { isPageLocked, hasLegacyPassword, lockPage, unlockPage, relockPage, migrateLegacyPageLock, derivePageKey } from '../../packages/svrn-format/src/pageCrypto.js'
 import { getPhotoBlob, putPhoto, deletePhotos, storedPhotoIds, makeThumbnail } from '../lib/photoStore.js'
+import { importMediaFiles } from '../utils/photoImport.js'
+import { toStorableProject, resolveProjectAssets, inlineProjectAssets } from '../utils/projectAssets.js'
 
 /** Element and layout ids share one generator so they can never collide. */
 const uid = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -93,6 +95,18 @@ const SHADOW_LIBRARY_KEY = 'vp_asset_library_shadow'
  */
 let libraryWriteChain = Promise.resolve()
 
+/**
+ * Set when the most recent library write failed (quota/private mode). The
+ * provider consumes it to tell the user once, instead of letting the failure
+ * stay silent inside the promise chain.
+ */
+let libraryWriteFailed = false
+export const consumeLibraryWriteFailed = () => {
+    const failed = libraryWriteFailed
+    libraryWriteFailed = false
+    return failed
+}
+
 const writeLibraryPayload = (payload) => {
     libraryWriteChain = libraryWriteChain.then(async () => {
         try {
@@ -104,7 +118,9 @@ const writeLibraryPayload = (payload) => {
             return true
         } catch {
             // Out of quota: the caller still holds the session in memory, so
-            // this is a soft failure rather than a lost library.
+            // this is a soft failure rather than a lost library — but the
+            // user must be told, or the next reload is a nasty surprise.
+            libraryWriteFailed = true
             return false
         }
     })
@@ -238,10 +254,16 @@ const VPProvider = ({ children }) => {
         persistTimerRef.current = setTimeout(() => {
             persistTimerRef.current = null
             try {
-                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current))
+                // Strip session-ephemeral blob: URLs before writing: the
+                // assetId stays, so the next open re-resolves them from the
+                // blob store. Writing object URLs to disk is how images used
+                // to come back broken after every reload.
+                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current.map(toStorableProject)))
             } catch (e) {
                 // Quota or private-mode denial. The session keeps working from
-                // memory; losing autosave is strictly better than a frozen tab.
+                // memory; losing autosave is strictly better than a frozen tab —
+                // but the user must know, or "Project saved!" is a lie.
+                toastThrottled('project-quota', 'Autosave failed — browser storage is full. Export a backup copy!', 'error')
             }
         }, 500)
     }, [vpState.projects])
@@ -254,7 +276,7 @@ const VPProvider = ({ children }) => {
                 persistTimerRef.current = null
             }
             try {
-                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current))
+                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current.map(toStorableProject)))
             } catch (e) { /* nothing more we can do */ }
         }
         window.addEventListener('pagehide', flush)
@@ -359,7 +381,13 @@ const VPProvider = ({ children }) => {
             fonts: library.fonts || [],
             video: library.video || [],
             ...storedPatch({ imported: true, audio: true }, library)
-        }))
+        })).then(() => {
+            // Quota failures used to vanish inside the write chain; the next
+            // reload would then greet the user with a smaller library.
+            if (consumeLibraryWriteFailed()) {
+                toastThrottled('library-quota', 'Library could not be saved — browser storage is full.', 'error')
+            }
+        })
     }
 
     const rememberColor = (color) => {
@@ -409,6 +437,34 @@ const VPProvider = ({ children }) => {
     }
 
     const addImportedAsset = (asset) => addImportedAssets([asset])
+
+    /**
+     * The one media import entry point. Every UI that takes files — single
+     * image button, bulk import, canvas drag-drop, audio import, asset modal,
+     * image replace — calls this, so "bytes to IndexedDB, metadata to
+     * localStorage" has exactly one implementation.
+     *
+     * @param {FileList|File[]} files
+     * @param {'image'|'audio'} kind
+     * @returns {Promise<object[]>} the committed library assets (with fresh
+     *          object-URL srcs and library ids). Files whose bytes could not
+     *          be stored are reported via toast and left out.
+     */
+    const importMedia = async (files, kind = 'image') => {
+        const { assets, failed } = await importMediaFiles(files, kind)
+        if (assets.length) addImportedAssets(assets)
+        if (failed.length) {
+            toastThrottled(
+                'import-quota',
+                `Storage is full — ${failed.length} file${failed.length === 1 ? '' : 's'} could not be kept (${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}). Free space in Manage storage.`,
+                'error'
+            )
+        } else if (assets.length) {
+            const noun = kind === 'audio' ? 'sound' : 'image'
+            toast(`${assets.length} ${noun}${assets.length === 1 ? '' : 's'} stored in the library`, 'success')
+        }
+        return assets
+    }
 
     const addImportedAssetsWithRoom = (assets) => {
         const validAssets = (assets || []).filter(asset => asset?.src)
@@ -569,7 +625,7 @@ const VPProvider = ({ children }) => {
      */
     const applyUiTheme = (theme) => {
         const next = theme === 'light' ? 'light' : 'dark'
-        document.documentElement.setAttribute('data-ui-theme', next)
+        document.documentElement.setAttribute('data-theme', next)
         localStorage.setItem('vp_ui_theme', next)
         setVpState(prev => ({ ...prev, uiTheme: next }))
     }
@@ -588,7 +644,7 @@ const VPProvider = ({ children }) => {
     }
 
     useEffect(() => {
-        document.documentElement.setAttribute('data-ui-theme', vpState.uiTheme || 'dark')
+        document.documentElement.setAttribute('data-theme', vpState.uiTheme || 'dark')
     }, [vpState.uiTheme])
 
     const themes = {
@@ -718,6 +774,18 @@ const VPProvider = ({ children }) => {
     }
 
     /**
+     * Storage failures are persistent conditions, not one-off events: without
+     * throttling, every autosave tick would stack another identical toast.
+     * One toast per key per session is enough to tell the user.
+     */
+    const toastSeenRef = useRef(new Set())
+    const toastThrottled = (key, msg, type = 'error') => {
+        if (toastSeenRef.current.has(key)) return
+        toastSeenRef.current.add(key)
+        toast(msg, type)
+    }
+
+    /**
      * Show a modal identified by `id` (see Modal usage in UI components).
      * Optionally provide a `subtype` to indicate modal variant.
      * @param {string} id modal id key
@@ -752,7 +820,7 @@ const VPProvider = ({ children }) => {
                 const projects = project
                     ? prev.projects.map(p => p.id === project.id ? { ...project, _dirty: true, updatedAt: Date.now() } : p)
                     : prev.projects
-                localStorage.setItem('vp_projects', JSON.stringify(projects))
+                localStorage.setItem('vp_projects', JSON.stringify(projects.map(toStorableProject)))
             } catch (e) { }
             return prev
         })
@@ -781,7 +849,7 @@ const VPProvider = ({ children }) => {
         if (!stored) {
             const initial = backfillTimestamps([getTutorialData(), ...getAdditionalDefaultZines()])
             setVpState(prev => ({ ...prev, projects: initial }))
-            localStorage.setItem('vp_projects', JSON.stringify(initial))
+            localStorage.setItem('vp_projects', JSON.stringify(initial.map(toStorableProject)))
             localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
             return
         }
@@ -796,7 +864,7 @@ const VPProvider = ({ children }) => {
             )
             const next = backfillTimestamps([example, ...getAdditionalDefaultZines(), ...withoutOld])
             setVpState(prev => ({ ...prev, projects: next }))
-            localStorage.setItem('vp_projects', JSON.stringify(next))
+            localStorage.setItem('vp_projects', JSON.stringify(next.map(toStorableProject)))
             localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
         } catch (e) {
             // keep existing projects if parse fails
@@ -818,7 +886,7 @@ const VPProvider = ({ children }) => {
     useEffect(() => {
         if (vpState.projects?.length > 0) {
             try {
-                localStorage.setItem('vp_projects', JSON.stringify(vpState.projects))
+                localStorage.setItem('vp_projects', JSON.stringify(vpState.projects.map(toStorableProject)))
             } catch (e) { }
         }
     }, [])
@@ -871,7 +939,11 @@ const VPProvider = ({ children }) => {
         const project = vpState.currentProject
         const page = project?.pages?.[pageIdx]
         if (!page) return
-        const locked = await lockPage(page, password)
+        // Inline asset bytes before encryption: the envelope is opaque after
+        // this, so any blob: URL inside would be dead weight the next time
+        // the page is decrypted.
+        const { project: inlined } = await inlineProjectAssets({ pages: [page] })
+        const locked = await lockPage(inlined.pages[0], password)
         const key = await derivePageKey(password, locked.lock.salt, locked.lock.iter)
         pageKeysRef.current[`${project.id}:${pageIdx}`] = { key, salt: locked.lock.salt, iter: locked.lock.iter }
         replacePage(pageIdx, locked)
@@ -908,7 +980,8 @@ const VPProvider = ({ children }) => {
         const page = project?.pages?.[pageIdx]
         const session = project && sessionKeyFor(project.id, pageIdx)
         if (!page || !session) return
-        const relocked = await relockPage(page, session)
+        const { project: inlined } = await inlineProjectAssets({ pages: [page] })
+        const relocked = await relockPage(inlined.pages[0], session)
         delete pageKeysRef.current[`${project.id}:${pageIdx}`]
         replacePage(pageIdx, relocked)
         toast('Page re-locked', 'success')
@@ -940,7 +1013,14 @@ const VPProvider = ({ children }) => {
         for (let i = 0; i < project.pages.length; i++) {
             const page = project.pages[i]
             const session = sessionKeyFor(project.id, i)
-            out.push(session && !isPageLocked(page) ? await relockPage(page, session) : page)
+            // The server payload must be portable: inline every assetId-linked
+            // ref as a data: URL from the blob store, because the in-memory
+            // blob: object URLs are dead the moment they leave this tab.
+            // Locked pages are encrypted below, so the inlined bytes end up
+            // inside the envelope — self-contained and decryptable anywhere.
+            const { project: inlined } = await inlineProjectAssets({ pages: [page] })
+            const portable = inlined.pages[0]
+            out.push(session && !isPageLocked(page) ? await relockPage(portable, session) : portable)
         }
         return out
     }
@@ -1120,39 +1200,59 @@ const VPProvider = ({ children }) => {
         const p = projects[idx]
         if (p._remote) {
             toast('Downloading pixozine...', 'info')
-            api(`/zines/${p.serverId}`).then(res => {
+            api(`/zines/${p.serverId}`).then(async res => {
                 // Backend returns { ...pixozine, data: parsedPages }
                 // data is the array of pages
                 const pages = Array.isArray(res.data)
                     ? res.data
                     : (res.data?.pages || res.pages || [])
                 const project = { ...p, pages, _remote: false }
-                const nextProjects = [...projects]
-                nextProjects[idx] = project
-                applyContentThemeVars(project.theme || 'classic')
-                setVpState(prev => ({
-                    ...prev,
-                    projects: nextProjects,
-                    currentProject: project,
-                    currentView: 'editor',
-                    selection: { type: 'page', id: project.pages[0]?.id, pageIdx: 0 },
-                    history: [JSON.parse(JSON.stringify(project))],
-                    historyIdx: 0
-                }))
+                // Downloaded zines carry portable data: URLs; absorb them into
+                // the local blob store so the zine works offline and later
+                // saves stop re-serialising megabytes of base64.
+                const { project: resolved } = await resolveProjectAssets(project)
+                applyContentThemeVars(resolved.theme || 'classic')
+                setVpState(prev => {
+                    const nextProjects = [...prev.projects]
+                    nextProjects[idx] = resolved
+                    return {
+                        ...prev,
+                        projects: nextProjects,
+                        currentProject: resolved,
+                        currentView: 'editor',
+                        selection: { type: 'page', id: resolved.pages[0]?.id, pageIdx: 0 },
+                        history: [JSON.parse(JSON.stringify(resolved))],
+                        historyIdx: 0
+                    }
+                })
             }).catch(e => {
                 toast('Failed to download pixozine: ' + e.message, 'error')
             })
             return
         }
         applyContentThemeVars(p.theme || 'classic')
-        setVpState(prev => ({
-            ...prev,
-            currentProject: p,
-            currentView: 'editor',
-            selection: { type: 'page', id: p.pages[0]?.id, pageIdx: 0 },
-            history: [JSON.parse(JSON.stringify(p))],
-            historyIdx: 0
-        }))
+        // Resolve library references to fresh object URLs before the editor
+        // sees the project: elements persist only the assetId, and the blob:
+        // URL from the previous session is dead. Without this, every image
+        // placed from the library renders broken after a reload.
+        resolveProjectAssets(p).then(({ project: resolved, missing }) => {
+            if (missing.length) {
+                toastThrottled('project-missing-assets', `${missing.length} image${missing.length === 1 ? '' : 's'} could not be found in storage and may appear broken.`, 'error')
+            }
+            setVpState(prev => {
+                const nextProjects = [...prev.projects]
+                nextProjects[idx] = resolved
+                return {
+                    ...prev,
+                    projects: nextProjects,
+                    currentProject: resolved,
+                    currentView: 'editor',
+                    selection: { type: 'page', id: resolved.pages[0]?.id, pageIdx: 0 },
+                    history: [JSON.parse(JSON.stringify(resolved))],
+                    historyIdx: 0
+                }
+            })
+        })
     }
 
     const saveProject = () => {
@@ -1753,19 +1853,19 @@ const VPProvider = ({ children }) => {
         if (vpState.currentView !== 'reader') stopBGM()
     }, [vpState.currentView])
 
-    const setBackgroundAudio = (src, name = 'Background audio', loop = true) => {
+    const setBackgroundAudio = (src, name = 'Background audio', loop = true, assetId = null) => {
         if (!vpState.currentProject) return false
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        project.backgroundAudio = src ? { src, name, loop: Boolean(loop) } : null
+        project.backgroundAudio = src ? { src, name, assetId: assetId || undefined, loop: Boolean(loop) } : null
         updateCurrentProject(project)
         toast(src ? 'Background audio added' : 'Background audio removed', 'success')
         return true
     }
 
-    const setPageAudio = (pageIdx, src, name = 'Page audio', loop = true) => {
+    const setPageAudio = (pageIdx, src, name = 'Page audio', loop = true, assetId = null) => {
         if (!vpState.currentProject?.pages?.[pageIdx]) return false
         const project = JSON.parse(JSON.stringify(vpState.currentProject))
-        if (src) project.pages[pageIdx].backgroundAudio = { src, name, loop: Boolean(loop) }
+        if (src) project.pages[pageIdx].backgroundAudio = { src, name, assetId: assetId || undefined, loop: Boolean(loop) }
         else delete project.pages[pageIdx].backgroundAudio
         updateCurrentProject(project)
         toast(src ? 'Page audio override added' : 'Page audio override removed', 'success')
@@ -2020,7 +2120,7 @@ const VPProvider = ({ children }) => {
                 setVpState(prev => ({ ...prev, projects: next, currentProject: project }))
             }
             closeModal('publishModal')
-            toast('🚀 Pixozine published! Go to Discover to see it live.', 'success')
+            toast('🚀 Pixozine published! It now shows as Published in your library.', 'success')
         } catch (e) {
             toast('Publish failed: ' + (e.message || 'Error'), 'error')
         }
@@ -2111,11 +2211,15 @@ const VPProvider = ({ children }) => {
         } else if (type === 'imported') {
             const asset = (getAssets('imported') || []).find(item => item.id === assetId)
             if (!asset) return
-            el = { ...base, type: 'image', src: asset.src, width: 240, height: 180, objectFit: 'contain' }
+            // Link the element to the library asset: the src is re-resolved
+            // from the blob store every time the project opens, so a stale
+            // blob: URL can never be persisted and resurrected as a broken
+            // image.
+            el = { ...base, type: 'image', src: asset.src, assetId: asset.id, assetName: asset.name || asset.id, width: 240, height: 180, objectFit: 'contain' }
         } else if (type === 'audio') {
             const asset = (getAssets('audio') || []).find(item => item.id === assetId)
             if (!asset) return
-            el = { ...base, type: 'audio-log', src: asset.src, name: asset.name, width: 260, height: 100 }
+            el = { ...base, type: 'audio-log', src: asset.src, assetId: asset.id, name: asset.name, width: 260, height: 100 }
         } else if (type === 'objects') {
             const colors = {
                 crystal: '#4488ff',
@@ -2428,6 +2532,7 @@ const VPProvider = ({ children }) => {
         addImportedAsset,
         addImportedAssets,
         addImportedAssetsWithRoom,
+        importMedia,
         updateImportedAsset,
         toggleAssetFlag,
         removeImportedAssets,

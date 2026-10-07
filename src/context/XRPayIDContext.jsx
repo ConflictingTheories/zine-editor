@@ -39,7 +39,7 @@ const XRPayIDProvider = ({ children }) => {
         refresh: async () => disabledState,
         updateXrState: () => {}
     }
-    return <XRPayIDContext.Provider value={value}>{children}</XRPayIDProvider>
+    return <XRPayIDContext.Provider value={value}>{children}</XRPayIDContext.Provider>
 }
 
 export { XRPayIDProvider }

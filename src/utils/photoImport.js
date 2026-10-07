@@ -146,3 +146,65 @@ export const filesFromDrop = (dataTransfer) => {
     if (dataTransfer.files?.length) return Array.from(dataTransfer.files)
     return []
 }
+
+/**
+ * The single media import pipeline. Every import path in the app — single
+ * image, bulk images, drag-drop, audio from the editor, audio from the asset
+ * modal, image replace — funnels through here, so there is exactly one place
+ * where "bytes go to IndexedDB, metadata goes to localStorage" can break.
+ *
+ * Images: filesToAssets → commitAssets (bytes to the blob store, thumbnail,
+ * object-URL src). Audio: bytes are written first, so a storage failure can
+ * never leave a record whose bytes are nowhere.
+ *
+ * @param {FileList|File[]} files
+ * @param {'image'|'audio'} kind
+ * @returns {Promise<{ assets: object[], failed: string[] }>} committed assets
+ *          plus the names of files whose bytes could not be stored (quota).
+ */
+export const importMediaFiles = async (files, kind = 'image') => {
+    const list = Array.from(files || []).filter(Boolean)
+    if (!list.length) return { assets: [], failed: [] }
+
+    if (kind === 'audio') {
+        const audioFiles = list.filter(file => file?.type?.startsWith('audio/'))
+        if (!audioFiles.length) return { assets: [], failed: [] }
+        const stamp = Date.now()
+        const assets = []
+        const failed = []
+        for (const [i, file] of audioFiles.entries()) {
+            const id = `audio-${stamp}-${i}-${Math.random().toString(36).slice(2, 8)}`
+            // Write the real bytes first, so a storage failure never leaves a
+            // record whose bytes are nowhere.
+            const stored = await putPhoto(id, file)
+            if (!stored) { failed.push(file.name || 'untitled audio'); continue }
+            const url = await toObjectUrl(id)
+            assets.push({
+                id,
+                name: file.name || 'Untitled audio',
+                originalName: file.name,
+                src: url,
+                bytes: file.size || 0,
+                kind: 'audio',
+                addedAt: new Date().toISOString(),
+            })
+        }
+        return { assets, failed }
+    }
+
+    // Images (default): the shared photo pipeline.
+    const created = await filesToAssets(list)
+    if (!created.length) return { assets: [], failed: [] }
+    const measured = await measureAssets(created)
+    const settled = await commitAssets(measured)
+    // commitAssets leaves the original asset untouched when the blob write
+    // fails — those still carry a data: src and must be reported, not
+    // silently kept as orphans.
+    const assets = []
+    const failed = []
+    for (const asset of settled) {
+        if (asset?.src?.startsWith('data:')) failed.push(asset.name || 'untitled image')
+        else assets.push(asset)
+    }
+    return { assets, failed }
+}
