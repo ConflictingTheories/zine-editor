@@ -9,6 +9,9 @@ const vault = require('./vaultService.cjs');
 const accountRoutes = require('./accountRoutes.cjs');
 const { seedDemoUser, DEMO_TOKEN, isDemoAccountAllowed } = require('./demoAccount.cjs');
 const { registerSvrnRoutes } = require('./svrnRoutes.cjs');
+const { registerIdentityRoutes } = require('./identityRoutes.cjs');
+const { registerStorageRoutes } = require('./storageRoutes.cjs');
+const { createAssetStore } = require('./assetStore.cjs');
 const { normalizeZineData, serializeZineData } = require('./zineStore.cjs');
 
 const {
@@ -36,6 +39,12 @@ app.get('/api/health', (req, res) => {
 });
 
 registerSvrnRoutes(app, { authenticateToken, express });
+registerIdentityRoutes(app, { db, authenticateToken });
+
+// Server-side storage: content-hash assets + project sync. The asset store
+// is disk-backed in dev; set ASSET_STORE=s3 (plus S3_* env) for production.
+const assetStore = createAssetStore();
+registerStorageRoutes(app, { db, authenticateToken, express, assetStore });
 
 // API Routes
 
@@ -140,6 +149,96 @@ app.post('/api/zines', authenticateToken, async (req, res) => {
             });
             res.json({ id, status: 'created' });
         }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create/Update Spritz (game bundle)
+app.post('/api/spritz', authenticateToken, async (req, res) => {
+    const { title, data, serverId } = req.body;
+
+    try {
+        if (serverId) {
+            await db('spritz')
+                .where({ id: serverId, user_id: req.user.id })
+                .update({
+                    title,
+                    data: JSON.stringify(data),
+                    updated_at: db.fn.now()
+                });
+            res.json({ id: serverId, status: 'updated' });
+        } else {
+            const [id] = await db('spritz').insert({
+                user_id: req.user.id,
+                title,
+                data: JSON.stringify(data)
+            });
+            res.json({ id, status: 'created' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get User Spritzes
+app.get('/api/spritz', authenticateToken, async (req, res) => {
+    try {
+        const rows = await db('spritz').where({ user_id: req.user.id }).orderBy('updated_at', 'desc');
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get Single Spritz
+app.get('/api/spritz/:id', async (req, res) => {
+    try {
+        const row = await db('spritz').where({ id: req.params.id }).first();
+        if (!row) return res.status(404).json({ error: 'Spritz not found' });
+        res.json(row);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Spritz
+app.delete('/api/spritz/:id', authenticateToken, async (req, res) => {
+    try {
+        await db('spritz').where({ id: req.params.id, user_id: req.user.id }).del();
+        res.json({ status: 'deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Publish Spritz
+app.post('/api/spritz/:id/publish', authenticateToken, async (req, res) => {
+    const { price, isPublic } = req.body;
+    try {
+        await db('spritz')
+            .where({ id: req.params.id, user_id: req.user.id })
+            .update({
+                is_published: true,
+                price: price || 0,
+                is_public: isPublic !== false,
+                published_at: db.fn.now(),
+                updated_at: db.fn.now()
+            });
+        res.json({ status: 'published' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get Published Spritzes (public discovery)
+app.get('/api/published/spritz', async (req, res) => {
+    try {
+        const rows = await db('spritz')
+            .where({ is_published: true, is_public: true })
+            .orderBy('published_at', 'desc')
+            .limit(50);
+        res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
