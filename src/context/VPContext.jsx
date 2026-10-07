@@ -1,0 +1,2564 @@
+/*
+ * Context: VPContext
+ * Primary application state provider for authentication, views, editor state, and shared API helpers.
+ */
+
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { getTutorialData, EXAMPLE_SEED_VERSION, EXAMPLE_PROJECT_ID, DEFAULT_ZINE_IDS } from '../data/tutorialData.js'
+import { getAdditionalDefaultZines } from '../data/defaultZines.js'
+import { BUILT_IN_TEMPLATES, createTemplatePage, getStoredTemplates, TEMPLATE_STORAGE_KEY } from '../data/pageTemplates.js'
+import { EDITOR_MODE_PHOTO_PORTFOLIO, EDITOR_MODE_ZINE, defaultThemeForMode } from '../data/editorModes.js'
+import { getPortfolioLayout, createLayoutPages } from '../data/portfolioTemplates.js'
+import { bookGeometry, pageKind, PAGE_KIND } from '../lib/bookGeometry.js'
+import { DEFAULT_PAPER } from '../constants.js'
+import { packSvrn } from '../../packages/svrn-format/src/index.js'
+import { isPageLocked, hasLegacyPassword, lockPage, unlockPage, relockPage, migrateLegacyPageLock, derivePageKey } from '../../packages/svrn-format/src/pageCrypto.js'
+import { getPhotoBlob, putPhoto, deletePhotos, storedPhotoIds, makeThumbnail } from '../lib/photoStore.js'
+import { importMediaFiles } from '../utils/photoImport.js'
+import { toStorableProject, resolveProjectAssets, inlineProjectAssets } from '../utils/projectAssets.js'
+
+/** Element and layout ids share one generator so they can never collide. */
+const uid = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+/**
+ * Stamp cover/body/back kinds onto a page list, purely from position.
+ *
+ * The stamps are re-derived from scratch every time, which is the only thing
+ * that works: an earlier version preserved existing non-null kinds, so appending
+ * a page left the previous back cover still stamped "back" and a four-page book
+ * reported three back covers. Position is the truth; the stamp is a cache of it.
+ */
+const markPageKinds = (pages) => {
+    const total = (pages || []).length
+    pages.forEach((p, i) => {
+        // Clear first — a stale stamp from a shorter book must not survive.
+        p.pageKind = null
+    })
+    if (total > 1) {
+        pages[0].pageKind = PAGE_KIND.COVER
+        pages[total - 1].pageKind = PAGE_KIND.BACK
+    }
+    return pages
+}
+
+/**
+ * VPContext
+ *
+ * Central app context holding editor state, projects, user, and helper
+ * functions used across the application. The provider exposes a compact
+ * API for reading state and performing common actions (CRUD on elements,
+ * project management, theme application, simple audio playback, and
+ * lightweight sync to the backend API).
+ *
+ * Consumers should use `useVP()` to access `vpState` and the helper
+ * methods documented below.
+ */
+
+const VPContext = createContext()
+
+/**
+ * Hook: useVP
+ * @returns {object} The context value provided by VPProvider including
+ *                   `vpState` and helper methods (toast, api, addElement, ...)
+ */
+export const useVP = () => useContext(VPContext)
+
+/** Which stored collections a given library update touched. */
+const storedPatch = (update, library) => {
+    const patch = {}
+    if (update.imported) patch.imported = (library.imported || []).map(toStoredRecord)
+    if (update.audio) patch.audio = (library.audio || []).map(toStoredRecord)
+    if (update.video) patch.video = library.video || []
+    if (update.colors) patch.colors = library.colors
+    if (update.fonts) patch.fonts = library.fonts
+    return patch
+}
+
+// ── Library persistence ────────────────────────────────────────────────────────
+// Module scope, outside the provider: this is storage plumbing with no business
+// in React's render cycle, and the write chain must not reset between renders.
+
+const LIBRARY_KEY = 'vp_asset_library'
+const SHADOW_LIBRARY_KEY = 'vp_asset_library_shadow'
+
+/**
+ * Writes are serialised through one promise chain, so a read-modify-write can
+ * never interleave with another.
+ *
+ * The double buffer is the fix for the "assets disappear" class of bug.
+ * `persistLibrary` used to build its stored payload from `prev` — the value
+ * captured by the enclosing updater — so two library updates landing in the
+ * same React batch (import a shoot, then favourite one frame) both serialised
+ * the *old* library and the second write erased the first. Mirroring the
+ * previous payload into a shadow key means a lost update can cost at most one
+ * batch of edits, and boot merges the two back together.
+ */
+let libraryWriteChain = Promise.resolve()
+
+/**
+ * Set when the most recent library write failed (quota/private mode). The
+ * provider consumes it to tell the user once, instead of letting the failure
+ * stay silent inside the promise chain.
+ */
+let libraryWriteFailed = false
+export const consumeLibraryWriteFailed = () => {
+    const failed = libraryWriteFailed
+    libraryWriteFailed = false
+    return failed
+}
+
+const writeLibraryPayload = (payload) => {
+    libraryWriteChain = libraryWriteChain.then(async () => {
+        try {
+            const previous = localStorage.getItem(LIBRARY_KEY)
+            if (previous) localStorage.setItem(SHADOW_LIBRARY_KEY, previous)
+        } catch { /* nothing to shadow */ }
+        try {
+            localStorage.setItem(LIBRARY_KEY, JSON.stringify(payload))
+            return true
+        } catch {
+            // Out of quota: the caller still holds the session in memory, so
+            // this is a soft failure rather than a lost library — but the
+            // user must be told, or the next reload is a nasty surprise.
+            libraryWriteFailed = true
+            return false
+        }
+    })
+    return libraryWriteChain
+}
+
+/** Read-modify-write against the library *as stored*, never a stale closure. */
+const updateLibraryPersisted = (mutate) => libraryWriteChain.then(async () => {
+    let current = {}
+    try { current = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}') } catch { current = {} }
+    const next = mutate(current) || current
+    await writeLibraryPayload(next)
+    return next
+})
+
+/** Union two stored lists by value, primary first. */
+const mergeById = (primary, shadow) => {
+    const out = []
+    const seen = new Set()
+    for (const value of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(shadow) ? shadow : [])]) {
+        const key = typeof value === 'string' ? value : value?.id
+        if (key === undefined || key === null || seen.has(key)) continue
+        seen.add(key)
+        out.push(value)
+    }
+    return out
+}
+
+const readAssetLibrary = () => {
+    try {
+        const stored = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}')
+        // A lost update can leave the shadow copy holding assets the primary
+        // key lost, so the two collections are merged by id rather than one
+        // being chosen outright — the user's photographs must come back.
+        let shadow = {}
+        try { shadow = JSON.parse(localStorage.getItem(SHADOW_LIBRARY_KEY) || '{}') } catch { shadow = {} }
+        return {
+            colors: mergeById(stored.colors, shadow.colors),
+            fonts: mergeById(stored.fonts, shadow.fonts),
+            imported: mergeById(stored.imported, shadow.imported),
+            audio: mergeById(stored.audio, shadow.audio),
+            video: mergeById(stored.video, shadow.video)
+        }
+    } catch {
+        return { colors: [], fonts: [], imported: [], audio: [], video: [] }
+    }
+}
+
+/**
+ * Photograph bytes live in IndexedDB, not localStorage — see lib/photoStore.
+ * A metadata record therefore carries no `src`: just the id, the dimensions,
+ * a small thumbnail for the grid, flags and the Light Table recipe. The
+ * readable `src` handed to the UI is an ephemeral object URL minted here and
+ * deliberately never written to disk, so a library can hold thousands of
+ * photographs without approaching the localStorage quota.
+ */
+const toStoredRecord = (asset) => {
+    if (!asset?.id) return asset
+    const { src, ...rest } = asset
+    return { ...rest, thumb: asset.thumb || null, width: asset.width, height: asset.height }
+}
+
+/**
+ * Mint a readable `src` for a record. The bytes are always fetched from the
+ * blob store when they are there, even if the record still carries an inline
+ * `data:` src — that inline value is legacy state on its way out, and reusing
+ * it would keep base64 alive forever.
+ */
+const resolveAssetSrc = async (asset) => {
+    if (!asset?.id) return asset
+    const blob = await getPhotoBlob(asset.id)
+    if (!blob) {
+        // No bytes on disk. Keep whatever the record had so a partially
+        // failed migration never turns into a library of broken images.
+        return asset
+    }
+    return { ...asset, src: URL.createObjectURL(blob) }
+}
+
+const VPProvider = ({ children }) => {
+    const [vpState, setVpState] = useState({
+        projects: JSON.parse(localStorage.getItem('vp_projects') || '[]'),
+        templates: getStoredTemplates(),
+        library: readAssetLibrary(),
+        published: [],
+        currentProject: null,
+        isPremium: false,
+        selectedTheme: 'classic',
+        uiTheme: localStorage.getItem('vp_ui_theme') || 'dark',
+        // Parse user and ensure ID is numeric
+        user: (() => {
+            const stored = localStorage.getItem('vp_user')
+            if (!stored) return null
+            try {
+                const parsed = JSON.parse(stored)
+                return { ...parsed, id: Number(parsed.id) }
+            } catch {
+                return null
+            }
+        })(),
+        token: localStorage.getItem('vp_token') || (import.meta.env.DEV ? 'local_offline_token' : null),
+        isOnline: navigator.onLine,
+        isSyncing: false,
+        toasts: [],
+        modals: {},
+        currentView: 'dashboard',
+        readerMode: null,
+        selection: { type: null, id: null, pageIdx: 0 },
+        history: [],
+        historyIdx: -1
+    })
+
+    const historyTimerRef = useRef(null)
+
+    // ── Persistence throttle ────────────────────────────────────────────────
+    /**
+     * Writing `vp_projects` is a full JSON serialisation plus a synchronous
+     * localStorage write. Doing that inside a state updater means every drag
+     * frame pays for it on the main thread, which is most of why the canvas
+     * used to feel like treacle. Persistence is now coalesced and trailing:
+     * state stays authoritative in memory, and the disk catches up once the
+     * user pauses.
+     */
+    const persistTimerRef = useRef(null)
+    const latestProjectsRef = useRef([])
+
+    useEffect(() => {
+        latestProjectsRef.current = vpState.projects || []
+        if (!latestProjectsRef.current.length) return
+        if (persistTimerRef.current) return
+        persistTimerRef.current = setTimeout(() => {
+            persistTimerRef.current = null
+            try {
+                // Strip session-ephemeral blob: URLs before writing: the
+                // assetId stays, so the next open re-resolves them from the
+                // blob store. Writing object URLs to disk is how images used
+                // to come back broken after every reload.
+                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current.map(toStorableProject)))
+            } catch (e) {
+                // Quota or private-mode denial. The session keeps working from
+                // memory; losing autosave is strictly better than a frozen tab —
+                // but the user must know, or "Project saved!" is a lie.
+                toastThrottled('project-quota', 'Autosave failed — browser storage is full. Export a backup copy!', 'error')
+            }
+        }, 500)
+    }, [vpState.projects])
+
+    // Never lose the last few hundred milliseconds of work to a closed tab.
+    useEffect(() => {
+        const flush = () => {
+            if (persistTimerRef.current) {
+                clearTimeout(persistTimerRef.current)
+                persistTimerRef.current = null
+            }
+            try {
+                localStorage.setItem('vp_projects', JSON.stringify(latestProjectsRef.current.map(toStorableProject)))
+            } catch (e) { /* nothing more we can do */ }
+        }
+        window.addEventListener('pagehide', flush)
+        window.addEventListener('beforeunload', flush)
+        return () => {
+            window.removeEventListener('pagehide', flush)
+            window.removeEventListener('beforeunload', flush)
+        }
+    }, [])
+
+    /**
+     * Rehydrate the library on boot.
+     *
+     * Three jobs, in order:
+     *   1. park any legacy inline `data:` bytes into the blob store
+     *   2. drop records whose pixels are on neither disk nor inline — those are
+     *      unrecoverable and would otherwise render as broken images forever
+     *   3. mint an object URL for everything that does still have bytes
+     *
+     * Step 2 is what stops a half-written library from looking complete. A
+     * record without bytes is worse than a missing record: it occupies a slot
+     * in the filmstrip, counts toward "N in library", and renders an empty box.
+     */
+    useEffect(() => {
+        let cancelled = false
+        const hydrate = async () => {
+            const stored = (vpState.library?.imported || [])
+            if (!stored.length) return
+            const legacy = stored.filter(asset => typeof asset.src === 'string' && asset.src.startsWith('data:'))
+            try {
+                // Legacy records first: park the bytes before slimming, or the
+                // base64 is deleted from disk before it has been copied to it.
+                if (legacy.length) {
+                    await Promise.all(legacy.map(asset => putPhoto(asset.id, asset.src)))
+                }
+                // Read the key list *after* writing — reading it beforehand
+                // would miss everything just imported and leave it unresolved.
+                const onDisk = new Set(await storedPhotoIds())
+
+                const recoverable = stored.filter(asset =>
+                    onDisk.has(asset.id) || (typeof asset.src === 'string' && asset.src.length > 0))
+                const lost = stored.length - recoverable.length
+
+                const resolved = await Promise.all(recoverable.map(asset =>
+                    onDisk.has(asset.id) ? resolveAssetSrc(asset) : asset))
+                if (cancelled) return
+
+                // Grid thumbnails are generated here, once, so a library that
+                // predates the blob store still gets fast scrolling.
+                const withThumbs = await Promise.all(resolved.map(asset =>
+                    (asset?.thumb || !asset?.src) ? asset : makeThumbnail(asset.src).then(thumb => (thumb ? { ...asset, thumb } : asset))))
+
+                // Anything still holding base64 failed to reach the blob store;
+                // keep it exactly as it is so a full disk never loses photos.
+                const stillInline = new Set(withThumbs.filter(a => a?.src?.startsWith('data:')).map(a => a.id))
+                const slim = withThumbs.map(asset => (stillInline.has(asset.id) ? asset : toStoredRecord(asset)))
+
+                setVpState(prev => ({ ...prev, library: { ...prev.library, imported: withThumbs } }))
+                // Read-modify-write against disk, not against the closure's
+                // copy of the library: anything imported while hydration was
+                // awaiting IndexedDB must survive this write.
+                await updateLibraryPersisted(stored => ({ ...stored, imported: slim }))
+                if (lost > 0) {
+                    console.warn(`[SVRN] ${lost} library record(s) had no recoverable image data and were removed`)
+                }
+            } catch { /* leave the library as-is; it still renders from thumbs */ }
+        }
+        hydrate()
+        return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    /**
+     * Merge-updater for `vpState`.
+     * @param {object} updates Partial state updates to shallow-merge into vpState
+     */
+    const updateVpState = (updates) => {
+        setVpState(prev => ({ ...prev, ...updates }))
+    }
+
+    const updateAssetLibrary = (update) => {
+        setVpState(prev => {
+            const library = { ...prev.library, ...update }
+            updateLibraryPersisted(stored => ({ ...stored, ...storedPatch(update, library) }))
+            return { ...prev, library }
+        })
+    }
+
+    /**
+     * Persist the library. Photo bytes are already in IndexedDB, so this only
+     * ever writes small metadata records — which is what makes favouriting a
+     * photo in a 2000-image library instantaneous instead of a multi-megabyte
+     * JSON serialisation.
+     */
+    const persistLibrary = (library) => {
+        // `{}` here would mean "nothing was touched", which is exactly how a
+        // full-library save ends up writing an empty payload. The whole library
+        // is being persisted, so every collection is written.
+        updateLibraryPersisted(stored => ({
+            ...stored,
+            colors: library.colors || [],
+            fonts: library.fonts || [],
+            video: library.video || [],
+            ...storedPatch({ imported: true, audio: true }, library)
+        })).then(() => {
+            // Quota failures used to vanish inside the write chain; the next
+            // reload would then greet the user with a smaller library.
+            if (consumeLibraryWriteFailed()) {
+                toastThrottled('library-quota', 'Library could not be saved — browser storage is full.', 'error')
+            }
+        })
+    }
+
+    const rememberColor = (color) => {
+        if (!/^#[0-9a-f]{6}$/i.test(color || '')) return
+        const colors = [color.toLowerCase(), ...(vpState.library?.colors || []).filter(value => value !== color.toLowerCase())].slice(0, 18)
+        updateAssetLibrary({ colors })
+    }
+
+    const rememberFont = (font) => {
+        if (!font) return
+        const fonts = [font, ...(vpState.library?.fonts || []).filter(value => value !== font)].slice(0, 12)
+        updateAssetLibrary({ fonts })
+    }
+
+    /**
+     * Library cap. Photographers routinely import whole shoots, so the
+     * photography workspace keeps far more than the audio cap and drops the
+     * oldest entries only once a limit is genuinely exceeded.
+     */
+    const LIBRARY_LIMITS = { imported: 600, audio: 60 }
+
+    const addImportedAssets = (assets) => {
+        const validAssets = (assets || []).filter(asset => asset?.src)
+        if (!validAssets.length) return
+        setVpState(prev => {
+            const library = { ...prev.library }
+            // Group first, then prepend once per collection. This used to
+            // reassign `library[collection]` inside a forEach, so every asset
+            // after the first was written over by the next and a 40-file
+            // import kept exactly one photo — which is what "the assets are
+            // lost" turned out to be.
+            const groups = { imported: [], audio: [] }
+            for (const asset of validAssets) {
+                const collection = asset.kind === 'audio' ? 'audio' : 'imported'
+                groups[collection].push(asset)
+            }
+            for (const [collection, incoming] of Object.entries(groups)) {
+                if (!incoming.length) continue
+                const ids = new Set(incoming.map(a => a.id))
+                const kept = (library[collection] || []).filter(v => !ids.has(v.id))
+                const limit = LIBRARY_LIMITS[collection]
+                library[collection] = [...incoming, ...kept].slice(0, limit)
+            }
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+    }
+
+    const addImportedAsset = (asset) => addImportedAssets([asset])
+
+    /**
+     * The one media import entry point. Every UI that takes files — single
+     * image button, bulk import, canvas drag-drop, audio import, asset modal,
+     * image replace — calls this, so "bytes to IndexedDB, metadata to
+     * localStorage" has exactly one implementation.
+     *
+     * @param {FileList|File[]} files
+     * @param {'image'|'audio'} kind
+     * @returns {Promise<object[]>} the committed library assets (with fresh
+     *          object-URL srcs and library ids). Files whose bytes could not
+     *          be stored are reported via toast and left out.
+     */
+    const importMedia = async (files, kind = 'image') => {
+        const { assets, failed } = await importMediaFiles(files, kind)
+        if (assets.length) addImportedAssets(assets)
+        if (failed.length) {
+            toastThrottled(
+                'import-quota',
+                `Storage is full — ${failed.length} file${failed.length === 1 ? '' : 's'} could not be kept (${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}). Free space in Manage storage.`,
+                'error'
+            )
+        } else if (assets.length) {
+            const noun = kind === 'audio' ? 'sound' : 'image'
+            toast(`${assets.length} ${noun}${assets.length === 1 ? '' : 's'} stored in the library`, 'success')
+        }
+        return assets
+    }
+
+    const addImportedAssetsWithRoom = (assets) => {
+        const validAssets = (assets || []).filter(asset => asset?.src)
+        if (!validAssets.length) return []
+        const limit = LIBRARY_LIMITS.imported
+        if (validAssets.length > limit) {
+            toast(`Only the most recent ${limit} photos are kept in the library`, 'info')
+        }
+        setVpState(prev => {
+            const library = { ...prev.library }
+            // Same grouping as addImportedAssets: assign once per collection
+            // rather than once per asset, so a multi-file import keeps them all.
+            const groups = { imported: [], audio: [] }
+            for (const asset of validAssets) {
+                const collection = asset.kind === 'audio' ? 'audio' : 'imported'
+                groups[collection].push(asset)
+            }
+            for (const [collection, incoming] of Object.entries(groups)) {
+                if (!incoming.length) continue
+                const ids = new Set(incoming.map(a => a.id))
+                const kept = (library[collection] || []).filter(v => !ids.has(v.id))
+                library[collection] = [...incoming, ...kept].slice(0, LIBRARY_LIMITS[collection])
+            }
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+        return validAssets
+    }
+
+    /**
+     * Patch a library asset in place — used for captions, favourites, usage
+     * flags and to store a Light Table recipe against the original file so
+     * edits are never lost by re-opening the photo.
+     */
+    const updateImportedAsset = (assetId, updates) => {
+        if (!assetId) return
+        setVpState(prev => {
+            const library = { ...prev.library }
+            const next = {}
+                ;['imported', 'audio'].forEach(collection => {
+                    next[collection] = (library[collection] || []).map(asset =>
+                        asset.id === assetId ? { ...asset, ...updates } : asset)
+                })
+            library.imported = next.imported
+            library.audio = next.audio
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+    }
+
+    const toggleAssetFlag = (assetId, flag) =>
+        setVpState(prev => {
+            const library = { ...prev.library }
+            library.imported = (library.imported || []).map(asset =>
+                asset.id === assetId ? { ...asset, [flag]: !asset[flag] } : asset)
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+
+    const removeImportedAssets = (assetIds) => {
+        const ids = new Set(Array.isArray(assetIds) ? assetIds : [assetIds])
+        if (!ids.size) return
+        setVpState(prev => {
+            const library = { ...prev.library }
+            library.imported = (library.imported || []).filter(asset => !ids.has(asset.id))
+            persistLibrary(library)
+            return { ...prev, library }
+        })
+        // Reclaim the pixels too, not just the metadata row.
+        deletePhotos([...ids])
+    }
+
+    const getAssetById = (assetId) =>
+        (vpState.library?.imported || []).find(asset => asset.id === assetId) || null
+
+    /**
+     * Remove an asset from the library, from whichever collection holds it, and
+     * reclaim its bytes.
+     *
+     * `removeImportedAssets` only ever filtered `imported`, so deleting an audio
+     * file silently did nothing at all — the row vanished from the audio list
+     * on the next render only if something else re-wrote the collection, and the
+     * pixels stayed on disk regardless. One function for every collection is the
+     * only version that can be trusted to actually free space.
+     *
+     * @returns {Promise<boolean>} whether the record was found and removed
+     */
+    const removeLibraryAsset = async (assetId) => {
+        const id = Array.isArray(assetId) ? assetId[0] : assetId
+        if (!id) return false
+        setVpState(prev => {
+            const library = { ...prev.library }
+            let found = false
+            for (const collection of ['imported', 'audio', 'video']) {
+                const list = library[collection]
+                if (!Array.isArray(list)) continue
+                const next = list.filter(a => a?.id !== id)
+                if (next.length !== list.length) {
+                    library[collection] = next
+                    found = true
+                }
+            }
+            if (found) persistLibrary(library)
+            return { ...prev, library }
+        })
+        // Reclaim the pixels, not just the metadata row.
+        await deletePhotos([id])
+        return true
+    }
+
+    /**
+     * Delete several assets at once. Sequential rather than parallel: each one
+     * is a separate IndexedDB transaction and a bulk delete that fires a dozen
+     * at a time is what turns a delete into a dropped connection.
+     */
+    const removeLibraryAssets = async (assetIds) => {
+        const ids = (Array.isArray(assetIds) ? assetIds : [assetIds]).filter(Boolean)
+        for (const id of ids) await removeLibraryAsset(id)
+        return ids.length
+    }
+
+    /**
+     * Push the provided `project` snapshot into the in-memory history stack.
+     * This enables undo/redo semantics inside the editor. History is capped
+     * to 50 snapshots.
+     * @param {object} project Project snapshot to serialize into history
+     * @param {object} options { immediate: boolean } When false, push is debounced
+     */
+    const pushHistory = (project, { immediate = true } = {}) => {
+        const doPush = () => {
+            setVpState(prev => {
+                const nextHistory = prev.history.slice(0, prev.historyIdx + 1)
+                nextHistory.push(JSON.parse(JSON.stringify(project)))
+                if (nextHistory.length > 50) nextHistory.shift()
+                return {
+                    ...prev,
+                    history: nextHistory,
+                    historyIdx: nextHistory.length - 1
+                }
+            })
+        }
+        if (immediate) {
+            if (historyTimerRef.current) {
+                clearTimeout(historyTimerRef.current)
+                historyTimerRef.current = null
+            }
+            doPush()
+        } else {
+            if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+            historyTimerRef.current = setTimeout(doPush, 400)
+        }
+    }
+
+    /**
+     * Apply UI theme to the document root and persist preference in localStorage.
+     * Accepts 'light' or 'dark' (anything else falls back to dark).
+     * @param {string} theme 'light'|'dark'
+     */
+    const applyUiTheme = (theme) => {
+        const next = theme === 'light' ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-ui-theme', next)
+        localStorage.setItem('vp_ui_theme', next)
+        setVpState(prev => ({ ...prev, uiTheme: next }))
+    }
+
+    /**
+     * Public wrapper for applying UI theme.
+     * @param {string} theme
+     */
+    const setUiTheme = (theme) => applyUiTheme(theme)
+
+    /**
+     * Toggle between 'light' and 'dark' UI themes.
+     */
+    const toggleUiTheme = () => {
+        applyUiTheme(vpState.uiTheme === 'light' ? 'dark' : 'light')
+    }
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-ui-theme', vpState.uiTheme || 'dark')
+    }, [vpState.uiTheme])
+
+    const themes = {
+        // Warm paper with an oxblood accent — the quiet default.
+        classic: { '--ed-black': '#1c1a17', '--ed-crimson': '#7a2e2e', '--ed-white': '#f7f3ea', '--ed-purple': '#4b3a5a', '--ed-green': '#3f7d4e', '--ed-gold': '#b8892f', '--ed-silver': '#b9b2a5', '--ed-gray': '#4a453d', '--ed-font': "'EB Garamond',serif", '--ed-display': "'Playfair Display',serif", '--ed-accent': "'Crimson Text',serif", status: 'STABLE' },
+        // Cool white journal chrome, precise serif/sans pairing.
+        editorial: { '--ed-black': '#161c26', '--ed-crimson': '#b3393a', '--ed-white': '#f7f8fb', '--ed-purple': '#5b6abf', '--ed-green': '#2f9e6b', '--ed-gold': '#c28b2c', '--ed-silver': '#8b93a7', '--ed-gray': '#5c667a', '--ed-font': "'Source Serif 4',serif", '--ed-display': "'Fraunces',serif", '--ed-accent': "'DM Sans',sans-serif", status: 'BRIGHT' },
+        // Deep fantasy reduced to one ochre and one forest note.
+        fantasy: { '--ed-black': '#12100c', '--ed-crimson': '#7a1f1f', '--ed-white': '#f4ead8', '--ed-purple': '#3a2a52', '--ed-green': '#3f6212', '--ed-gold': '#b8912f', '--ed-silver': '#b0a690', '--ed-gray': '#3a352c', '--ed-font': "'Crimson Text',serif", '--ed-display': "'Cinzel',serif", '--ed-accent': "'Crimson Text',serif", status: 'LEGENDARY' },
+        // Night-mode neon, pulled back from glare to luminance.
+        cyberpunk: { '--ed-black': '#06070a', '--ed-crimson': '#e6225a', '--ed-white': '#e8ecf1', '--ed-purple': '#8b5cf6', '--ed-green': '#00d8e6', '--ed-gold': '#e8d21f', '--ed-silver': '#3a4150', '--ed-gray': '#151922', '--ed-font': "'Roboto Mono',monospace", '--ed-display': "'Orbitron',sans-serif", '--ed-accent': "'Bebas Neue',sans-serif", status: 'CONNECTED' },
+        // Declassified dossier on tired manila.
+        conspiracy: { '--ed-black': '#171512', '--ed-crimson': '#6b1f1f', '--ed-white': '#e8e4d9', '--ed-purple': '#33203f', '--ed-green': '#2f5d2f', '--ed-gold': '#a08a48', '--ed-silver': '#8a867c', '--ed-gray': '#2a2723', '--ed-font': "'Courier Prime',monospace", '--ed-display': "'Special Elite',cursive", '--ed-accent': "'Roboto Mono',monospace", status: 'CLASSIFIED' },
+        // Neutral slate field for cartographies and archives.
+        worldbuilding: { '--ed-black': '#22323f', '--ed-crimson': '#b0413e', '--ed-white': '#eef1f2', '--ed-purple': '#5d5a8a', '--ed-green': '#1f6f6b', '--ed-gold': '#c1912f', '--ed-silver': '#9aa7b4', '--ed-gray': '#46586a', '--ed-font': "'Assistant',sans-serif", '--ed-display': "'Montserrat',sans-serif", '--ed-accent': "'Source Serif 4',serif", status: 'CHARTED' },
+        // Comic but not childish — press-sheet primaries.
+        comics: { '--ed-black': '#141414', '--ed-crimson': '#d91e18', '--ed-white': '#ffffff', '--ed-purple': '#3d3db4', '--ed-green': '#1d9d55', '--ed-gold': '#eab308', '--ed-silver': '#d4d4d4', '--ed-gray': '#2a2a2a', '--ed-font': "'Comic Neue',cursive", '--ed-display': "'Bangers',cursive", '--ed-accent': "'Bebas Neue',sans-serif", status: 'DYNAMIC' },
+        // Deep plum with a single amber thread.
+        arcane: { '--ed-black': '#14051f', '--ed-crimson': '#7a2540', '--ed-white': '#f2e9f8', '--ed-purple': '#6d28a8', '--ed-green': '#3f6212', '--ed-gold': '#d9912f', '--ed-silver': '#9d8ab8', '--ed-gray': '#2a103f', '--ed-font': "'Crimson Text',serif", '--ed-display': "'Cinzel Decorative',cursive", '--ed-accent': "'Cinzel',serif", status: 'MANIFESTED' }
+    }
+
+    /**
+     * Apply a named content theme (editor-specific design tokens) to
+     * the document root CSS variables. `key` should match one of the
+     * theme keys defined in `themes` above.
+     * @param {string} key theme identifier
+     */
+    const applyContentThemeVars = (key) => {
+        const t = themes[key] || themes.classic
+        Object.entries(t).forEach(([k, v]) => {
+            if (k.startsWith('--')) document.documentElement.style.setProperty(k, v)
+        })
+    }
+
+    const [clipboard, setClipboard] = useState(null)
+    const [activeVfx, setActiveVfx] = useState(null)
+    const bgmRef = useRef(null)
+
+    /**
+     * Navigation history.
+     *
+     * The three modes are not mutually exclusive — the Light Table is reached
+     * from a Publisher frame *and* from a Portfolio frame, and either has to
+     * hand the user back to where they came from. A single `currentView` string
+     * cannot express "where were you", which is why the old mode switcher left
+     * people stranded and why the back button kept disagreeing with the nav.
+     *
+     * This is a bounded trail of view keys. It is intentionally *not* a router:
+     * back is a single step, and the trail is truncated at the dashboard so it
+     * can never accumulate a dead end.
+     */
+    const [navTrail, setNavTrail] = useState([])
+    // Mirrored into a ref so `goBack` can read the destination without
+    // becoming a function that changes identity on every navigation.
+    const navTrailRef = useRef([])
+    navTrailRef.current = navTrail
+
+    /**
+     * Set the active app view (dashboard/editor/reader/...)
+     * @param {string} name view key
+     * @param {object} [opts] `{ replace }` to swap the current entry instead of
+     *        pushing. Used when arriving somewhere from a mode switch that should
+     *        not be undoable (e.g. opening a project from the hub).
+     */
+    const showView = (name, opts = {}) => {
+        setVpState(prev => {
+            const from = prev.currentView
+            // `prev` is read here, but the trail is updated outside the state
+            // updater: calling a setState from inside another component's
+            // updater is a render-phase side effect, and under StrictMode the
+            // updater runs twice — which would push a duplicate history entry.
+            if (from && from !== name) {
+                setNavTrail(trail => {
+                    if (opts.replace && trail.length) return trail
+                    return [...trail, from].slice(-12)
+                })
+            }
+            return { ...prev, currentView: name, ...(name !== 'reader' ? { readerMode: null } : {}) }
+        })
+    }
+
+    /**
+     * Step back one view. Returns false when there is nowhere to go, so the
+     * caller can fall back to the hub rather than doing nothing.
+     */
+    const goBack = () => {
+        const target = navTrailRef.current[navTrailRef.current.length - 1]
+        if (!target) return false
+        setNavTrail(trail => trail.slice(0, -1))
+        setVpState(prev => ({ ...prev, currentView: target, ...(target !== 'reader' ? { readerMode: null } : {}) }))
+        return true
+    }
+
+    /** True when there is somewhere to go back to. */
+    const canGoBack = navTrail.length > 0
+
+    /** Abandon the trail — the hub is always a safe, absolute destination. */
+    const goHome = () => {
+        setNavTrail([])
+        setVpState(prev => ({ ...prev, currentView: 'dashboard', readerMode: null }))
+    }
+
+    /**
+     * Open current project in read-only preview mode.
+     */
+    const previewProject = () => {
+        setVpState(prev => ({ ...prev, currentView: 'reader', readerMode: 'preview' }))
+    }
+
+    /**
+     * Push a transient toast notification. Toasts auto-dismiss after 3s.
+     * @param {string} msg message to display
+     * @param {string} [type='info'] one of 'info'|'success'|'error'
+     */
+    const toast = (msg, type = 'info') => {
+        const id = Date.now()
+        setVpState(prev => ({
+            ...prev,
+            toasts: [...prev.toasts, { id, msg, type }]
+        }))
+        setTimeout(() => {
+            setVpState(prev => ({
+                ...prev,
+                toasts: prev.toasts.filter(t => t.id !== id)
+            }))
+        }, 3000)
+    }
+
+    /**
+     * Storage failures are persistent conditions, not one-off events: without
+     * throttling, every autosave tick would stack another identical toast.
+     * One toast per key per session is enough to tell the user.
+     */
+    const toastSeenRef = useRef(new Set())
+    const toastThrottled = (key, msg, type = 'error') => {
+        if (toastSeenRef.current.has(key)) return
+        toastSeenRef.current.add(key)
+        toast(msg, type)
+    }
+
+    /**
+     * Show a modal identified by `id` (see Modal usage in UI components).
+     * Optionally provide a `subtype` to indicate modal variant.
+     * @param {string} id modal id key
+     * @param {string} [subtype]
+     */
+    const showModal = (id, subtype) => {
+        setVpState(prev => ({
+            ...prev,
+            modals: { ...prev.modals, [id]: { active: true, subtype: subtype || null } }
+        }))
+    }
+
+    /**
+     * Close the modal keyed by `id`.
+     * @param {string} id
+     */
+    const closeModal = (id) => {
+        setVpState(prev => ({
+            ...prev,
+            modals: { ...prev.modals, [id]: { active: false } }
+        }))
+    }
+
+    /**
+     * Persist lightweight project list to localStorage. This function
+     * is resilient to storage errors (quota/denied) and is intentionally
+     * silent on failure.
+     */
+    const saveLocal = (project = null) => {
+        setVpState(prev => {
+            try {
+                const projects = project
+                    ? prev.projects.map(p => p.id === project.id ? { ...project, _dirty: true, updatedAt: Date.now() } : p)
+                    : prev.projects
+                localStorage.setItem('vp_projects', JSON.stringify(projects.map(toStorableProject)))
+            } catch (e) { }
+            return prev
+        })
+    }
+
+    useEffect(() => {
+        const seedVersion = localStorage.getItem('vp_example_seed_v')
+        const stored = localStorage.getItem('vp_projects')
+        const needsSeed = seedVersion !== String(EXAMPLE_SEED_VERSION)
+
+        /**
+         * Older projects predate the `updatedAt` stamp. Backfill from whatever
+         * ordering signal exists (creation date, then list position) so the hub's
+         * "Recent edits" and card timestamps work on an existing library
+         * instead of only on projects created from today onward.
+         */
+        const backfillTimestamps = (list) => list.map((p, i) => {
+            if (p.updatedAt) return p
+            const created = p.created ? new Date(p.created).getTime() : NaN
+            // Spread the fallback across the past so ordering stays stable
+            // rather than collapsing everything onto one timestamp.
+            const fallback = Number.isNaN(created) ? Date.now() - (list.length - i) * 1000 : created
+            return { ...p, updatedAt: fallback }
+        })
+
+        if (!stored) {
+            const initial = backfillTimestamps([getTutorialData(), ...getAdditionalDefaultZines()])
+            setVpState(prev => ({ ...prev, projects: initial }))
+            localStorage.setItem('vp_projects', JSON.stringify(initial.map(toStorableProject)))
+            localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
+            return
+        }
+
+        if (!needsSeed) return
+
+        try {
+            const projects = JSON.parse(stored)
+            const example = getTutorialData()
+            const withoutOld = projects.filter(p =>
+                !DEFAULT_ZINE_IDS.includes(p.id) && p.id !== 'tutorial_zine'
+            )
+            const next = backfillTimestamps([example, ...getAdditionalDefaultZines(), ...withoutOld])
+            setVpState(prev => ({ ...prev, projects: next }))
+            localStorage.setItem('vp_projects', JSON.stringify(next.map(toStorableProject)))
+            localStorage.setItem('vp_example_seed_v', String(EXAMPLE_SEED_VERSION))
+        } catch (e) {
+            // keep existing projects if parse fails
+        }
+    }, [])
+
+    // The backfill above only runs when the example seed is re-applied, so an
+    // established library would never pick it up. A cheap one-time pass fixes
+    // every project that is still missing a timestamp.
+    useEffect(() => {
+        if (!vpState.projects?.length) return
+        if (vpState.projects.every(p => p.updatedAt)) return
+        const fixed = vpState.projects.map((p, i) => (
+            p.updatedAt ? p : { ...p, updatedAt: new Date(p.created || 0).getTime() || Date.now() - i * 1000 }
+        ))
+        setVpState(prev => ({ ...prev, projects: fixed }))
+    }, [vpState.projects])
+
+    useEffect(() => {
+        if (vpState.projects?.length > 0) {
+            try {
+                localStorage.setItem('vp_projects', JSON.stringify(vpState.projects.map(toStorableProject)))
+            } catch (e) { }
+        }
+    }, [])
+
+
+
+    const updateCurrentProject = (project) => {
+        setVpState(prev => {
+            const idx = prev.projects.findIndex(p => p.id === project.id)
+            const nextProjects = idx >= 0 ? prev.projects.map((p, i) => i === idx ? { ...project, _dirty: true } : p) : prev.projects
+            return { ...prev, currentProject: project, projects: nextProjects }
+        })
+        pushHistory(project)
+    }
+
+    const updateProjectSettings = (updates) => {
+        if (!vpState.currentProject) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        Object.assign(project, updates)
+        updateCurrentProject(project)
+    }
+
+    // Page metadata (paper size, texture, access, audio) needs the same dirty
+    // state and undo semantics as element edits.
+    const updatePage = (pageIdx, updates) => {
+        if (!vpState.currentProject?.pages?.[pageIdx]) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        Object.assign(project.pages[pageIdx], updates)
+        updateCurrentProject(project)
+    }
+
+    // Replace a whole page object (used by page-password lock/migrate, where
+    // stale keys like a plaintext `password` must not survive the update).
+    const replacePage = (pageIdx, page) => {
+        if (!vpState.currentProject?.pages?.[pageIdx]) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        project.pages[pageIdx] = JSON.parse(JSON.stringify(page))
+        updateCurrentProject(project)
+    }
+
+    // P10: session keys for pages unlocked for editing. Memory-only — the
+    // server must never see a password or a plaintext page. Keyed by
+    // `${projectId}:${pageIdx}` so a reload can never resurrect them.
+    const pageKeysRef = useRef({})
+    const sessionKeyFor = (projectId, pageIdx) => pageKeysRef.current[`${projectId}:${pageIdx}`]
+
+    // Encrypt a page with a fresh password and cache the derived key so
+    // later edits can be re-encrypted without re-deriving (PBKDF2 is slow).
+    const lockPageWithPassword = async (pageIdx, password) => {
+        const project = vpState.currentProject
+        const page = project?.pages?.[pageIdx]
+        if (!page) return
+        // Inline asset bytes before encryption: the envelope is opaque after
+        // this, so any blob: URL inside would be dead weight the next time
+        // the page is decrypted.
+        const { project: inlined } = await inlineProjectAssets({ pages: [page] })
+        const locked = await lockPage(inlined.pages[0], password)
+        const key = await derivePageKey(password, locked.lock.salt, locked.lock.iter)
+        pageKeysRef.current[`${project.id}:${pageIdx}`] = { key, salt: locked.lock.salt, iter: locked.lock.iter }
+        replacePage(pageIdx, locked)
+        toast('Page locked with encryption', 'success')
+    }
+
+    // Decrypt a page for editing. The working copy replaces the page in
+    // memory; the session key lets sync re-encrypt before anything is sent.
+    const unlockPageForEdit = async (pageIdx, password) => {
+        const project = vpState.currentProject
+        const page = project?.pages?.[pageIdx]
+        if (!page) return
+        let envelope
+        if (isPageLocked(page)) {
+            envelope = page.lock
+        } else if (hasLegacyPassword(page)) {
+            // Transparent migration: the legacy plaintext password encrypts
+            // the page on this unlock; the plaintext never syncs again.
+            envelope = (await migrateLegacyPageLock(page, password)).lock
+            toast('Page password upgraded to encryption', 'success')
+        } else {
+            throw new Error('Incorrect password')
+        }
+        const key = await derivePageKey(password, envelope.salt, envelope.iter)
+        const working = await unlockPage({ ...page, lock: envelope }, password)
+        pageKeysRef.current[`${project.id}:${pageIdx}`] = { key, salt: envelope.salt, iter: envelope.iter }
+        replacePage(pageIdx, working)
+        return working
+    }
+
+    // Re-encrypt the working copy right now (also happens automatically on sync).
+    const relockPageNow = async (pageIdx) => {
+        const project = vpState.currentProject
+        const page = project?.pages?.[pageIdx]
+        const session = project && sessionKeyFor(project.id, pageIdx)
+        if (!page || !session) return
+        const { project: inlined } = await inlineProjectAssets({ pages: [page] })
+        const relocked = await relockPage(inlined.pages[0], session)
+        delete pageKeysRef.current[`${project.id}:${pageIdx}`]
+        replacePage(pageIdx, relocked)
+        toast('Page re-locked', 'success')
+    }
+
+    // Does this page have a cached session key (unlocked for editing)?
+    const hasPageSession = (pageIdx) => {
+        const project = vpState.currentProject
+        return !!project && !!sessionKeyFor(project.id, pageIdx)
+    }
+
+    // Drop one page's session key (used when removing password protection).
+    const dropPageSession = (pageIdx) => {
+        const project = vpState.currentProject
+        if (project) delete pageKeysRef.current[`${project.id}:${pageIdx}`]
+    }
+
+    // Forget a cached session key without persisting (e.g. project closed).
+    const forgetPageKeys = (projectId) => {
+        for (const k of Object.keys(pageKeysRef.current)) {
+            if (k.startsWith(`${projectId}:`)) delete pageKeysRef.current[k]
+        }
+    }
+
+    // Strip working copies back to their lock envelopes before anything
+    // leaves the device. The in-memory project keeps the editable copies.
+    const pagesForSync = async (project) => {
+        const out = []
+        for (let i = 0; i < project.pages.length; i++) {
+            const page = project.pages[i]
+            const session = sessionKeyFor(project.id, i)
+            // The server payload must be portable: inline every assetId-linked
+            // ref as a data: URL from the blob store, because the in-memory
+            // blob: object URLs are dead the moment they leave this tab.
+            // Locked pages are encrypted below, so the inlined bytes end up
+            // inside the envelope — self-contained and decryptable anywhere.
+            const { project: inlined } = await inlineProjectAssets({ pages: [page] })
+            const portable = inlined.pages[0]
+            out.push(session && !isPageLocked(page) ? await relockPage(portable, session) : portable)
+        }
+        return out
+    }
+
+    const api = async (endpoint, method = 'GET', body = null) => {
+        if (!vpState.isOnline) throw new Error('Offline')
+        const headers = { 'Content-Type': 'application/json' }
+        if (vpState.token) headers['Authorization'] = `Bearer ${vpState.token}`
+
+        // Import API_BASE_URL from constants - use dynamic import to avoid circular deps
+        const baseUrl = '/api'
+        const url = baseUrl + endpoint
+
+        console.log(`API ${method}:`, url)
+
+        const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : null })
+        if (!res.ok) {
+            const errorText = await res.text()
+            console.error(`API Error ${res.status}:`, errorText)
+            if (res.status === 401 || res.status === 403) {
+                setVpState(prev => ({ ...prev, user: null, token: null }))
+                localStorage.removeItem('vp_token')
+                localStorage.removeItem('vp_user')
+            }
+            let message = errorText || `HTTP ${res.status}`
+            try {
+                message = JSON.parse(errorText).error || message
+            } catch (e) { }
+            const error = new Error(message)
+            error.status = res.status
+            throw error
+        }
+        return res.json()
+    }
+
+    useEffect(() => {
+        if (!vpState.isOnline || !vpState.token) return
+
+        let cancelled = false
+        api('/zines').then(rows => {
+            if (cancelled || !Array.isArray(rows)) return
+
+            setVpState(prev => {
+                const remoteById = new Map(rows.map(row => [String(row.id), row]))
+                const projects = prev.projects.map(project => {
+                    const row = project.serverId && remoteById.get(String(project.serverId))
+                    return row
+                        ? { ...project, title: row.title, _published: Boolean(row.is_published) }
+                        : project
+                })
+                const knownIds = new Set(projects.map(project => String(project.serverId || '')))
+                const remoteProjects = rows
+                    .filter(row => !knownIds.has(String(row.id)))
+                    .map(row => ({
+                        id: `remote-${row.id}`,
+                        serverId: row.id,
+                        title: row.title || 'Untitled Pixozine',
+                        theme: 'classic',
+                        pages: [],
+                        _remote: true,
+                        _published: Boolean(row.is_published)
+                    }))
+
+                return { ...prev, projects: [...remoteProjects, ...projects] }
+            })
+        }).catch(() => { })
+
+        return () => { cancelled = true }
+    }, [vpState.isOnline, vpState.token])
+
+    const login = async (email, password) => {
+        try {
+            const res = await api('/auth/login', 'POST', { email, password })
+            if (!res.token) {
+                throw new Error('Invalid response from server')
+            }
+            setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
+            localStorage.setItem('vp_token', res.token)
+            localStorage.setItem('vp_user', JSON.stringify(res.user))
+            closeModal('authModal')
+            toast(`Welcome, ${res.user.username}!`, 'success')
+        } catch (err) {
+            console.error('Login error:', err)
+            toast('Login failed: ' + (err.message || 'Please check your credentials'), 'error')
+            throw err
+        }
+    }
+
+    const register = async (email, password, username) => {
+        try {
+            const res = await api('/auth/register', 'POST', { email, password, username })
+            if (!res.token) {
+                throw new Error('Invalid response from server')
+            }
+            setVpState(prev => ({ ...prev, token: res.token, user: res.user }))
+            localStorage.setItem('vp_token', res.token)
+            localStorage.setItem('vp_user', JSON.stringify(res.user))
+            closeModal('authModal')
+            toast(`Welcome, ${res.user.username}!`, 'success')
+        } catch (err) {
+            console.error('Register error:', err)
+            toast('Registration failed: ' + (err.message || 'Please try again'), 'error')
+            throw err
+        }
+    }
+
+    const logout = () => {
+        setVpState(prev => ({ ...prev, token: null, user: null }))
+        localStorage.removeItem('vp_token')
+        localStorage.removeItem('vp_user')
+        toast('Logged out', 'info')
+    }
+
+    const createProject = (themeKey, editorMode = 'zine') => {
+        const theme = themeKey || vpState.selectedTheme
+        const isPortfolio = editorMode === EDITOR_MODE_PHOTO_PORTFOLIO
+        let pages
+        if (isPortfolio) {
+            // A new book starts as cover + one body page, so the very first
+            // screen shows a real book structure rather than two arbitrary
+            // templates. Both are built against the book's own trim.
+            const geo = bookGeometry({ paperSize: DEFAULT_PAPER })
+            const titleLayout = getPortfolioLayout('pf-title-page')
+            pages = createLayoutPages(titleLayout, {
+                background: '#ffffff',
+                pageSize: { width: geo.width, height: geo.height },
+                gutter: geo.gutter
+            })
+            pages.push({
+                id: uid('page'),
+                pageKind: null,
+                background: '#ffffff',
+                texture: null,
+                elements: []
+            })
+            markPageKinds(pages)
+        } else {
+            pages = [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }]
+        }
+        const project = {
+            id: Date.now(),
+            title: 'Untitled ' + (isPortfolio ? 'Book' : 'Pixozine'),
+            theme,
+            editorMode,
+            // The paper is chosen per book, but it has to exist from the first
+            // frame or the canvas has no trim to lay out against.
+            paperSize: isPortfolio ? DEFAULT_PAPER : undefined,
+            pages,
+            created: new Date().toISOString(),
+            // `updatedAt` is what the hub's "Recent edits" sorts on. It was
+            // never being written, so that section could never render and the
+            // project card showed no date at all.
+            updatedAt: Date.now(),
+            _dirty: true
+        }
+        applyContentThemeVars(theme)
+        setVpState(prev => ({
+            ...prev,
+            projects: [project, ...prev.projects],
+            currentProject: project,
+            // A book opens in the Portfolio workspace, not the pixozine editor. Both
+            // keys render <Editor />, which dispatches on editorMode, but
+            // setting the correct key keeps the breadcrumb honest.
+            currentView: isPortfolio ? 'portfolio' : 'editor',
+            selection: { type: 'page', id: project.pages[0].id, pageIdx: 0 },
+            history: [JSON.parse(JSON.stringify(project))],
+            historyIdx: 0
+        }))
+        saveLocal()
+        closeModal('themePickerModal')
+        closeModal('themePicker')
+        toast(isPortfolio ? 'New book created' : 'New pixozine created!', 'success')
+    }
+
+    const openProject = (idx) => {
+        const projects = vpState.projects
+        const p = projects[idx]
+        if (p._remote) {
+            toast('Downloading pixozine...', 'info')
+            api(`/zines/${p.serverId}`).then(async res => {
+                // Backend returns { ...pixozine, data: parsedPages }
+                // data is the array of pages
+                const pages = Array.isArray(res.data)
+                    ? res.data
+                    : (res.data?.pages || res.pages || [])
+                const project = { ...p, pages, _remote: false }
+                // Downloaded zines carry portable data: URLs; absorb them into
+                // the local blob store so the zine works offline and later
+                // saves stop re-serialising megabytes of base64.
+                const { project: resolved } = await resolveProjectAssets(project)
+                applyContentThemeVars(resolved.theme || 'classic')
+                setVpState(prev => {
+                    const nextProjects = [...prev.projects]
+                    nextProjects[idx] = resolved
+                    return {
+                        ...prev,
+                        projects: nextProjects,
+                        currentProject: resolved,
+                        currentView: 'editor',
+                        selection: { type: 'page', id: resolved.pages[0]?.id, pageIdx: 0 },
+                        history: [JSON.parse(JSON.stringify(resolved))],
+                        historyIdx: 0
+                    }
+                })
+            }).catch(e => {
+                toast('Failed to download pixozine: ' + e.message, 'error')
+            })
+            return
+        }
+        applyContentThemeVars(p.theme || 'classic')
+        // Resolve library references to fresh object URLs before the editor
+        // sees the project: elements persist only the assetId, and the blob:
+        // URL from the previous session is dead. Without this, every image
+        // placed from the library renders broken after a reload.
+        resolveProjectAssets(p).then(({ project: resolved, missing }) => {
+            if (missing.length) {
+                toastThrottled('project-missing-assets', `${missing.length} image${missing.length === 1 ? '' : 's'} could not be found in storage and may appear broken.`, 'error')
+            }
+            setVpState(prev => {
+                const nextProjects = [...prev.projects]
+                nextProjects[idx] = resolved
+                return {
+                    ...prev,
+                    projects: nextProjects,
+                    currentProject: resolved,
+                    currentView: 'editor',
+                    selection: { type: 'page', id: resolved.pages[0]?.id, pageIdx: 0 },
+                    history: [JSON.parse(JSON.stringify(resolved))],
+                    historyIdx: 0
+                }
+            })
+        })
+    }
+
+    const saveProject = () => {
+        if (!vpState.currentProject) {
+            toast('No project open', 'error')
+            return
+        }
+        const project = vpState.currentProject
+        const idx = vpState.projects.findIndex(p => p.id === project.id)
+        if (idx >= 0) {
+            const next = [...vpState.projects]
+            next[idx] = { ...project, _dirty: true, _lastSaved: new Date().toISOString(), updatedAt: Date.now() }
+            setVpState(prev => ({ ...prev, projects: next }))
+        }
+        toast('Project saved!', 'success')
+    }
+
+    const deleteProject = async project => {
+        if (project.serverId && vpState.token) {
+            try {
+                await api(`/zines/${project.serverId}`, 'DELETE')
+            } catch (error) {
+                if (error.status !== 404) throw error
+            }
+        }
+        setVpState(prev => ({
+            ...prev,
+            projects: prev.projects.filter(item => item.id !== project.id)
+        }))
+        if (vpState.currentProject?.id === project.id) {
+            setVpState(prev => ({ ...prev, currentProject: null, currentView: 'dashboard' }))
+        }
+        toast('Pixozine deleted', 'success')
+    }
+
+    const sync = async () => {
+        if (!vpState.isOnline || !vpState.token) return
+        setVpState(prev => ({ ...prev, isSyncing: true }))
+        try {
+            const projects = vpState.projects || []
+            for (const p of projects) {
+                if (p._dirty && p.pages) {
+                    try {
+                        const res = await api('/zines', 'POST', {
+                            serverId: p.serverId,
+                            title: p.title,
+                            data: await pagesForSync(p),
+                            theme: p.theme
+                        })
+                        p.serverId = res.id
+                        p._dirty = false
+                        p._synced = new Date().toISOString()
+                    } catch (e) {
+                        console.warn(`Failed to sync project ${p.title}:`, e)
+                    }
+                }
+            }
+            setVpState(prev => ({ ...prev, projects: [...prev.projects] }))
+        } catch (e) {
+            console.error('Sync failed', e)
+        }
+        setVpState(prev => ({ ...prev, isSyncing: false }))
+    }
+
+    const genId = () => 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+
+    const addElements = (pageIdx, elements) => {
+        if (!elements?.length) return
+        // P10: never attach plaintext elements to a locked page — unlock it
+        // for editing first, so the content is re-encrypted on sync.
+        const targetPage = vpState.currentProject?.pages?.[pageIdx]
+        if (targetPage && isPageLocked(targetPage) && !sessionKeyFor(vpState.currentProject.id, pageIdx)) {
+            toast('Unlock the page before adding elements', 'error')
+            return
+        }
+        setVpState(prev => {
+            if (!prev.currentProject) return prev
+            const project = JSON.parse(JSON.stringify(prev.currentProject))
+            const page = project.pages[pageIdx]
+            if (!page) return prev
+            if (!page.elements) page.elements = []
+            const added = elements.map((element, index) => ({
+                ...element,
+                id: element.id || genId(),
+                zIndex: page.elements.length + index
+            }))
+            page.elements.push(...added)
+            const projects = prev.projects.map(item => item.id === project.id ? { ...project, _dirty: true } : item)
+            pushHistory(project)
+            return {
+                ...prev,
+                currentProject: project,
+                projects,
+                selection: { type: 'element', id: added[added.length - 1].id, pageIdx }
+            }
+        })
+    }
+
+    const addElement = (pageIdx, element) => addElements(pageIdx, [element])
+
+    const updateElement = (pageIdx, elementId, updates) => {
+        setVpState(prev => {
+            const project = prev.currentProject
+            const page = project?.pages?.[pageIdx]
+            if (!page) return prev
+            const index = (page.elements || []).findIndex(e => e.id === elementId)
+            if (index < 0) return prev
+
+            // Structural update, not a deep clone.
+            //
+            // This function runs on every pointermove of a drag. Cloning the
+            // whole project with JSON round-tripping cost two full traversals
+            // per frame and, worse, handed fresh objects to every component —
+            // so no amount of React.memo could ever help. Copying only the path
+            // down to the changed element costs three shallow array copies,
+            // keeps every other element referentially identical, and makes
+            // memoisation actually pay off.
+            const elements = page.elements.slice()
+            elements[index] = { ...elements[index], ...updates }
+            const pages = project.pages.slice()
+            pages[pageIdx] = { ...page, elements }
+            const nextProject = { ...project, pages }
+
+            const projIdx = prev.projects.findIndex(p => p.id === project.id)
+            const projects = projIdx >= 0
+                ? prev.projects.map((p, i) => i === projIdx ? { ...nextProject, _dirty: true, updatedAt: Date.now() } : p)
+                : prev.projects
+
+            // Debounce history for rapid edits (typing / drag)
+            scheduleHistory(nextProject)
+
+            return { ...prev, currentProject: nextProject, projects }
+        })
+    }
+
+    /**
+     * Queue an undo snapshot without blocking the interaction that caused it.
+     * Snapshots are deep copies, so they must never happen on the drag path —
+     * one trailing snapshot per gesture is what the user actually wants, and it
+     * is indistinguishable from the old behaviour at the undo button.
+     */
+    const scheduleHistory = (project) => {
+        if (!project) return
+        if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+        historyTimerRef.current = setTimeout(() => {
+            historyTimerRef.current = null
+            setVpState(p => {
+                const nextHistory = p.history.slice(0, p.historyIdx + 1)
+                nextHistory.push(JSON.parse(JSON.stringify(project)))
+                if (nextHistory.length > 50) nextHistory.shift()
+                return {
+                    ...p,
+                    history: nextHistory,
+                    historyIdx: nextHistory.length - 1
+                }
+            })
+        }, 450)
+    }
+
+    const deleteElement = () => {
+        if (!vpState.currentProject || vpState.selection.type !== 'element') return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx, id } = vpState.selection
+        const elements = project.pages[pageIdx].elements
+        const i = elements.findIndex(e => e.id === id)
+        if (i === -1) return
+        elements.splice(i, 1)
+        setVpState(prev => ({
+            ...prev,
+            currentProject: project,
+            selection: { type: 'page', id: project.pages[pageIdx].id, pageIdx }
+        }))
+        pushHistory(project)
+    }
+
+    const addPageFromTemplate = (template) => {
+        if (!vpState.currentProject) {
+            toast('Open a pixozine before adding a template page', 'error')
+            return false
+        }
+        if (vpState.currentProject.pages.length >= 32) {
+            toast('Max 32 pages', 'error')
+            return false
+        }
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const newPage = template ? createTemplatePage(template, project.theme || 'classic') : createTemplatePage(null)
+        project.pages = [...(project.pages || []), newPage]
+        // Appending past the end means the previous back cover is now a body
+        // page, so the book needs a new one.
+        markPageKinds(project.pages)
+        const pageIdx = project.pages.length - 1
+        setVpState(prev => ({ ...prev, currentProject: project, selection: { type: 'page', id: newPage.id, pageIdx } }))
+        pushHistory(project)
+        saveLocal(project)
+        toast(template ? 'Template page added' : 'Blank page added', 'success')
+        return true
+    }
+    const addPage = () => addPageFromTemplate(null)
+
+    /**
+     * Append a photography layout and optionally fill its empty frames straight
+     * from the library — the fastest path from "I have 800 photos" to "I have a
+     * composed book".
+     *
+     * A layout occupies one or two PAGES. Both are appended, so a two-page
+     * layout genuinely adds two pages to the book rather than adding one page
+     * that pretends to be wide. Page kinds are re-derived afterwards because
+     * inserting at the end can change which page is the back cover.
+     */
+    const addPageFromPortfolioLayout = (layout, { fillWith = null, background = '#ffffff' } = {}) => {
+        if (!vpState.currentProject) {
+            toast('Open a portfolio before adding a layout', 'error')
+            return false
+        }
+        const pageCount = Math.max(1, Math.min(2, layout?.pageCount ?? 1))
+        if (vpState.currentProject.pages.length + pageCount > 64) {
+            toast('A book is limited to 64 pages', 'error')
+            return false
+        }
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        // Lay the layout out against the book's actual paper, not the legacy
+        // page the templates were authored on.
+        const geo = bookGeometry(project)
+        const newPages = createLayoutPages(layout, {
+            background,
+            pageSize: { width: geo.width, height: geo.height },
+            gutter: geo.gutter
+        })
+
+        const pool = (fillWith || []).filter(asset => asset?.src)
+        if (pool.length) {
+            // Fill across the whole layout, in reading order across both pages,
+            // so a two-page layout gets an even spread of the shoot.
+            const frames = newPages.flatMap(p => p.elements.filter(el => el.type === 'photo-frame'))
+            frames.forEach((frameElement, index) => {
+                const asset = pool[index % pool.length]
+                if (!asset) return
+                frameElement.src = asset.src
+                frameElement.assetId = asset.id
+                frameElement.assetName = asset.name || asset.id
+                frameElement.lightTableRecipe = asset.recipe || null
+            })
+        }
+
+        project.pages = [...(project.pages || []), ...newPages]
+        // The old last page is no longer the back cover, so kinds are re-derived.
+        markPageKinds(project.pages)
+        const pageIdx = project.pages.length - newPages.length
+        setVpState(prev => ({
+            ...prev,
+            currentProject: project,
+            selection: { type: 'page', id: newPages[0].id, pageIdx }
+        }))
+        pushHistory(project)
+        saveLocal(project)
+        toast(pool.length
+            ? `${layout?.name || 'Layout'} added with ${Math.min(pool.length, newPages.reduce((n, p) => n + p.elements.filter(e => e.type === 'photo-frame').length, 0))} photos`
+            : `${layout?.name || 'Layout'} added (${newPages.length} page${newPages.length === 1 ? '' : 's'})`, 'success')
+        return true
+    }
+
+    /**
+     * Save the visible page (or pair of pages) as a reusable layout. Stored on
+     * the project rather than in the shared asset library, because a layout is a
+     * decision about *this* book — a grid that works for a portrait series does
+     * not belong in the toolbox of every book on the account.
+     *
+     * A saved layout records how many pages it covered, and its frames are
+     * authored in sheet space, so a two-page arrangement comes back as two
+     * pages rather than one wide one. Only frames survive; text is stripped,
+     * because a saved layout is a set of empty mats waiting to be filled.
+     */
+    const saveCurrentSpreadAsLayout = (name, pageIndices = null) => {
+        const project = vpState.currentProject
+        if (!project) {
+            toast('Open a portfolio before saving a layout', 'error')
+            return null
+        }
+        const pages = project.pages || []
+        if (!pages.length) {
+            toast('This book has no pages yet', 'error')
+            return null
+        }
+        const anchor = vpState.selection?.pageIdx ?? 0
+        const geo = bookGeometry(project)
+        // Default to whatever the workspace is currently showing, so "save
+        // layout" saves the spread the user is looking at.
+        const indices = pageIndices && pageIndices.length
+            ? pageIndices
+            : [anchor, anchor + 1].filter(i => i < pages.length)
+
+        const sources = indices.map(i => pages[i]).filter(Boolean)
+        const frames = sources.flatMap(p => (p.elements || []).filter(el => el.type === 'photo-frame'))
+        if (!frames.length) {
+            toast('A saved layout needs at least one photo frame', 'error')
+            return null
+        }
+
+        const pageCount = Math.max(1, Math.min(2, sources.length))
+        // Sheet space: pages side by side, separated by a nominal gutter, which
+        // is what createLayoutPages maps back onto real pages.
+        const NOMINAL_GUTTER = 24
+        const sheetW = PAGE_W * pageCount + NOMINAL_GUTTER * (pageCount - 1)
+        // Rebase each page's frames into sheet space.
+        const sheetFrames = sources.flatMap((p, pIdx) => (p.elements || [])
+            .filter(el => el.type === 'photo-frame')
+            .map(f => ({
+                __frame: true,
+                preset: f.framePreset || 'mat',
+                x: (f.x ?? 0) + PAGE_W * pIdx + NOMINAL_GUTTER * pIdx,
+                y: f.y ?? 0,
+                width: f.width ?? 0,
+                height: f.height ?? 0
+            })))
+
+        const minX = Math.min(...sheetFrames.map(f => f.x))
+        const minY = Math.min(...sheetFrames.map(f => f.y))
+        const maxX = Math.max(...sheetFrames.map(f => f.x + f.width))
+        const maxY = Math.max(...sheetFrames.map(f => f.y + f.height))
+
+        const layout = {
+            id: uid('layout'),
+            name: (name || 'Custom layout').trim().slice(0, 60),
+            description: `${frames.length} frame${frames.length === 1 ? '' : 's'} · ${pageCount} page${pageCount === 1 ? '' : 's'}`,
+            category: 'Saved',
+            pageCount,
+            orientation: 'portrait',
+            custom: true,
+            build: () => sheetFrames.map(f => ({
+                __frame: true,
+                preset: f.preset,
+                // Rebased onto a full sheet so the arrangement is not stuck
+                // wherever it happened to sit on the pages it came from.
+                x: Math.round(f.x - minX + (sheetW - (maxX - minX)) / 2),
+                y: Math.round(f.y - minY + (PAGE_H - (maxY - minY)) / 2),
+                width: Math.round(f.width),
+                height: Math.round(f.height)
+            }))
+        }
+        void geo
+
+        const updated = {
+            ...project,
+            customLayouts: [...(project.customLayouts || []), layout],
+            _dirty: true
+        }
+        setVpState(prev => ({ ...prev, currentProject: updated, projects: prev.projects.map(p => p.id === updated.id ? updated : p) }))
+        pushHistory(updated)
+        saveLocal(updated)
+        toast(`Saved “${layout.name}” to this book's layouts`, 'success')
+        return layout
+    }
+
+    /**
+     * Open the Light Table on a specific photo *without* leaving the book.
+     * `target` describes where the developed recipe should land when the user
+     * is done, so grading never destroys the layout they were working on.
+     */
+    const openLightTableFor = ({ assetId = null, src = null, name = null, target = null } = {}) => {
+        // If the photograph is not in the library yet (dropped straight onto a
+        // page, or a legacy inline image) it has no filmstrip entry, so the
+        // Light Table would open on a pseudo asset that is not selectable and
+        // whose grade could never be re-opened. Adopting it into the library
+        // first is what makes "develop, then keep editing" actually work.
+        const asset = (assetId ? getAssetById(assetId) : null)
+            || (src ? (vpState.library?.imported || []).find(item => item.src === src) : null)
+        const adopted = asset ? null : (src ? {
+            id: assetId || `adopted-${Date.now()}`,
+            src,
+            name: name || 'Untitled',
+            kind: 'image',
+            addedAt: new Date().toISOString()
+        } : null)
+        if (adopted) addImportedAssetsWithRoom([adopted])
+        const pseudoAsset = asset || adopted
+        const returnView = vpState.currentView
+        showView('lighttable')
+        setVpState(prev => ({
+            ...prev,
+            lightTableReturnView: returnView,
+            lightTableAsset: pseudoAsset,
+            // Remembers page/element so "Apply" can write the recipe back.
+            lightTableTarget: target
+        }))
+    }
+
+    /**
+     * Apply a developed recipe to a photo frame or image element in place.
+     * Position, size, frame styling and every other property are preserved —
+     * only the image source and recipe are updated.
+     */
+    const applyRecipeToElement = (target, { src, recipe, name, assetId } = {}) => {
+        if (!target?.elementId) return false
+        const element = findElement(target.pageIdx, target.elementId)
+        if (!element) return false
+        const updates = { lightTableRecipe: recipe || null }
+        if (src) updates.src = src
+        if (name) updates.assetName = name
+        if (assetId) updates.assetId = assetId
+        updateElement(target.pageIdx, target.elementId, updates)
+        return true
+    }
+
+    /** Locate an element in the current project without mutating state. */
+    const findElement = (pageIdx, elementId) =>
+        vpState.currentProject?.pages?.[pageIdx]?.elements?.find(element => element.id === elementId) || null
+
+    /**
+     * Swap the photograph inside a frame or image while keeping geometry,
+     * mats, captions and layer order untouched. Used by the context menu's
+     * "Replace image" and by the library picker.
+     */
+    const replaceElementImage = (pageIdx, elementId, asset) => {
+        if (!asset?.src) return false
+        const element = findElement(pageIdx, elementId)
+        if (!element) return false
+        const updates = { src: asset.src, assetId: asset.id, assetName: asset.name || asset.id }
+        if (asset.recipe) updates.lightTableRecipe = asset.recipe
+        updateElement(pageIdx, elementId, updates)
+        return true
+    }
+
+    /**
+     * Fill every empty photo frame on a page from the library in one action.
+     * Returns the number of frames filled so the caller can report it.
+     */
+    const fillEmptyFrames = (pageIdx, assets = []) => {
+        const page = vpState.currentProject?.pages?.[pageIdx]
+        if (!page || !assets.length) return 0
+        const empties = (page.elements || [])
+            .filter(el => el.type === 'photo-frame' && !el.src)
+            .sort((a, b) => (a.y || 0) - (b.y || 0) || (a.x || 0) - (b.x || 0))
+        if (!empties.length) return 0
+        const updates = {}
+        empties.slice(0, assets.length).forEach((frameElement, index) => {
+            const asset = assets[index]
+            updates[frameElement.id] = {
+                src: asset.src,
+                assetId: asset.id,
+                assetName: asset.name || asset.id,
+                lightTableRecipe: asset.recipe || null
+            }
+        })
+        updateElements(pageIdx, updates)
+        return Math.min(empties.length, assets.length)
+    }
+
+    /** Batch element update — one history entry instead of one per frame. */
+    const updateElements = (pageIdx, updatesById) => {
+        const ids = Object.keys(updatesById || {})
+        if (!ids.length) return
+        setVpState(prev => {
+            if (!prev.currentProject) return prev
+            const project = JSON.parse(JSON.stringify(prev.currentProject))
+            const page = project.pages[pageIdx]
+            if (!page) return prev
+            page.elements = (page.elements || []).map(el =>
+                updatesById[el.id] ? { ...el, ...updatesById[el.id] } : el)
+            const projIdx = prev.projects.findIndex(p => p.id === project.id)
+            const projects = projIdx >= 0
+                ? prev.projects.map((p, i) => i === projIdx ? { ...project, _dirty: true, updatedAt: Date.now() } : p)
+                : prev.projects
+            return { ...prev, currentProject: project, projects }
+        })
+        pushHistory(vpState.currentProject, { immediate: false })
+    }
+
+    const savePageAsTemplate = (name, pageIdx = vpState.selection?.pageIdx || 0) => {
+        const page = vpState.currentProject?.pages?.[pageIdx]
+        if (!page || !name?.trim()) return false
+        const templates = [...(vpState.templates || []), { id: `custom-${Date.now()}`, name: name.trim(), category: 'My Templates', description: 'Custom page template', themes: [], page: JSON.parse(JSON.stringify(page)) }]
+        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates))
+        setVpState(prev => ({ ...prev, templates }))
+        return true
+    }
+    const deleteTemplate = id => {
+        const templates = (vpState.templates || []).filter(t => t.id !== id)
+        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates))
+        setVpState(prev => ({ ...prev, templates }))
+    }
+
+    const playBGM = (source, options = {}) => {
+        const descriptor = typeof source === 'string' ? { src: source } : (source || {})
+        const url = descriptor.src
+        const loop = options.loop ?? descriptor.loop ?? true
+        if (!url) return
+        // Keep the existing player alive while the reader changes pages. Only
+        // replace it when the source (or its play mode) actually changes.
+        if (bgmRef.current && bgmRef.current._src === url) {
+            if (typeof bgmRef.current.loop === 'boolean') bgmRef.current.loop = loop
+            // A previous reader lifecycle may have paused the shared player;
+            // navigating must resume it instead of treating it as already active.
+            if (typeof bgmRef.current.play === 'function' && bgmRef.current.paused) {
+                bgmRef.current.play().catch(() => { })
+            }
+            return
+        }
+        stopBGM()
+
+        // Handle synthesized ambient moods (gen:drone, gen:horror, etc.)
+        if (url.startsWith('gen:')) {
+
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)()
+                const gainNode = ctx.createGain()
+                gainNode.gain.value = 0.15
+                gainNode.connect(ctx.destination)
+
+                const mood = url.replace('gen:', '')
+                const oscs = []
+
+                if (mood === 'drone') {
+                    const freqs = [55, 82.5, 110]
+                    freqs.forEach(f => {
+                        const osc = ctx.createOscillator()
+                        osc.type = 'sine'
+                        osc.frequency.value = f
+                        osc.connect(gainNode)
+                        osc.start()
+                        oscs.push(osc)
+                    })
+                } else if (mood === 'horror') {
+                    const freqs = [40, 43, 80]
+                    freqs.forEach((f, i) => {
+                        const osc = ctx.createOscillator()
+                        osc.type = i === 2 ? 'sawtooth' : 'sine'
+                        osc.frequency.value = f
+                        osc.detune.value = Math.random() * 20 - 10
+                        osc.connect(gainNode)
+                        osc.start()
+                        oscs.push(osc)
+                    })
+                } else if (mood === 'cyber') {
+                    const freqs = [220, 330, 440]
+                    freqs.forEach(f => {
+                        const osc = ctx.createOscillator()
+                        osc.type = 'square'
+                        osc.frequency.value = f
+                        const subGain = ctx.createGain()
+                        subGain.gain.value = 0.05
+                        osc.connect(subGain)
+                        subGain.connect(ctx.destination)
+                        osc.start()
+                        oscs.push(osc)
+                    })
+                } else if (mood === 'nature') {
+                    // White noise via buffer
+                    const bufferSize = ctx.sampleRate * 2
+                    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+                    const data = buffer.getChannelData(0)
+                    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1
+                    const noise = ctx.createBufferSource()
+                    noise.buffer = buffer
+                    noise.loop = true
+                    const filter = ctx.createBiquadFilter()
+                    filter.type = 'lowpass'
+                    filter.frequency.value = 800
+                    noise.connect(filter)
+                    filter.connect(gainNode)
+                    noise.start()
+                    oscs.push(noise)
+                }
+
+                bgmRef.current = {
+                    _src: url,
+                    _ctx: ctx,
+                    _oscs: oscs,
+                    pause() {
+                        oscs.forEach(o => { try { o.stop() } catch (e) { } })
+                        ctx.close().catch(() => { })
+                    }
+                }
+            } catch (e) {
+                console.warn('Gen BGM failed:', e)
+            }
+            return
+        }
+
+        // Normal audio URL
+        const a = new Audio(url)
+        a.loop = loop
+        a.volume = 0.5
+        a._src = url
+        a.play().catch(() => { })
+        bgmRef.current = a
+    }
+
+    const stopBGM = () => {
+        if (bgmRef.current) {
+            bgmRef.current.pause()
+            bgmRef.current = null
+        }
+    }
+
+    // Audio belongs to the provider, so leaving the reader is the one place
+    // that should stop it. Page navigation never reaches this branch.
+    useEffect(() => {
+        if (vpState.currentView !== 'reader') stopBGM()
+    }, [vpState.currentView])
+
+    const setBackgroundAudio = (src, name = 'Background audio', loop = true, assetId = null) => {
+        if (!vpState.currentProject) return false
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        project.backgroundAudio = src ? { src, name, assetId: assetId || undefined, loop: Boolean(loop) } : null
+        updateCurrentProject(project)
+        toast(src ? 'Background audio added' : 'Background audio removed', 'success')
+        return true
+    }
+
+    const setPageAudio = (pageIdx, src, name = 'Page audio', loop = true, assetId = null) => {
+        if (!vpState.currentProject?.pages?.[pageIdx]) return false
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        if (src) project.pages[pageIdx].backgroundAudio = { src, name, assetId: assetId || undefined, loop: Boolean(loop) }
+        else delete project.pages[pageIdx].backgroundAudio
+        updateCurrentProject(project)
+        toast(src ? 'Page audio override added' : 'Page audio override removed', 'success')
+        return true
+    }
+
+    const playSFX = (url) => {
+        if (!url) return
+        const a = new Audio(url)
+        a.volume = 0.7
+        a.play().catch(() => { })
+    }
+
+    const triggerVfx = (type) => {
+        if (!type) return
+        // Force a state change so the same effect can be retriggered quickly
+        setActiveVfx(null)
+        // schedule on next tick to guarantee a different state value
+        setTimeout(() => {
+            setActiveVfx(type)
+            // automatically clear after the effect duration
+            setTimeout(() => setActiveVfx(null), 600)
+        }, 0)
+    }
+
+    const getAssets = (type) => {
+        if (type === 'imported') {
+            return (vpState.library?.imported || []).map(asset => ({ ...asset, kind: 'image', preview: `<img src="${asset.src}" alt="" />` }))
+        }
+        if (type === 'audio') {
+            return (vpState.library?.audio || []).map(asset => ({ ...asset, preview: '<span style="font-size:28px">♫</span>' }))
+        }
+        const panels = [
+            { id: 'photo-frame', preview: '<div style="width:80%;height:65%;border:12px solid #f7f5f0;box-shadow:0 3px 9px #333;background:#888"></div>', name: 'Photo Frame' },
+            { id: 'rect', preview: '<div style="width:80%;height:80%;border:3px solid #ccc"></div>', name: 'Rect' },
+            { id: 'rect-rounded', preview: '<div style="width:80%;height:80%;border:3px solid #ccc;border-radius:10px"></div>', name: 'Rounded' },
+            { id: 'torn', preview: '<div style="width:80%;height:80%;border:3px dashed #ccc"></div>', name: 'Torn' },
+            { id: 'neon', preview: '<div style="width:80%;height:80%;border:2px solid #00f3ff;box-shadow:0 0 8px #bc00ff"></div>', name: 'Neon' }
+        ]
+        const shapes = [
+            { id: 'circle', preview: '<div style="width:50px;height:50px;border-radius:50%;background:#888"></div>', name: 'Circle' },
+            { id: 'square', preview: '<div style="width:50px;height:50px;background:#888"></div>', name: 'Square' },
+            { id: 'triangle', preview: '<div style="width:0;height:0;border-left:25px solid transparent;border-right:25px solid transparent;border-bottom:50px solid #888"></div>', name: 'Triangle' },
+            { id: 'diamond', preview: '<div style="width:40px;height:40px;background:#888;transform:rotate(45deg)"></div>', name: 'Diamond' },
+            { id: 'line_h', preview: '<div style="width:60px;height:3px;background:#888"></div>', name: 'Line' },
+            { id: 'arrow', preview: '<span style="font-size:24px">➤</span>', name: 'Arrow' }
+        ]
+        const balloons = [
+            { id: 'dialog', preview: '<div style="background:#fff;border:2px solid #333;border-radius:16px;padding:6px;font-size:9px">Hello!</div>', name: 'Dialog' },
+            { id: 'thought', preview: '<div style="background:#fff;border:2px solid #333;border-radius:50%;padding:8px;font-size:9px">💭</div>', name: 'Thought' },
+            { id: 'shout', preview: '<div style="background:#fff;border:3px solid #333;padding:6px;font-size:9px;font-weight:bold">BANG!</div>', name: 'Shout' },
+            { id: 'caption', preview: '<div style="background:#000;color:#fff;padding:6px;font-size:9px">CAPTION</div>', name: 'Caption' },
+            { id: 'whisper', preview: '<div style="background:#f8f8f8;border:1px dashed #999;border-radius:16px;padding:6px;font-size:8px;color:#666">psst...</div>', name: 'Whisper' },
+            { id: 'narration', preview: '<div style="background:#ffe;border:1px solid #cc9;padding:6px;font-size:8px">Meanwhile...</div>', name: 'Narration' }
+        ]
+        const sfx = [
+            { id: 'crash', preview: '<span style="font-family:Bangers;font-size:20px;color:#e44">CRASH!</span>', name: 'Crash' },
+            { id: 'boom', preview: '<span style="font-family:Bangers;font-size:20px;color:#f80">BOOM!</span>', name: 'Boom' },
+            { id: 'zap', preview: '<span style="font-family:Bangers;font-size:20px;color:#ff0">ZAP!</span>', name: 'Zap' },
+            { id: 'pow', preview: '<span style="font-family:Bangers;font-size:20px;color:#f44">POW!</span>', name: 'POW' },
+            { id: 'whoosh', preview: '<span style="font-family:Bangers;font-size:20px;color:#4af">WHOOSH</span>', name: 'Whoosh' },
+            { id: 'splash', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLASH!</span>', name: 'Splat' },
+            { id: 'splat', preview: '<span style="font-family:Bangers;font-size:20px;color:#4a4">SPLAT!</span>', name: 'Splat' }
+        ]
+        // Splat / texture image symbols (from the devil's atlas asset pack)
+        const bloodSplats = [
+            { src: '/assets/devils-atlas/blood-splat00.png', name: 'Blood Splat 1', tint: '#8b0000' },
+            { src: '/assets/devils-atlas/blood-splat12.png', name: 'Blood Splat 2', tint: '#8b0000' },
+            { src: '/assets/devils-atlas/blood-splat22.png', name: 'Blood Splat 3', tint: '#8b0000' },
+            { src: '/assets/devils-atlas/blood-splat30.png', name: 'Blood Splat 4', tint: '#8b0000' }
+        ]
+        const inkSplats = [
+            { src: '/assets/devils-atlas/ink-splat00.png', name: 'Ink Splat 0', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat05.png', name: 'Ink Splat 1', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat08.png', name: 'Ink Splat 2', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat12.png', name: 'Ink Splat 3', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat15.png', name: 'Ink Splat 4', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat18.png', name: 'Ink Splat 5', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat22.png', name: 'Ink Splat 6', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat27.png', name: 'Ink Splat 7', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat30.png', name: 'Ink Splat 8', tint: '#1a1a1a' },
+            { src: '/assets/devils-atlas/ink-splat33.png', name: 'Ink Splat 9', tint: '#1a1a1a' }
+        ]
+        const splatSymbols = [
+            ...bloodSplats.map((s, i) => ({
+                id: `blood_${i}`,
+                kind: 'image',
+                src: s.src,
+                name: s.name,
+                preview: `<div style="width:50px;height:50px;background:radial-gradient(circle at 50% 50%, rgba(139,0,0,0.35), transparent 70%);border-radius:50%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 4px rgba(139,0,0,0.6))"><img src="${s.src}" style="width:100%;height:100%;object-fit:cover;mix-blend-mode:screen" /></div>`
+            })),
+            ...inkSplats.map((s, i) => ({
+                id: `ink_${i}`,
+                kind: 'image',
+                src: s.src,
+                name: s.name,
+                preview: `<div style="width:50px;height:50px;background:radial-gradient(circle at 50% 50%, rgba(26,26,26,0.4), transparent 70%);border-radius:50%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 4px rgba(0,0,0,0.5))"><img src="${s.src}" style="width:100%;height:100%;object-fit:cover" /></div>`
+            }))
+        ]
+
+        // Glyph symbols (revolutionary, occult, publishing, nature, celestial)
+        const glyph = (id, char, name, color = 'var(--vp-accent)', category = 'Symbols') => ({
+            id,
+            kind: 'glyph',
+            char,
+            name,
+            category,
+            preview: `<span style="font-size:34px;color:${color};filter:drop-shadow(0 0 6px ${color}66);line-height:1">${char}</span>`
+        })
+
+        const symbols = [
+            // Splatter bank first — the ink & blood
+            ...splatSymbols.map(s => ({ ...s, category: 'Ink & Blood' })),
+            // Revolutionary / protest
+            glyph('anarchy', 'ⓐ', 'Anarchy', '#e74c3c', 'Revolution'),
+            glyph('star_point', '✶', 'Star', '#d4af37', 'Revolution'),
+            glyph('star_8', '✴', '8-Point Star', '#d4af37', 'Revolution'),
+            glyph('star_outline', '✷', 'Star Outline', '#e67e22', 'Revolution'),
+            glyph('dove', '🕊', 'Peace Dove', '#7f8c8d', 'Revolution'),
+            glyph('fist', '✊', 'Raised Fist', '#e74c3c', 'Revolution'),
+            glyph('rose', '🌹', 'Rose', '#c0392b', 'Revolution'),
+            glyph('warning', '⚠', 'Warning', '#f1c40f', 'Revolution'),
+            glyph('no_entry', '⛔', 'No Entry', '#e74c3c', 'Revolution'),
+            glyph('high_voltage', '⚡', 'Lightning', '#f39c12', 'Revolution'),
+            glyph('crossed_swords', '⚔', 'Crossed Swords', '#bdc3c7', 'Revolution'),
+            glyph('skull_cross', '☠', 'Skull', '#95a5a6', 'Revolution'),
+            glyph('shield', '🛡', 'Shield', '#9b59b6', 'Revolution'),
+            glyph('spear', '🔱', 'Trident', '#d4af37', 'Revolution'),
+            // Occult / mystical
+            glyph('pentagram', '⛤', 'Pentagram', '#bc00ff', 'Occult'),
+            glyph('pentacle', '⛧', 'Pentacle', '#8e44ad', 'Occult'),
+            glyph('eye', '👁', 'Eye', '#e8e4d9', 'Occult'),
+            glyph('all_seeing', '𓂀', 'All-Seeing', '#d4af37', 'Occult'),
+            glyph('rune', 'ᚱ', 'Rune', '#c5b358', 'Occult'),
+            glyph('rune_2', 'ᛟ', 'Rune 2', '#c5b358', 'Occult'),
+            glyph('rune_3', 'ᚨ', 'Rune 3', '#c5b358', 'Occult'),
+            glyph('ankh', '☥', 'Ankh', '#d4af37', 'Occult'),
+            glyph('moon', '☽', 'Moon', '#bdc3c7', 'Occult'),
+            glyph('crescent', '🌙', 'Crescent', '#f1c40f', 'Occult'),
+            glyph('sun', '☀', 'Sun', '#f39c12', 'Occult'),
+            glyph('spiral', '🌀', 'Spiral', '#3498db', 'Occult'),
+            glyph('flower_life', '𓋹', 'Flower of Life', '#e67e22', 'Occult'),
+            glyph('sigil_1', '⚭', 'Sigil Bond', '#d4af37', 'Occult'),
+            glyph('sigil_2', '⚸', 'Sigil', '#bc00ff', 'Occult'),
+            glyph('marriage', '⚭', 'Marriage', '#e74c3c', 'Occult'),
+            // Celestial / navigation
+            glyph('compass', '🧭', 'Compass', '#d4af37', 'Celestial'),
+            glyph('globe', '🌍', 'Globe', '#3498db', 'Celestial'),
+            glyph('star_map', '✦', 'Star Map', '#d4af37', 'Celestial'),
+            glyph('mountain', '⛰', 'Mountain', '#7f8c8d', 'Celestial'),
+            glyph('anchor', '⚓', 'Anchor', '#bdc3c7', 'Celestial'),
+            glyph('ship', '⚓', 'Ship', '#3498db', 'Celestial'),
+            glyph('location', '📍', 'Location', '#e74c3c', 'Celestial'),
+            glyph('crosshair', '🎯', 'Target', '#e74c3c', 'Celestial'),
+            // Publishing / literature
+            glyph('quill', '✒', 'Quill', '#7f8c8d', 'Publishing'),
+            glyph('pen', '✎', 'Pen', '#95a5a6', 'Publishing'),
+            glyph('book', '📖', 'Book', '#d4af37', 'Publishing'),
+            glyph('scroll', '📜', 'Scroll', '#c5b358', 'Publishing'),
+            glyph('mask', '🎭', 'Theater', '#9b59b6', 'Publishing'),
+            glyph('key', '🔑', 'Key', '#d4af37', 'Publishing'),
+            glyph('lock', '🔒', 'Lock', '#e74c3c', 'Publishing'),
+            glyph('hourglass', '⌛', 'Hourglass', '#f1c40f', 'Publishing'),
+            glyph('chess', '♞', 'Chess', '#bdc3c7', 'Publishing'),
+            glyph('chess_king', '♚', 'King', '#d4af37', 'Publishing'),
+            glyph('infinity', '∞', 'Infinity', '#d4af37', 'Publishing'),
+            glyph('omega', 'Ω', 'Omega', '#e74c3c', 'Publishing'),
+            // Nature / elements
+            glyph('fire', '🔥', 'Fire', '#e74c3c', 'Nature'),
+            glyph('water', '💧', 'Water', '#3498db', 'Nature'),
+            glyph('leaf', '🍃', 'Leaf', '#27ae60', 'Nature'),
+            glyph('bone', '🦴', 'Bone', '#ecf0f1', 'Nature'),
+            glyph('heart', '❤', 'Heart', '#e74c3c', 'Nature'),
+            glyph('knife', '🔪', 'Knife', '#bdc3c7', 'Nature'),
+            glyph('hammer', '🔨', 'Hammer', '#95a5a6', 'Nature'),
+            glyph('gear', '⚙', 'Gear', '#bdc3c7', 'Nature'),
+            glyph('cross', '✝', 'Cross', '#95a5a6', 'Nature'),
+            glyph('star_of_david', '✡', 'Star of David', '#3498db', 'Nature')
+        ]
+        const shaderList = typeof window !== 'undefined' && window.VPShader?.getPresetList
+            ? window.VPShader.getPresetList()
+            : [
+                { key: 'plasma', name: 'Plasma' },
+                { key: 'fire', name: 'Fire' },
+                { key: 'water', name: 'Water' },
+                { key: 'lightning', name: 'Lightning' },
+                { key: 'voidNoise', name: 'Void' },
+                { key: 'galaxy', name: 'Galaxy' }
+            ]
+        const shaders = shaderList.map(p => ({
+            id: p.key,
+            name: p.name,
+            preview: `<div style="width:50px;height:50px;background:linear-gradient(135deg,#222,#444);border-radius:4px;display:flex;align-items:center;justify-content:center;color:#8a889a;font-size:10px;text-align:center;padding:4px;border:1px solid #444">${p.name}</div>`
+        }))
+        const objects = [
+            { id: 'crystal', name: 'Glowing Crystal', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #7ff, #447);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #48f)">💎</div>' },
+            { id: 'crystalCluster', name: 'Crystal Cluster', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #f8f, #a4a);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #f4f)">🔮</div>' },
+            { id: 'orb', name: 'Energy Orb', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 40% 35%, #fff, #0af 70%);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 8px #0af)">🌀</div>' },
+            { id: 'prism', name: 'Neon Prism', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #ff8, #f80);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #fa0)">🔶</div>' },
+            { id: 'runestone', name: 'Rune Stone', preview: '<div style="width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 40%, #8f8, #484);display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 6px #4f4)">🪨</div>' }
+        ]
+        const map = { panels, shapes, balloons, sfx, symbols, shaders, objects }
+        return map[type] || []
+    }
+
+    const publishToNode = async (nodeUrl, nodeToken = vpState.token) => {
+        if (!vpState.currentProject) throw new Error('No project open')
+        if (!nodeUrl) throw new Error('Publishing node URL is required')
+        const project = vpState.currentProject
+        // P10: re-encrypt any unlocked-for-edit working copies before packing.
+        const { archive } = await packSvrn({ ...project, pages: await pagesForSync(project) }, { baseUrl: window.location.href })
+        const response = await fetch(`${nodeUrl.replace(/\/$/, '')}/svrn/v1/issues`, {
+            method: 'POST',
+            headers: { ...(nodeToken ? { Authorization: `Bearer ${nodeToken}` } : {}), 'Content-Type': 'application/vnd.svrn+zip' },
+            body: new Blob([archive], { type: 'application/vnd.svrn+zip' })
+        })
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`)
+        return response.json()
+    }
+
+    const publishZine = async (formData) => {
+        if (!vpState.currentProject) {
+            toast('No project open', 'error')
+            return
+        }
+        const project = vpState.currentProject
+        if (!formData.title?.trim()) {
+            toast('Title required', 'error')
+            return
+        }
+        try {
+            if (!project.serverId) {
+                const res = await api('/zines', 'POST', { title: formData.title || project.title, data: await pagesForSync(project), theme: project.theme })
+                project.serverId = res.id
+                setVpState(prev => ({
+                    ...prev,
+                    currentProject: project,
+                    projects: prev.projects.map(p => p.id === project.id ? { ...project, serverId: res.id } : p)
+                }))
+            }
+            await api(`/publish/${project.serverId}`, 'POST', {
+                author_name: formData.author || vpState.user?.username || 'Anonymous',
+                genre: formData.genre || 'classic',
+                tags: (formData.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(',')
+            })
+            // Mark project as published
+            project._published = true
+            const idx = vpState.projects.findIndex(p => p.id === project.id)
+            if (idx >= 0) {
+                const next = [...vpState.projects]
+                next[idx] = { ...project, _published: true, _dirty: false }
+                setVpState(prev => ({ ...prev, projects: next, currentProject: project }))
+            }
+            closeModal('publishModal')
+            toast('🚀 Pixozine published! Go to Discover to see it live.', 'success')
+        } catch (e) {
+            toast('Publish failed: ' + (e.message || 'Error'), 'error')
+        }
+    }
+
+    const reloadProject = async (zineId) => {
+        try {
+            const zine = await api(`/zines/${zineId}`);
+            setVpState(prev => {
+                const project = { ...zine, pages: zine.data.pages, serverId: zine.id, _remote: false, data: zine.data };
+                const idx = prev.projects.findIndex(p => p.serverId === zineId);
+                const nextProjects = [...prev.projects];
+                if (idx >= 0) {
+                    nextProjects[idx] = project;
+                }
+                return {
+                    ...prev,
+                    projects: nextProjects,
+                    currentProject: project,
+                };
+            });
+        } catch (error) {
+            toast('Failed to reload pixozine: ' + error.message, 'error');
+        }
+    };
+
+
+    const addAsset = (type, assetId) => {
+        const pageIdx = vpState.selection?.pageIdx ?? 0
+        const base = { id: genId(), x: 120, y: 120, rotation: 0, opacity: 1, zIndex: 0, borderWidth: 0, borderColor: '#000', borderRadius: 0 }
+        let el = { ...base }
+        if (type === 'panels') {
+            el = assetId === 'photo-frame'
+                ? { ...base, type: 'photo-frame', width: 300, height: 230, frameWidth: 18, frameColor: '#f7f5f0', frameShadow: '0 10px 22px rgba(0,0,0,.28)', imageFit: 'cover' }
+                : { ...base, type: 'panel', width: 220, height: 160, panelBorderWidth: 4, panelBorderColor: assetId === 'neon' ? '#00f3ff' : '#0a0a0a', panelBorderStyle: assetId === 'torn' ? 'dashed' : 'solid', panelRadius: assetId === 'rect-rounded' ? 12 : 0, fill: 'transparent', panelShadow: assetId === 'neon' ? '0 0 15px #bc00ff' : 'none' }
+        } else if (type === 'shapes') {
+            const shapes = { circle: { type: 'shape', shape: 'circle', width: 100, height: 100, fill: '#0a0a0a' }, square: { type: 'shape', shape: 'rect', width: 100, height: 100, fill: '#0a0a0a' }, triangle: { type: 'shape', shape: 'triangle', width: 100, height: 100, fill: '#0a0a0a' }, diamond: { type: 'shape', shape: 'diamond', width: 80, height: 100, fill: '#0a0a0a' }, line_h: { type: 'shape', shape: 'line_h', width: 200, height: 4, fill: '#0a0a0a' }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } }
+            el = { ...base, ...(shapes[assetId] || shapes.circle) }
+        } else if (type === 'balloons') {
+            const b = { dialog: { balloonType: 'dialog', width: 200, height: 80, content: 'Dialog text...', fontSize: 14 }, thought: { balloonType: 'thought', width: 160, height: 120, content: 'Thinking...', fontSize: 13 }, shout: { balloonType: 'shout', width: 170, height: 80, content: 'SHOUT!', fontSize: 18 }, caption: { balloonType: 'caption', width: 220, height: 50, content: 'Caption text', fontSize: 13 }, whisper: { balloonType: 'whisper', width: 180, height: 70, content: 'whisper...', fontSize: 12 }, narration: { balloonType: 'narration', width: 240, height: 60, content: 'Meanwhile...', fontSize: 14 } }
+            el = { ...base, type: 'balloon', ...(b[assetId] || b.dialog) }
+        } else if (type === 'sfx') {
+            const t = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', whoosh: 'WHOOSH!', pow: 'POW!', splat: 'SPLAT!', splash: 'SPLASH!' }
+            el = { ...base, type: 'text', sfx: true, content: t[assetId] || 'BAM!', fontSize: 52, fontFamily: 'Bangers', color: '#0a0a0a', width: 180, height: 70, strokeWidth: 2, strokeColor: '#ffffff' }
+        } else if (type === 'symbols') {
+            // Look up the asset to determine if it's an image splat or a glyph
+            const asset = (getAssets('symbols') || []).find(a => a.id === assetId)
+            if (asset?.kind === 'image') {
+                // Ink / blood splatter — drop as a full-bleed image, tintable
+                const baseElementCount = vpState.currentProject?.pages[pageIdx]?.elements?.length || 0
+                el = {
+                    ...base,
+                    type: 'image',
+                    src: asset.src,
+                    width: 220,
+                    height: 220,
+                    objectFit: 'cover',
+                    opacity: 0.85,
+                    blendMode: 'multiply',
+                    // Stagger placement so repeated drops don't stack exactly on top of each other
+                    x: 60 + ((baseElementCount % 5) * 32),
+                    y: 60 + ((baseElementCount % 4) * 32)
+                }
+            } else {
+                // Unicode / emoji glyph — mark as a symbol so it renders non-editable and stays freely draggable
+                const char = asset?.char || '✦'
+                const baseElementCount = (() => {
+                    const page = vpState.currentProject?.pages[pageIdx]
+                    return page?.elements?.length || 0
+                })()
+                el = {
+                    ...base,
+                    symbol: true,
+                    type: 'text',
+                    content: char,
+                    fontSize: 56,
+                    color: asset ? asset.previewColor || '#d4af37' : '#d4af37',
+                    width: 80,
+                    height: 80,
+                    fontFamily: 'sans-serif',
+                    // Stagger placement so repeated drops don't stack exactly on top of each other
+                    x: 80 + ((baseElementCount % 5) * 24),
+                    y: 80 + ((baseElementCount % 4) * 24)
+                }
+            }
+        } else if (type === 'shaders') {
+            el = { ...base, type: 'shader', shaderPreset: assetId || 'plasma', width: 220, height: 220, opacity: 1 }
+        } else if (type === 'imported') {
+            const asset = (getAssets('imported') || []).find(item => item.id === assetId)
+            if (!asset) return
+            // Link the element to the library asset: the src is re-resolved
+            // from the blob store every time the project opens, so a stale
+            // blob: URL can never be persisted and resurrected as a broken
+            // image.
+            el = { ...base, type: 'image', src: asset.src, assetId: asset.id, assetName: asset.name || asset.id, width: 240, height: 180, objectFit: 'contain' }
+        } else if (type === 'audio') {
+            const asset = (getAssets('audio') || []).find(item => item.id === assetId)
+            if (!asset) return
+            el = { ...base, type: 'audio-log', src: asset.src, assetId: asset.id, name: asset.name, width: 260, height: 100 }
+        } else if (type === 'objects') {
+            const colors = {
+                crystal: '#4488ff',
+                crystalCluster: '#cc44ff',
+                orb: '#00aaff',
+                prism: '#ffaa00',
+                runestone: '#44ff88'
+            }
+            el = {
+                ...base,
+                type: 'object',
+                objModel: assetId || 'crystal',
+                objColor: colors[assetId] || '#4488ff',
+                objSpin: true,
+                width: 200,
+                height: 200,
+                opacity: 1
+            }
+        }
+        addElement(pageIdx, el)
+    }
+
+    const undo = () => {
+        if (vpState.historyIdx > 0) {
+            const nextIdx = vpState.historyIdx - 1
+            const project = JSON.parse(JSON.stringify(vpState.history[nextIdx]))
+            setVpState(prev => ({ ...prev, currentProject: project, historyIdx: nextIdx }))
+        }
+    }
+
+    const redo = () => {
+        if (vpState.historyIdx < vpState.history.length - 1) {
+            const nextIdx = vpState.historyIdx + 1
+            const project = JSON.parse(JSON.stringify(vpState.history[nextIdx]))
+            setVpState(prev => ({ ...prev, currentProject: project, historyIdx: nextIdx }))
+        }
+    }
+
+    const deletePage = () => {
+        if (!vpState.currentProject) return
+        if (vpState.currentProject.pages.length <= 1) {
+            toast('Cannot delete last page', 'error')
+            return
+        }
+        if (!confirm('Delete current page?')) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx } = vpState.selection
+        project.pages.splice(pageIdx, 1)
+        // Removing a page re-derives the cover/back cover, so a book that lost
+        // its back cover gets a new one rather than ending on a body page.
+        markPageKinds(project.pages)
+        const nextIdx = Math.min(pageIdx, project.pages.length - 1)
+        updateVpState({
+            currentProject: project,
+            selection: { type: 'page', id: project.pages[nextIdx].id, pageIdx: nextIdx }
+        })
+        pushHistory(project)
+    }
+
+    const duplicatePage = () => {
+        if (!vpState.currentProject) return
+        if (vpState.currentProject.pages.length >= 32) {
+            toast('Max 32 pages', 'error')
+            return
+        }
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx } = vpState.selection
+        const currentPage = project.pages[pageIdx]
+        const newPage = JSON.parse(JSON.stringify(currentPage))
+        newPage.id = Date.now()
+        // A duplicate is never a cover or back cover, however the original was
+        // stamped — otherwise duplicating the cover would create a second one.
+        newPage.pageKind = null
+        if (newPage.elements) newPage.elements.forEach(e => { e.id = genId() })
+        project.pages.splice(pageIdx + 1, 0, newPage)
+        markPageKinds(project.pages)
+        updateVpState({
+            currentProject: project,
+            selection: { type: 'page', id: newPage.id, pageIdx: pageIdx + 1 }
+        })
+        pushHistory(project)
+    }
+
+    const duplicateElement = () => {
+        if (!vpState.currentProject || vpState.selection.type !== 'element') return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx, id } = vpState.selection
+        const el = project.pages[pageIdx].elements.find(e => e.id === id)
+        if (el) {
+            const newEl = JSON.parse(JSON.stringify(el))
+            newEl.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+            newEl.x += 20
+            newEl.y += 20
+            project.pages[pageIdx].elements.push(newEl)
+            updateVpState({
+                currentProject: project,
+                selection: { type: 'element', id: newEl.id, pageIdx }
+            })
+            pushHistory(project)
+        }
+    }
+
+    const copyElement = () => {
+        if (!vpState.currentProject || vpState.selection.type !== 'element') return
+        const { pageIdx, id } = vpState.selection
+        const el = vpState.currentProject.pages[pageIdx].elements.find(e => e.id === id)
+        if (el) {
+            setClipboard(JSON.parse(JSON.stringify(el)))
+            toast('Element copied', 'info')
+        }
+    }
+
+    const pasteElement = () => {
+        if (!vpState.currentProject || !clipboard) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx } = vpState.selection
+        const newEl = JSON.parse(JSON.stringify(clipboard))
+        newEl.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+        newEl.x += 40
+        newEl.y += 40
+        project.pages[pageIdx].elements.push(newEl)
+        updateVpState({
+            currentProject: project,
+            selection: { type: 'element', id: newEl.id, pageIdx }
+        })
+        pushHistory(project)
+    }
+
+    const moveLayer = (direction) => {
+        if (!vpState.currentProject || vpState.selection.type !== 'element') return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx, id } = vpState.selection
+        const elements = project.pages[pageIdx].elements
+        const idx = elements.findIndex(e => e.id === id)
+        if (idx === -1) return
+
+        if (direction === 'up' && idx < elements.length - 1) {
+            [elements[idx], elements[idx + 1]] = [elements[idx + 1], elements[idx]]
+        } else if (direction === 'down' && idx > 0) {
+            [elements[idx], elements[idx - 1]] = [elements[idx - 1], elements[idx]]
+        } else if (direction === 'top') {
+            const el = elements.splice(idx, 1)[0]
+            elements.push(el)
+        } else if (direction === 'bottom') {
+            const el = elements.splice(idx, 1)[0]
+            elements.unshift(el)
+        }
+
+        // Update all zIndex
+        elements.forEach((e, i) => e.zIndex = i)
+        updateCurrentProject(project)
+    }
+
+    const applyTheme = (key) => {
+        const t = themes[key]
+        if (!t || !vpState.currentProject) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const oldKey = project.theme || 'classic'
+        const oldT = themes[oldKey]
+
+        project.theme = key
+        applyContentThemeVars(key)
+
+        if (oldKey !== key && confirm('Do you want to update existing items to match the new theme?')) {
+            project.pages.forEach(p => {
+                // Background mapping
+                Object.keys(oldT).forEach(k => {
+                    if (k.startsWith('--ed-') && !k.includes('font') && p.background === oldT[k]) {
+                        p.background = t[k]
+                    }
+                })
+
+                if (p.elements) {
+                    p.elements.forEach(el => {
+                        // Font mapping
+                        if (el.fontFamily) {
+                            const norm = f => f.replace(/'/g, '').split(',')[0].trim()
+                            if (norm(el.fontFamily) === norm(oldT['--ed-display'])) el.fontFamily = t['--ed-display'].replace(/'/g, '')
+                            if (norm(el.fontFamily) === norm(oldT['--ed-font'])) el.fontFamily = t['--ed-font'].replace(/'/g, '')
+                            if (norm(el.fontFamily) === norm(oldT['--ed-accent'])) el.fontFamily = t['--ed-accent'].replace(/'/g, '')
+                        }
+                        // Color mapping
+                        Object.keys(oldT).forEach(k => {
+                            if (k.startsWith('--ed-') && !k.includes('font')) {
+                                const oldVal = oldT[k].toLowerCase()
+                                const newVal = t[k]
+                                if (el.color && el.color.toLowerCase() === oldVal) el.color = newVal
+                                if (el.fill && el.fill.toLowerCase() === oldVal) el.fill = newVal
+                                if (el.strokeColor && el.strokeColor.toLowerCase() === oldVal) el.strokeColor = newVal
+                            }
+                        })
+                    })
+                }
+            })
+        }
+
+        updateCurrentProject(project)
+        toast('Theme: ' + key, 'success')
+    }
+
+    const insertTemplate = (type) => {
+        if (!vpState.currentProject) return
+        const project = JSON.parse(JSON.stringify(vpState.currentProject))
+        const { pageIdx } = vpState.selection
+        const page = project.pages[pageIdx]
+
+        const theme = themes[project.theme || 'classic']
+        const bg = theme['--ed-black']
+        const fg = theme['--ed-white']
+        const accent = theme['--ed-gold']
+        const displayFont = theme['--ed-display'].replace(/'/g, '')
+        const bodyFont = theme['--ed-font'].replace(/'/g, '')
+
+        if (type === 'cover') {
+            page.background = bg
+            page.texture = 'https://www.transparenttextures.com/patterns/dark-matter.png'
+            page.elements = [
+                { id: 'el_p1_' + Date.now(), type: 'panel', x: 28, y: 28, width: 472, height: 760, fill: 'transparent', panelBorderWidth: 3, panelBorderColor: accent, panelBorderStyle: 'solid', zIndex: 0 },
+                { id: 'el_p2_' + Date.now(), type: 'panel', x: 40, y: 40, width: 448, height: 736, fill: 'transparent', panelBorderWidth: 1, panelBorderColor: theme['--ed-crimson'] || '#4a0000', panelBorderStyle: 'solid', zIndex: 1 },
+                { id: 'el_sym_' + Date.now(), type: 'text', content: '✦', x: 234, y: 100, width: 60, height: 50, fontSize: 36, color: accent, align: 'center', zIndex: 2, animation: 'pulse', animDuration: 2.5, animLoop: true },
+                { id: 'el_t1_' + Date.now(), type: 'text', content: 'ZINE TITLE', x: 50, y: 200, width: 428, height: 100, fontSize: 56, fontFamily: displayFont, color: accent, align: 'center', bold: true, zIndex: 2, textShadow: '3px 3px 0 rgba(0,0,0,0.5)' },
+                { id: 'el_t2_' + Date.now(), type: 'text', content: 'Issue No. 01', x: 50, y: 320, width: 428, height: 40, fontSize: 20, fontFamily: bodyFont, color: fg, align: 'center', italic: true, zIndex: 2 },
+                { id: 'el_line_' + Date.now(), type: 'shape', shape: 'line_h', x: 140, y: 380, width: 248, height: 2, fill: accent, opacity: 0.7, zIndex: 2 },
+                { id: 'el_sub_' + Date.now(), type: 'text', content: 'A story worth the ink', x: 50, y: 420, width: 428, height: 30, fontSize: 14, fontFamily: bodyFont, color: theme['--ed-silver'] || '#bdc3c7', align: 'center', zIndex: 2 },
+                { id: 'el_cta_' + Date.now(), type: 'text', content: 'TURN THE PAGE →', x: 144, y: 620, width: 240, height: 40, fontSize: 14, fontFamily: displayFont, color: bg, align: 'center', bold: true, fill: accent, borderRadius: 4, zIndex: 3, action: 'goto', actionVal: '2' }
+            ]
+        } else if (type === 'content') {
+            page.background = theme['--ed-white']
+            page.texture = 'https://www.transparenttextures.com/patterns/old-mathematics.png'
+            page.elements = [
+                { id: 'el_chap_' + Date.now(), type: 'text', content: 'CHAPTER', x: 50, y: 36, width: 428, height: 20, fontSize: 11, fontFamily: 'Courier Prime', color: theme['--ed-crimson'] || '#4a0000', align: 'left', letterSpacing: 3, zIndex: 0 },
+                { id: 'el_t3_' + Date.now(), type: 'text', content: 'CHAPTER NAME', x: 50, y: 60, width: 428, height: 50, fontSize: 32, fontFamily: displayFont, color: bg, align: 'left', bold: true, zIndex: 0 },
+                { id: 'el_rule_' + Date.now(), type: 'shape', shape: 'line_h', x: 50, y: 120, width: 120, height: 2, fill: theme['--ed-crimson'] || '#4a0000', zIndex: 0 },
+                { id: 'el_t4_' + Date.now(), type: 'text', content: 'Start your story here. Drop panels, balloons, shaders, and logic actions — build the page the way a skilled hand would.', x: 50, y: 150, width: 428, height: 520, fontSize: 16, fontFamily: bodyFont, color: bg, align: 'left', lineHeight: 1.4, zIndex: 1 }
+            ]
+        } else if (type === 'back') {
+            page.background = bg
+            page.texture = 'https://www.transparenttextures.com/patterns/dark-matter.png'
+            page.elements = [
+                { id: 'el_p3_' + Date.now(), type: 'panel', x: 40, y: 40, width: 448, height: 736, fill: 'transparent', panelBorderWidth: 2, panelBorderColor: accent, zIndex: 0 },
+                { id: 'el_t5_' + Date.now(), type: 'text', content: 'THE END', x: 50, y: 340, width: 428, height: 60, fontSize: 48, fontFamily: displayFont, color: fg, align: 'center', bold: true, zIndex: 1 },
+                { id: 'el_line2_' + Date.now(), type: 'shape', shape: 'line_h', x: 160, y: 420, width: 208, height: 2, fill: accent, opacity: 0.6, zIndex: 1 },
+                { id: 'el_fin_' + Date.now(), type: 'text', content: 'Buy the ticket. Take the ride.', x: 50, y: 450, width: 428, height: 40, fontSize: 14, fontFamily: bodyFont, color: accent, align: 'center', italic: true, zIndex: 1 }
+            ]
+        }
+
+        updateCurrentProject(project)
+        toast('Template applied', 'success')
+    }
+
+    const value = {
+        vpState,
+        updateVpState,
+        showView,
+        goBack,
+        canGoBack,
+        goHome,
+        previewProject,
+        api,
+        login,
+        register,
+        logout,
+        toast,
+        showModal,
+        closeModal,
+        saveLocal,
+        createProject,
+        openProject,
+        saveProject,
+        updateProjectSettings,
+        deleteProject,
+        sync,
+        undo,
+        redo,
+        addElement,
+        addElements,
+        updateElement,
+        updatePage,
+        replacePage,
+        lockPageWithPassword,
+        unlockPageForEdit,
+        relockPageNow,
+        forgetPageKeys,
+        hasPageSession,
+        dropPageSession,
+        deleteElement,
+        addPage,
+        addPageFromTemplate,
+        savePageAsTemplate,
+        deleteTemplate,
+        deletePage,
+        duplicatePage,
+        duplicateElement,
+        copyElement,
+        pasteElement,
+        moveLayer,
+        applyTheme,
+        insertTemplate,
+        playBGM,
+        stopBGM,
+        setBackgroundAudio,
+        setPageAudio,
+        playSFX,
+        activeVfx,
+        triggerVfx,
+        getAssets,
+        addAsset,
+        rememberColor,
+        rememberFont,
+        addImportedAsset,
+        addImportedAssets,
+        addImportedAssetsWithRoom,
+        importMedia,
+        updateImportedAsset,
+        toggleAssetFlag,
+        removeImportedAssets,
+        removeLibraryAsset,
+        removeLibraryAssets,
+        getAssetById,
+        openLightTableFor,
+        applyRecipeToElement,
+        replaceElementImage,
+        fillEmptyFrames,
+        updateElements,
+        findElement,
+        addPageFromPortfolioLayout,
+        saveCurrentSpreadAsLayout,
+        publishZine,
+        publishToNode,
+        themes,
+        setUiTheme,
+        toggleUiTheme
+    }
+
+    return (
+        <VPContext.Provider value={value}>
+            {children}
+        </VPContext.Provider>
+    )
+}
+
+export { VPProvider }

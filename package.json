@@ -1,10 +1,30 @@
 {
   "name": "zine",
   "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
+  "private": true,
+  "description": "SVRN Publisher - Pixozine Publishing Platform",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "build:editor": "vite build --outDir dist-editor",
+    "build:reader": "vite build --config apps/reader/vite.config.js",
+    "build:desktop": "npm run build:editor && npm run build:reader",
+    "desktop": "npm run build:desktop && electron .",
+    "dist:desktop": "npm run dist:editor",
+    "dist:editor": "npm run build:desktop && electron-builder",
+    "dist:reader": "npm run build:desktop && electron-builder --config desktop/electron-builder.reader.json",
+    "preview": "vite preview",
+    "server": "node server/server.cjs",
+    "migrate": "knex migrate:latest --knexfile server/knexfile.cjs",
+    "rollback": "knex migrate:rollback --knexfile server/knexfile.cjs",
+    "nuke-db": "rm -f server/data/database.sqlite && knex migrate:latest --knexfile server/knexfile.cjs",
+    "test": "node --test packages/*/test/*.test.js server/test/*.test.cjs",
+    "dev:reader": "vite --config apps/reader/vite.config.js"
   },
   "repository": {
     "type": "git",
@@ -21,9 +41,64 @@
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.2",
     "cors": "^2.8.6",
+    "dotenv": "^16.3.1",
     "express": "^5.2.1",
+    "fflate": "^0.8.2",
     "jsonwebtoken": "^9.0.3",
+    "knex": "^3.1.0",
+    "libraw-wasm": "^1.6.0",
     "mushu-flow": "^1.1.0",
-    "sqlite3": "^5.1.7"
+    "pg": "^8.18.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "sqlite3": "^5.1.7",
+    "stripe": "^20.3.1",
+    "xrpl": "^4.6.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "vite": "^4.3.9"
+  },
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "com.svrn.publisher",
+    "productName": "SVRN Publisher",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sqlite3/**/*"
+    ],
+    "files": [
+      "desktop/**/*",
+      "dist-editor/**/*",
+      "dist-reader/**/*",
+      "server/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.cjs"
+    },
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "category": "Graphics",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
   }
 }

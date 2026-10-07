@@ -1,0 +1,49 @@
+{
+  "name": "mushu-flow",
+  "version": "1.1.0",
+  "description": "The Fluent Pattern for Shader Coding - WebGL & WebGPU made simple",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./core": "./src/core/index.js",
+    "./glsl": "./src/glsl/index.js",
+    "./gpu": "./src/gpu/index.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "npx http-server . -c-1 -o examples/index.html",
+    "build": "echo 'No build step needed - pure ES modules'",
+    "test": "vitest",
+    "lint": "eslint \"src/**/*.js\" \"test/**/*.js\"",
+    "lint:fix": "eslint --fix \"src/**/*.js\" \"test/**/*.js\""
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "vitest": "^1.0.0"
+  },
+  "keywords": [
+    "webgl",
+    "webgpu",
+    "glsl",
+    "wgsl",
+    "shader",
+    "creative-coding",
+    "generative-art",
+    "graphics",
+    "simulation",
+    "fire",
+    "water",
+    "particles"
+  ],
+  "repository": {
+    "url": "https://github.com/ConflictingTheories/calliope-pixos.git",
+    "type": "git"
+  },
+  "author": "Kyle Derby MacInnis",
+  "license": "MIT"
+}

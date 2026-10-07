@@ -1,0 +1,319 @@
+/*
+ * Top navigation — the app's spine.
+ *
+ * Layout is left / right, not the three-column centred arrangement the old bar
+ * used. A centred wordmark forced a fixed mode-tab width to keep it optically
+ * centred, which is what produced the 104px tokens and the dead gap in the
+ * middle at narrow widths. With a breadcrumb instead of a mode switcher the
+ * brand belongs on the left with the rest of the identity, and the right rail
+ * simply anchors the other end.
+ */
+
+.topnav {
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    height: var(--topnav-h);
+    padding: 0 var(--space-lg);
+    background: var(--surface-0);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+}
+
+/* ── Left cluster: back · brand · location ─────────────────────────────────── */
+
+.topnav-lead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+/* A square icon button that lines up with the brand's optical height. */
+.topnav-back {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.topnav-back:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.topnav-back:disabled {
+    opacity: .28;
+    cursor: default;
+}
+
+.topnav-back:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+/* ── Brand ────────────────────────────────────────────────────────────────────
+   The mark carries the identity; the text is a quiet second line. The old
+   wordmark was a bare <div> with an 8px subtitle, which the fixed 48px bar
+   clipped at the top: two content lines plus a 1px gap exceeded the line
+   boxes. Explicit line-heights and a smaller subtitle keep both lines whole. */
+.topnav-brand {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding: 3px 7px 3px 3px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text);
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.topnav-brand:hover {
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.topnav-brand:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+/* The mark is the only element allowed the accent colour, so the brand reads as
+   one object rather than an icon sitting next to some text. */
+.topnav-mark-svg {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.topnav-brand-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1;
+}
+
+.topnav-brand-name {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    line-height: 1.05;
+}
+
+.topnav-brand-sub {
+    font-family: var(--font-ui);
+    font-size: 7.5px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    line-height: 1.15;
+    color: var(--text-faint);
+}
+
+/* ── Location ─────────────────────────────────────────────────────────────────
+   A breadcrumb, not a mode indicator. It answers "where am I, and what am I
+   looking at" — the question the mode tabs raised and never resolved. */
+.topnav-crumbs {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    margin-left: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 1px solid var(--line);
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    line-height: 1;
+}
+
+.topnav-crumb-place {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.topnav-crumb-sep {
+    color: var(--text-faint);
+}
+
+.topnav-crumb-detail {
+    min-width: 0;
+    /* Long book titles must not push the right rail off the bar. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+/* ── Right cluster ──────────────────────────────────────────────────────────── */
+
+.topnav-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.topnav-rule {
+    width: 1px;
+    height: 18px;
+    background: var(--line);
+    flex-shrink: 0;
+}
+
+/* The Light Table is a global tool, not a peer mode, so it is a launcher. */
+.topnav-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.topnav-launch:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--line-strong);
+}
+
+.topnav-launch:disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.topnav-launch:focus-visible,
+.topnav-icon-btn:focus-visible,
+.topnav-text-btn:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+.topnav-icon-btn {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--dur) var(--ease);
+}
+
+.topnav-icon-btn:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+/* Connection state is a live signal, so it is one of the few places the
+   permitted signal colours are spent on chrome. */
+.topnav-online-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.topnav-online-dot.online {
+    background: var(--positive);
+}
+
+.topnav-online-dot.offline {
+    background: var(--danger);
+}
+
+.topnav-text-btn {
+    padding: 4px 8px;
+    font-family: var(--font-ui);
+    font-size: var(--type-sm);
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--dur) var(--ease);
+}
+
+.topnav-text-btn:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line);
+}
+
+.topnav-user {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 1px solid var(--line);
+}
+
+.topnav-avatar {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    font-family: var(--font-ui);
+    font-size: var(--type-xs);
+    font-weight: 600;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    border-radius: 50%;
+    user-select: none;
+}
+
+@media (max-width: 900px) {
+    .topnav {
+        padding: 0 var(--space-md);
+    }
+
+    /* The brand sub-line is the first thing to go; the mark and the location
+       still identify the app and the place. */
+    .topnav-brand-sub {
+        display: none;
+    }
+
+    .topnav-crumbs {
+        margin-left: 0;
+        padding-left: var(--space-sm);
+    }
+}
+
+@media (max-width: 720px) {
+
+    /* The launcher's label goes; its icon and tooltip remain. */
+    .topnav-launch span {
+        display: none;
+    }
+
+    .topnav-launch {
+        width: 28px;
+        padding: 0;
+        justify-content: center;
+    }
+}

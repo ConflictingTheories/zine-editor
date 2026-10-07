@@ -1,0 +1,1319 @@
+/*
+ * Component: LightTable
+ * The develop workspace: browse the shared image library, grade with GPU
+ * (or CPU) rendering, crop and rotate, and push results back to the library
+ * or straight onto a spread. Every edit is stored as a portable recipe.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useVP } from '../../context/VPContext.jsx'
+import { cubeText, downloadText, parseCube } from '../../lib/lightTable.js'
+import {
+    CONTROL_GROUPS,
+    GRADE_DEFAULTS,
+    FX_DEFAULTS,
+    DEFAULT_RECIPE,
+    PRESETS,
+    getPreset,
+    createRecipe,
+    normaliseRecipe,
+    serialiseRecipe,
+    isRecipeDirty,
+    analyseImage,
+    outputSize,
+    renderRecipe,
+    centreCrop
+} from '../../lib/lightTableEngine.js'
+import { LtRenderer } from './ltRenderer.js'
+import StorageManager from '../StorageManager.jsx'
+import { filesToAssets, commitAssets, measureAssets } from '../../utils/photoImport.js'
+import { PHOTO_ACCEPT } from '../../lib/rawPhoto.js'
+import { isRawAsset, developRawAsset, developRawAsset16, DEFAULT_DEVELOP, wbMultipliersFromPatch } from '../../lib/rawDevelop.js'
+import { buildTiff16 } from '../../lib/tiff16.js'
+
+/** A storage/box glyph for the library manager button. */
+const StorageIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <rect x="1.5" y="2.5" width="11" height="3" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="1.5" y="8.5" width="11" height="3" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <line x1="4" y1="4" x2="4" y2="4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <line x1="7" y1="10" x2="7" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+)
+import LtSlider from './LtSlider.jsx'
+import LtHistogram from './LtHistogram.jsx'
+import LtCurveEditor from './LtCurveEditor.jsx'
+import LtCropOverlay from './LtCropOverlay.jsx'
+import LtPresetStrip from './LtPresetStrip.jsx'
+
+const TABS = [
+    { id: 'develop', label: 'Develop' },
+    { id: 'detail', label: 'Detail' },
+    { id: 'effects', label: 'Effects' },
+    { id: 'curves', label: 'Curves' },
+    { id: 'geometry', label: 'Geometry' },
+    { id: 'lut', label: 'LUT' }
+]
+
+const DEVELOP_GROUPS = ['tone', 'presence', 'colour'].map(
+    id => CONTROL_GROUPS.find(g => g.id === id)
+).filter(Boolean)
+
+const DETAIL_GROUP = CONTROL_GROUPS.filter(g => g.id === 'detail')
+
+/**
+ * Effects are presented as named looks (Vignette, Grain, …) rather than one
+ * flat list, because that is how they are reached for: "more grain", not
+ * "nudge the fifth slider". Ranges are the ones the engine's Effects group
+ * already declared, so nothing here widens or narrows what a slider can do.
+ */
+const FX_CONTROL_SPEC = Object.fromEntries(
+    CONTROL_GROUPS.find(g => g.id === 'effects').controls
+)
+
+const FX_GROUPS = [
+    { id: 'vignette', label: 'Vignette', controls: ['vignette'] },
+    { id: 'grain', label: 'Grain', controls: ['grain'] },
+    { id: 'light', label: 'Light Leaks', controls: ['bloom', 'halation'] },
+    { id: 'film', label: 'Film Stock', controls: ['chroma', 'posterize', 'splitTone'] }
+]
+
+/**
+ * The value a parameter rests at: zero for bipolar, and the top of its range
+ * for "amount of" controls where the pipeline treats the maximum as the
+ * neutral (contrast, saturation, LUT strength).
+ */
+const NEUTRAL = {
+    contrast: 1,
+    saturation: 1,
+    fade: 0
+}
+
+const neutralFor = (key) => (key in NEUTRAL ? NEUTRAL[key] : 0)
+
+const ASPECTS = [
+    { id: 'free', label: 'Free' },
+    { id: '1:1', label: '1:1' },
+    { id: '4:5', label: '4:5' },
+    { id: '3:2', label: '3:2' },
+    { id: '16:9', label: '16:9' },
+    { id: '2:3', label: '2:3' }
+]
+
+/** Renders one collapsible-ish titled group of sliders from shared defaults. */
+function SliderGroup({ label, controls, values, onChange, onReset, onInteraction }) {
+    return (
+        <div className="lt-group">
+            <div className="lt-group-head">
+                {label}
+                {onReset && (
+                    <button className="lt-btn ghost" onClick={onReset}>Reset</button>
+                )}
+            </div>
+            {controls.map(([key, name, min, max, step, bipolar]) => (
+                <LtSlider
+                    key={key}
+                    label={name}
+                    value={values[key] ?? (bipolar ? 0 : min)}
+                    onChange={v => onChange(key, v)}
+                    onInteraction={onInteraction}
+                    spec={{
+                        min, max, step, bipolar,
+                        defaultAtZero: bipolar,
+                        neutral: bipolar ? 0 : min
+                    }}
+                />
+            ))}
+        </div>
+    )
+}
+
+function LightTable() {
+    const { vpState, updateVpState, addImportedAssets, addElement, updateImportedAsset, applyRecipeToElement, removeLibraryAsset, goBack, toast } = useVP()
+
+    const allAssets = vpState.library?.imported || []
+    const gallery = useMemo(() => {
+        const project = vpState.currentProject
+        if (project?.editorMode !== 'photo-portfolio' || !vpState.lightTableTarget) return allAssets
+        const ids = new Set()
+        const sources = new Set()
+        for (const page of project.pages || []) {
+            for (const element of page.elements || []) {
+                if (!['image', 'photo-frame'].includes(element.type) || !element.src) continue
+                if (element.assetId) ids.add(element.assetId)
+                sources.add(element.src)
+            }
+        }
+        return allAssets.filter(asset => ids.has(asset.id) || sources.has(asset.src))
+    }, [allAssets, vpState.currentProject, vpState.lightTableTarget])
+
+    // Per-asset recipe drafts, keyed by asset id, so switching images keeps
+    // each photo's edits instead of resetting on every selection change.
+    const [drafts, setDrafts] = useState({})
+    const [selectedId, setSelectedId] = useState(
+        vpState.lightTableAsset?.id || gallery[0]?.id || null
+    )
+    const [tab, setTab] = useState('develop')
+    const [activePreset, setActivePreset] = useState('none')
+    const [curveChannel, setCurveChannel] = useState('rgb')
+    const [compare, setCompare] = useState(false)
+    const [cropping, setCropping] = useState(false)
+    const [inspectorOpen, setInspectorOpen] = useState(false)
+    const [dragging, setDragging] = useState(false)
+    const [rendererMode, setRendererMode] = useState('pending')
+    const [storageOpen, setStorageOpen] = useState(false)
+    const [adjusting, setAdjusting] = useState(false)
+    const [zoom, setZoom] = useState(1)
+    // Raw develop: draft settings (sliders) and applied settings — only the
+    // latter triggers a decode. A fresh 36 MB NEF must not decode on every
+    // pixel of slider travel.
+    const [rawDraft, setRawDraft] = useState(DEFAULT_DEVELOP)
+    const [appliedRaw, setAppliedRaw] = useState(DEFAULT_DEVELOP)
+    const [rawDecode, setRawDecode] = useState('idle') // idle|decoding|ready|fallback
+    const [pickingWb, setPickingWb] = useState(false)
+    const [tiffBusy, setTiffBusy] = useState(false)
+
+    const canvasRef = useRef(null)
+    const rendererRef = useRef(null)
+    const imageRef = useRef(null)
+    const rafRef = useRef(0)
+    const recipeRef = useRef(createRecipe())
+    const fileInputRef = useRef(null)
+
+    const selectedAsset = useMemo(
+        () => gallery.find(a => a.id === selectedId) || vpState.lightTableAsset || null,
+        [gallery, selectedId, vpState.lightTableAsset]
+    )
+
+    // New photo: restore its persisted develop settings, otherwise defaults.
+    useEffect(() => {
+        const persisted = isRawAsset(selectedAsset) && selectedAsset?.develop
+            ? { ...DEFAULT_DEVELOP, ...selectedAsset.develop }
+            : DEFAULT_DEVELOP
+        setRawDraft(persisted)
+        setAppliedRaw(persisted)
+        setRawDecode('idle')
+        setPickingWb(false)
+    }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // The active recipe is the draft for the selected image, restored from
+    // any recipe already saved onto the asset.
+    const recipe = useMemo(() => {
+        const base = selectedAsset?.recipe
+        return drafts[selectedId] || (base ? normaliseRecipe(base) : createRecipe())
+    }, [drafts, selectedId, selectedAsset])
+
+    recipeRef.current = recipe
+
+    const updateRecipe = useCallback((patch) => {
+        setDrafts(prev => ({
+            ...prev,
+            [selectedId]: { ...recipeRef.current, ...patch }
+        }))
+    }, [selectedId])
+
+    const updateParam = useCallback((key, value) => {
+        updateRecipe({ params: { ...recipeRef.current.params, [key]: value } })
+        setActivePreset('custom')
+    }, [updateRecipe])
+
+    const updateFx = useCallback((key, value) => {
+        updateRecipe({ fx: { ...recipeRef.current.fx, [key]: value } })
+        setActivePreset('custom')
+    }, [updateRecipe])
+
+    const updateGeometry = useCallback((patch) => {
+        updateRecipe({ geometry: { ...recipeRef.current.geometry, ...patch } })
+    }, [updateRecipe])
+
+    // ── Renderer lifecycle ───────────────────────────────────────────────
+    // The canvas is only rendered once an asset is selected (`{selectedAsset ?`
+    // guards it), so on a cold mount `canvasRef.current` is null and the
+    // renderer never came up. That left the stage stuck at the 300x150 default
+    // canvas, the status bar reading "initialising" forever, and every edit
+    // falling through to a null renderer — which is what "the Light Table is
+    // slow and nothing renders" actually felt like. Keying on the presence of
+    // the canvas means the renderer is built the moment the stage appears.
+    useEffect(() => {
+        const canvas = canvasRef.current
+        if (!canvas || rendererRef.current) return
+        const renderer = new LtRenderer(canvas)
+        // If WebGL2 turns out to be unusable the renderer swaps in a fresh
+        // 2D-capable canvas; the ref has to follow it or every later draw
+        // targets a node that is no longer in the document.
+        renderer.onCanvasSwap = (fresh) => { canvasRef.current = fresh }
+        const ok = renderer.init()
+        rendererRef.current = renderer
+        setRendererMode(ok ? 'gpu' : 'cpu')
+        return () => {
+            cancelAnimationFrame(rafRef.current)
+            renderer.destroy()
+            rendererRef.current = null
+        }
+    }, [selectedAsset])
+
+    // ── Image loading for the selected asset ──────────────────────────────
+    useEffect(() => {
+        if (!selectedAsset?.src) {
+            imageRef.current = null
+            return
+        }
+        let cancelled = false
+        const loadImage = (src) => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            img.onload = () => {
+                if (cancelled) return
+                imageRef.current = img
+                // The renderer may not exist yet on a cold mount (it is created
+                // when the canvas mounts, which happens after the image is
+                // chosen). The lifecycle effect uploads a pending image once it
+                // comes up, but guard here too so a late-loading image never
+                // draws into null.
+                rendererRef.current?.uploadImage(img)
+                draw()
+            }
+            img.src = src
+        }
+        if (isRawAsset(selectedAsset)) {
+            setRawDecode('decoding')
+            developRawAsset(selectedAsset, appliedRaw).then(developed => {
+                if (cancelled) return
+                if (developed) {
+                    setRawDecode('ready')
+                    loadImage(developed)
+                } else {
+                    setRawDecode('fallback')
+                    loadImage(selectedAsset.src)
+                }
+            })
+        } else {
+            setRawDecode('idle')
+            loadImage(selectedAsset.src)
+        }
+        return () => { cancelled = true }
+    }, [selectedAsset, rendererMode, appliedRaw])
+
+    const imageStats = useMemo(() => {
+        const img = imageRef.current
+        if (!img?.naturalWidth) return null
+        const info = analyseImage(img)
+        if (!info) return null
+        return {
+            clippedShadows: info.blacks < -0.3,
+            clippedHighlights: info.whites > 0.35,
+            meanLuma: info.meanLuma
+        }
+    }, [selectedAsset])
+
+    // ── Draw ─────────────────────────────────────────────────────────────
+    // Animated effects (grain) need a continuous loop; everything else is
+    // drawn once per recipe change. Compare mode renders the untouched
+    // original, so it must always bypass the loop.
+    const sizeCanvas = useCallback(() => {
+        const canvas = canvasRef.current
+        const img = imageRef.current
+        if (!canvas || !img?.naturalWidth) return
+        const [ow, oh] = outputSize(img.naturalWidth, img.naturalHeight, recipeRef.current.geometry)
+        const stage = canvas.closest('.lt-stage')
+        if (stage) {
+            const displayScale = Math.min(
+                1,
+                Math.max(1, stage.clientWidth - 48) / ow,
+                Math.max(1, stage.clientHeight - 48) / oh
+            )
+            const displayWidth = `${Math.max(1, Math.round(ow * displayScale))}px`
+            const displayHeight = `${Math.max(1, Math.round(oh * displayScale))}px`
+            if (canvas.style.width !== displayWidth) canvas.style.width = displayWidth
+            if (canvas.style.height !== displayHeight) canvas.style.height = displayHeight
+        }
+        const maxW = adjusting
+            ? (rendererMode === 'gpu' ? 640 : 480)
+            : (rendererMode === 'gpu' ? 1600 : 1400)
+        const maxH = adjusting
+            ? (rendererMode === 'gpu' ? 480 : 320)
+            : (rendererMode === 'gpu' ? 1100 : 1000)
+        const scale = Math.min(1, maxW / ow, maxH / oh)
+        const w = Math.max(1, Math.round(ow * scale))
+        const h = Math.max(1, Math.round(oh * scale))
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w
+            canvas.height = h
+        }
+    }, [adjusting, rendererMode])
+
+    const draw = useCallback((time = 0) => {
+        const renderer = rendererRef.current
+        const img = imageRef.current
+        if (!renderer || !img?.naturalWidth) return
+        sizeCanvas()
+        if (compare) {
+            // Straight blit of the source, no grading.
+            const ctx = renderer.canvas.getContext('2d')
+            if (ctx) ctx.drawImage(img, 0, 0, renderer.canvas.width, renderer.canvas.height)
+            return
+        }
+        try {
+            if (renderer.supported) {
+                renderer.draw(recipeRef.current, time)
+            } else {
+                renderer.drawCpu(img, recipeRef.current, {
+                    maxWidth: adjusting ? 480 : 1400,
+                    maxHeight: adjusting ? 320 : 1000
+                })
+            }
+        } catch (err) {
+            // One bad frame must never take the workspace down with it.
+            console.warn('[LightTable] render failed:', err)
+        }
+    }, [adjusting, compare, sizeCanvas])
+    const needsAnimation = rendererMode === 'gpu' && recipe.fx.grain > 0.001
+
+    // Redraw whenever anything that affects the pixels changes.
+    useEffect(() => {
+        if (needsAnimation && !compare) {
+            const tick = (t) => { draw(t); rafRef.current = requestAnimationFrame(tick) }
+            rafRef.current = requestAnimationFrame(tick)
+            return () => cancelAnimationFrame(rafRef.current)
+        }
+        draw(performance.now())
+    }, [recipe, compare, draw, needsAnimation])
+
+    // ── Import ───────────────────────────────────────────────────────────
+    /**
+     * Import through the shared photo pipeline, exactly as the Portfolio does.
+     *
+     * This used to read each file straight to a data URL and add it to the
+     * library. That put the bytes nowhere: `toStoredRecord` deliberately strips
+     * `src` from the record it writes to localStorage on the assumption the
+     * pixels are already in IndexedDB — and this path never put them there. The
+     * result was a library that looked full and listed its assets after a
+     * reload, then rendered broken images, because the record survived and the
+     * bytes did not. `commitAssets` is what actually writes them.
+     */
+    const importFiles = useCallback(async (files) => {
+        const created = await filesToAssets(files)
+        if (!created.length) return
+        // Render immediately from the data URLs already in hand…
+        addImportedAssets(created)
+        if (created[0]) setSelectedId(created[0].id)
+        // …then commit the bytes to IndexedDB and patch in the object URLs.
+        measureAssets(created)
+        const settled = await commitAssets(created)
+        addImportedAssets(settled)
+        toast(`${settled.length} image${settled.length === 1 ? '' : 's'} stored in the library`, 'success')
+    }, [addImportedAssets, toast])
+
+    const onPickFiles = () => fileInputRef.current?.click()
+
+    /**
+     * Delete one asset and reclaim its bytes. Selection moves to a neighbour so
+     * the stage is never left showing a photograph that no longer exists.
+     */
+    const handleDeleteAsset = useCallback(async (asset) => {
+        if (!asset) return
+        const at = gallery.findIndex(a => a.id === asset.id)
+        const next = gallery[at + 1] || gallery[at - 1] || null
+        await removeLibraryAsset(asset.id)
+        if (selectedId === asset.id) setSelectedId(next ? next.id : null)
+        setDrafts(prev => {
+            if (!(asset.id in prev)) return prev
+            const next = { ...prev }
+            delete next[asset.id]
+            return next
+        })
+        toast(`Deleted “${asset.name || 'file'}”`, 'success')
+    }, [gallery, selectedId, removeLibraryAsset, toast])
+
+    // ── Presets & auto ───────────────────────────────────────────────────
+    const applyPreset = useCallback((id) => {
+        const preset = getPreset(id)
+        const next = recipeRef.current
+        updateRecipe({
+            params: { ...GRADE_DEFAULTS, ...(preset.params || {}) },
+            fx: { ...FX_DEFAULTS, ...(preset.fx || {}) },
+            bw: Boolean(preset.bw),
+            curves: createRecipe().curves
+        })
+        setActivePreset(id)
+    }, [updateRecipe])
+
+    const autoAdjust = useCallback(() => {
+        const img = imageRef.current
+        if (!img) return
+        const info = analyseImage(img)
+        if (!info) return
+        updateRecipe({
+            params: {
+                ...recipeRef.current.params,
+                ...info.params,
+                blacks: Number(info.blacks.toFixed(2)),
+                whites: Number(info.whites.toFixed(2))
+            }
+        })
+        setActivePreset('auto')
+        toast('Auto-adjusted from the image histogram', 'success')
+    }, [updateRecipe, toast])
+
+    const resetAll = useCallback(() => {
+        updateRecipe({
+            params: { ...GRADE_DEFAULTS },
+            fx: { ...FX_DEFAULTS },
+            curves: createRecipe().curves,
+            geometry: { ...DEFAULT_RECIPE.geometry },
+            lut: null,
+            lutStrength: 1,
+            bw: false
+        })
+        setActivePreset('none')
+        toast('Recipe reset', 'info')
+    }, [updateRecipe, toast])
+
+    // ── Custom WB sampling ───────────────────────────────────────────────
+    // Click a neutral area in the preview: render the current grade offscreen,
+    // average the clicked patch, and derive LibRaw WB multipliers. That keeps
+    // the mapping click→pixels unambiguous even though the stage canvas may
+    // be WebGL-backed.
+    const handlePickWb = (event) => {
+        if (!pickingWb || !canvasRef.current || !imageRef.current) return
+        const rect = canvasRef.current.getBoundingClientRect()
+        const fx = (event.clientX - rect.left) / rect.width
+        const fy = (event.clientY - rect.top) / rect.height
+        const out = document.createElement('canvas')
+        renderRecipe(imageRef.current, out, recipeRef.current, { maxWidth: 1200, maxHeight: 1200 })
+        const ctx = out.getContext('2d', { willReadFrequently: true })
+        if (!ctx) return
+        const sx = Math.min(Math.max(0, Math.round(fx * out.width) - 4), out.width - 8)
+        const sy = Math.min(Math.max(0, Math.round(fy * out.height) - 4), out.height - 8)
+        const patch = ctx.getImageData(sx, sy, 8, 8)
+        let r = 0, g = 0, b = 0
+        for (let i = 0; i < patch.data.length; i += 4) { r += patch.data[i]; g += patch.data[i + 1]; b += patch.data[i + 2] }
+        const n = patch.data.length / 4
+        const userMul = wbMultipliersFromPatch(r / n, g / n, b / n)
+        const next = { ...rawDraft, userMul }
+        setRawDraft(next)
+        setAppliedRaw(next)
+        if (selectedAsset?.id) updateImportedAsset(selectedAsset.id, { develop: next })
+        setPickingWb(false)
+        toast('White balance set from picked point', 'success')
+    }
+
+    // ── Output ───────────────────────────────────────────────────────────
+    /**
+     * Throw away this photo's unsaved draft and fall back to whatever recipe
+     * is already saved on the library asset. Distinct from resetAll, which
+     * commits a clean slate as the new draft.
+     */
+    const revertDraft = useCallback(() => {
+        setDrafts(prev => {
+            if (!(selectedId in prev)) return prev
+            const next = { ...prev }
+            delete next[selectedId]
+            return next
+        })
+    }, [selectedId])
+
+    const saveToLibrary = useCallback(() => {
+        const img = imageRef.current
+        if (!img || !selectedAsset) return
+        const out = document.createElement('canvas')
+        renderRecipe(img, out, recipeRef.current, { maxWidth: 2400, maxHeight: 2400 })
+        const asset = {
+            id: `lighttable-${Date.now()}`,
+            name: `${(selectedAsset.name || 'image').replace(/\.[^.]+$/, '')} — developed`,
+            src: out.toDataURL('image/jpeg', 0.94),
+            kind: 'image',
+            addedAt: new Date().toISOString(),
+            recipe: serialiseRecipe(recipeRef.current)
+        }
+        addImportedAssets([asset])
+        updateVpState({ lightTableAsset: asset })
+        toast('Developed image added to the library', 'success')
+    }, [selectedAsset, addImportedAssets, updateVpState, toast])
+
+    const downloadImage = useCallback(() => {
+        const img = imageRef.current
+        if (!img || !selectedAsset) return
+        const out = document.createElement('canvas')
+        renderRecipe(img, out, recipeRef.current, { maxWidth: 4000, maxHeight: 4000 })
+        const link = document.createElement('a')
+        link.download = `${(selectedAsset.name || 'image').replace(/\.[^.]+$/, '')}-developed.jpg`
+        link.href = out.toDataURL('image/jpeg', 0.95)
+        link.click()
+        toast('Image downloaded', 'success')
+    }, [selectedAsset, toast])
+
+    const placeOnSpread = useCallback(() => {
+        if (!selectedAsset || !vpState.currentProject) return
+        const pageIdx = vpState.selection?.pageIdx || 0
+        addElement(pageIdx, {
+            type: 'photo-frame',
+            src: selectedAsset.src,
+            assetId: selectedAsset.id,
+            assetName: selectedAsset.name,
+            x: 80, y: 80, width: 320, height: 240,
+            imageFit: 'cover',
+            frameStyle: 'mat',
+            frameWidth: 20,
+            frameColor: '#faf8f4',
+            frameBorderWidth: 0,
+            frameBorderColor: '#111111',
+            frameShadow: '0 6px 18px rgba(0,0,0,.18)',
+            lightTableRecipe: serialiseRecipe(recipeRef.current)
+        })
+        toast('Placed on the current spread with the live recipe attached', 'success')
+    }, [selectedAsset, vpState.currentProject, vpState.selection, addElement, toast])
+
+    // ── LUT ──────────────────────────────────────────────────────────────
+    const importLut = (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => {
+            try {
+                const lut = parseCube(reader.result, file.name)
+                updateRecipe({ lut })
+                setActivePreset('custom')
+                toast(`LUT "${file.name}" loaded`, 'success')
+            } catch (err) {
+                toast(err.message || 'Could not read that .cube file', 'error')
+            }
+        }
+        reader.readAsText(file)
+        event.target.value = ''
+    }
+
+    const exportLut = () => {
+        if (!recipe.lut) return
+        downloadText(`${recipe.lut.name.replace(/\.cube$/i, '')}.cube`, cubeText(recipe.lut), 'text/plain')
+    }
+
+    const exportRecipe = () => {
+        downloadText(
+            `${(selectedAsset?.name || 'image').replace(/\.[^.]+$/, '')}-recipe.json`,
+            JSON.stringify(serialiseRecipe(recipeRef.current), null, 2),
+            'application/json'
+        )
+    }
+
+    // ── Geometry helpers ─────────────────────────────────────────────────
+    const applyAspect = (id) => {
+        if (id === 'free') {
+            updateGeometry({ crop: [0, 0, 1, 1] })
+            return
+        }
+        const [w, h] = id.split(':').map(Number)
+        // centreCrop works in normalised space, so convert the requested
+        // ratio into that space by scaling against the image's own aspect.
+        const img = imageRef.current
+        const imgAspect = img?.naturalWidth && img?.naturalHeight
+            ? img.naturalWidth / img.naturalHeight : 1
+        const crop = centreCrop((w / h) / imgAspect, recipeRef.current.geometry.crop || [0, 0, 1, 1])
+        updateGeometry({ crop: crop.map(v => Number(v.toFixed(5))) })
+    }
+
+    const rotate = (delta) => {
+        const current = recipeRef.current.geometry.rotate || 0
+        updateGeometry({ rotate: Math.round(((current + delta) % 360 + 360) % 360) })
+    }
+
+    // ── Non-destructive return to the book ─────────────────────────────────
+    // When the Light Table was opened from a frame, "Apply" writes the recipe
+    // back to that exact element. Nothing is re-imported, the frame keeps its
+    // size, mat and caption, and the user lands exactly where they left off.
+    const returnTarget = vpState.lightTableTarget
+
+    const returnToPrevious = useCallback(() => {
+        const handoff = {
+            lightTableAsset: null,
+            lightTableTarget: null,
+            lightTableReturnView: null
+        }
+        if (goBack()) updateVpState(handoff)
+        else updateVpState({ ...handoff, currentView: vpState.lightTableReturnView || 'dashboard' })
+    }, [goBack, updateVpState, vpState.lightTableReturnView])
+
+    const applyToTarget = useCallback(({ src, recipe, name }) => {
+        if (!returnTarget?.elementId) return false
+        const applied = applyRecipeToElement(returnTarget, {
+            src,
+            recipe,
+            name: name || selectedAsset?.name,
+            assetId: selectedAsset?.id
+        })
+        if (applied) {
+            const returned = goBack()
+            updateVpState({
+                ...(returned ? {} : { currentView: vpState.lightTableReturnView || 'editor' }),
+                lightTableAsset: null,
+                lightTableTarget: null,
+                lightTableReturnView: null,
+                selection: { type: 'element', id: returnTarget.elementId, pageIdx: returnTarget.pageIdx }
+            })
+            toast('Developed — your frame is updated in place', 'success')
+        }
+        return applied
+    }, [returnTarget, applyRecipeToElement, selectedAsset, updateVpState, vpState.lightTableReturnView, goBack, toast])
+
+    const commitRecipe = useCallback(({ bake = false } = {}) => {
+        if (!selectedAsset) return
+        const serialised = serialiseRecipe(recipeRef.current)
+        const clearDraft = () => setDrafts(prev => {
+            const next = { ...prev }
+            delete next[selectedId]
+            return next
+        })
+
+        if (bake) {
+            // Flatten into pixels — the frame keeps its geometry, but the
+            // grade now lives in the image itself.
+            const img = imageRef.current
+            if (img) {
+                const out = document.createElement('canvas')
+                renderRecipe(img, out, recipeRef.current, { maxWidth: 2400, maxHeight: 2400 })
+                if (applyToTarget({ src: out.toDataURL('image/jpeg', 0.94), recipe: serialised })) {
+                    clearDraft()
+                    return
+                }
+            }
+        }
+
+        // Store the recipe against the library asset so the edit is permanent
+        // and survives re-opening the photo, then mirror it onto the frame.
+        updateImportedAsset(selectedAsset.id, { recipe: serialised })
+        if (applyToTarget({ recipe: serialised })) {
+            clearDraft()
+            return
+        }
+        toast('Recipe saved to the library — open it again any time to keep adjusting', 'success')
+    }, [selectedAsset, applyToTarget, updateImportedAsset, toast])
+
+
+    // ── Keyboard shortcuts ───────────────────────────────────────────────
+    useEffect(() => {
+        const onKey = (event) => {
+            const tag = event.target?.tagName
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target?.isContentEditable) return
+            // ⌘ and ⌃ belong to the platform layer, not the grade: on a Mac ⌃C
+            // is "copy" and skipping it here drops every keyboard copy and
+            // paste straight into the develop workspace.
+            if (event.metaKey || event.ctrlKey) return
+            if (cropping) {
+                if (event.key === 'Escape') setCropping(false)
+                if (event.key === 'Enter') setCropping(false)
+                return
+            }
+            const galleryList = gallery
+            const index = galleryList.findIndex(a => a.id === selectedId)
+            switch (event.key) {
+                case 'ArrowRight':
+                    if (index >= 0 && index < galleryList.length - 1) setSelectedId(galleryList[index + 1].id)
+                    break
+                case 'ArrowLeft':
+                    if (index > 0) setSelectedId(galleryList[index - 1].id)
+                    break
+                case '\\':
+                    setCompare(v => !v)
+                    break
+                case 'r':
+                    rotate(event.shiftKey ? -90 : 90)
+                    break
+                case 'f':
+                    updateGeometry({ flipH: !recipeRef.current.geometry.flipH })
+                    break
+                case 'c':
+                    setCropping(v => !v)
+                    break
+                case 'a':
+                    autoAdjust()
+                    break
+                case '0':
+                    setZoom(1)
+                    break
+                case 'Escape':
+                    if (compare) setCompare(false)
+                    break
+                default:
+                    break
+            }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [gallery, selectedId, cropping, compare, updateGeometry, autoAdjust])
+
+    const isDirty = isRecipeDirty(recipe)
+    const imgDims = imageRef.current
+        ? `${imageRef.current.naturalWidth} × ${imageRef.current.naturalHeight}`
+        : ''
+
+    return (
+        <>
+            <div className="light-table lt-workspace">
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={PHOTO_ACCEPT}
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={e => { importFiles(e.target.files); e.target.value = '' }}
+                />
+
+                {/* ── Header ─────────────────────────────────────────────── */}
+                <header className="lt-header">
+                    {/* No back arrow: TopNav owns navigation. A second, mode-specific
+                            way out was a leftover from before the three-mode shell, and it
+                            disagreed with the nav about where "back" even meant. */}
+                    <div className="lt-title">
+                        <strong>LIGHT TABLE</strong>
+                        <span className="lt-file">
+                            {selectedAsset?.name || 'No image selected'}
+                            {isDirty ? ' •' : ''}
+                        </span>
+                    </div>
+                    <div className="lt-header-actions">
+                        <button className="lt-btn" onClick={returnToPrevious} title="Return to the previous workspace">← Back</button>
+                        <button className="lt-btn" onClick={onPickFiles} title="Import images">Import</button>
+                        <button className="lt-btn" onClick={autoAdjust} disabled={!selectedAsset} title="Auto adjust (A)">Auto</button>
+                        <button
+                            className={`lt-btn${compare ? ' active' : ''}`}
+                            onClick={() => setCompare(v => !v)}
+                            disabled={!selectedAsset}
+                            title="Hold to compare with the original (\\)"
+                            onPointerDown={() => setCompare(true)}
+                            onPointerUp={() => setCompare(false)}
+                            onPointerLeave={() => setCompare(false)}
+                        >
+                            Compare
+                        </button>
+                        {vpState.currentProject && (
+                            <button className="lt-btn" onClick={placeOnSpread} disabled={!selectedAsset}>Place</button>
+                        )}
+                        {returnTarget && (
+                            <>
+                                <button
+                                    className="lt-btn primary"
+                                    onClick={() => commitRecipe({ bake: false })}
+                                    disabled={!selectedAsset}
+                                    title="Write this grade back onto the frame you came from — non-destructive"
+                                >
+                                    Apply to frame
+                                </button>
+                                <button
+                                    className="lt-btn"
+                                    onClick={() => commitRecipe({ bake: true })}
+                                    disabled={!selectedAsset}
+                                    title="Flatten the grade into pixels and swap the frame's image"
+                                >
+                                    Bake &amp; apply
+                                </button>
+                            </>
+                        )}
+                        <button className="lt-btn" onClick={saveToLibrary} disabled={!selectedAsset} title="Render a new, flattened JPEG and add it to the library as a separate asset">
+                            {returnTarget ? 'Save as new' : 'Save'}
+                        </button>
+                        <button className="lt-btn" onClick={downloadImage} disabled={!selectedAsset} title="Download a full-resolution JPEG">↓</button>
+                        {returnTarget && (
+                            <button
+                                className="lt-btn ghost"
+                                onClick={revertDraft}
+                                disabled={!selectedAsset || !isDirty}
+                                title="Discard this photo's unsaved edits"
+                            >
+                                Revert
+                            </button>
+                        )}
+                        <button
+                            className="lt-btn icon lt-inspector-toggle"
+                            onClick={() => setInspectorOpen(v => !v)}
+                            title="Toggle inspector"
+                        >
+                            ⚙
+                        </button>
+                    </div>
+                </header>
+
+                {/* ── Filmstrip ─────────────────────────────────────────── */}
+                <aside className="lt-library">
+                    <div className="lt-lib-toolbar">
+                        <button className="lt-btn" onClick={onPickFiles} title="Import images">+</button>
+                        <button
+                            className="lt-btn"
+                            onClick={() => setDrafts({})}
+                            title="Discard unsaved edits for every image"
+                        >
+                            ↺
+                        </button>
+                        <button
+                            className="lt-btn lt-lib-manage"
+                            onClick={() => setStorageOpen(true)}
+                            title="Manage library files and see how much space they use"
+                            aria-label="Manage library"
+                        >
+                            <StorageIcon />
+                        </button>
+                    </div>
+                    <div className="lt-thumbs">
+                        {gallery.map(asset => (
+                            <div key={asset.id} className="lt-thumb-wrap">
+                                <button
+                                    className={`lt-thumb${selectedId === asset.id ? ' active' : ''}`}
+                                    onClick={() => setSelectedId(asset.id)}
+                                    title={asset.name}
+                                >
+                                    <img src={asset.src} alt={asset.name || ''} />
+                                    {asset.recipe && <span className="lt-thumb-dirty" />}
+                                    <span className="lt-thumb-name">{asset.name}</span>
+                                </button>
+                                {/* Delete is on the tile rather than in a menu: the
+                                whole point of the panel is that removing a file
+                                should not be a multi-click errand. */}
+                                <button
+                                    className="lt-thumb-delete"
+                                    onClick={() => handleDeleteAsset(asset)}
+                                    title={`Delete ${asset.name}`}
+                                    aria-label={`Delete ${asset.name}`}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    {!gallery.length && (
+                        <p className="lt-gallery-empty">
+                            No photos yet
+                        </p>
+                    )}
+                </aside>
+
+                {/* ── Stage ─────────────────────────────────────────────── */}
+                <main
+                    className={`lt-stage${compare ? ' compare' : ''}${dragging ? ' dragging' : ''}`}
+                    onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={e => { e.preventDefault(); setDragging(false); importFiles(e.dataTransfer.files) }}
+                >
+                    {selectedAsset ? (
+                        <>
+                            {/* Top bar: image info + quick geometry */}
+                            <div className="lt-stage-bar top">
+                                <span className="lt-meta">{imgDims}</span>
+                                <div className="divider" />
+                                <button className="lt-btn icon" onClick={() => rotate(-90)} title="Rotate left (Shift+R)">↺</button>
+                                <button className="lt-btn icon" onClick={() => rotate(90)} title="Rotate right (R)">↻</button>
+                                <button
+                                    className={`lt-btn icon${recipe.geometry.flipH ? ' active' : ''}`}
+                                    onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
+                                    title="Flip horizontal (F)"
+                                >
+                                    ⇋
+                                </button>
+                                <button
+                                    className={`lt-btn icon${recipe.geometry.flipV ? ' active' : ''}`}
+                                    onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
+                                    title="Flip vertical"
+                                >
+                                    ⇵
+                                </button>
+                                <div className="divider" />
+                                <button className="lt-btn icon" onClick={resetAll} title="Reset everything">⟲</button>
+                            </div>
+
+                            <div
+                                style={{
+                                    position: 'relative',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                    height: '100%',
+                                    overflow: 'auto'
+                                }}
+                            >
+                                <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: 'transform .12s ease' }}>
+                                    <canvas ref={canvasRef} onClick={handlePickWb} style={pickingWb ? { cursor: 'crosshair' } : undefined} />
+                                </div>
+                                {cropping && (
+                                    <LtCropOverlay
+                                        crop={recipe.geometry.crop || [0, 0, 1, 1]}
+                                        imageAspect={imageRef.current
+                                            ? imageRef.current.naturalWidth / imageRef.current.naturalHeight
+                                            : 1}
+                                        onCommit={(crop) => { updateGeometry({ crop }); setCropping(false) }}
+                                        onCancel={() => setCropping(false)}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Bottom bar: zoom + crop toggle */}
+                            <div className="lt-stage-bar bottom">
+                                <button className="lt-btn icon" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="Zoom out">−</button>
+                                <span className="lt-zoom-label">{Math.round(zoom * 100)}%</span>
+                                <button className="lt-btn icon" onClick={() => setZoom(z => Math.min(4, z + 0.25))} title="Zoom in">+</button>                            <div className="divider" />
+                                <button
+                                    className={`lt-btn${cropping ? ' active' : ''}`}
+                                    onClick={() => setCropping(v => !v)}
+                                    title="Crop (C)"
+                                >
+                                    Crop
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="lt-stage-empty">
+                            <div className="lt-drop">
+                                <h2>Start with a photograph</h2>
+                                <p>
+                                    Import images or drop them here. Develop them with a full
+                                    grade, crop, tone curves and LUTs — then push the result
+                                    straight into a spread.
+                                </p>
+                                <button className="lt-btn primary" onClick={onPickFiles}>Import images</button>
+                            </div>
+                        </div>
+                    )}
+                </main>
+
+                {/* ── Inspector ─────────────────────────────────────────── */}
+                <aside className={`lt-controls${inspectorOpen ? ' open' : ''}`}>
+                    <div className="lt-inspector-head">
+                        <LtHistogram image={imageRef.current} stats={imageStats} />
+                        <div className="lt-tabs">
+                            {TABS.map(t => (
+                                <button
+                                    key={t.id}
+                                    className={`lt-tab${tab === t.id ? ' active' : ''}`}
+                                    onClick={() => setTab(t.id)}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {returnTarget && (
+                        <p className="lt-return-hint">
+                            Developing for a frame in your book. <strong>Apply to frame</strong> keeps the
+                            image as a live recipe — you can keep adjusting it later.
+                        </p>
+                    )}
+
+                    <div className="lt-inspector-body">
+                        {/* ── Develop ─────────────────────────────────── */}
+                        {tab === 'develop' && (
+                            <>
+                                {isRawAsset(selectedAsset) && (
+                                    <div className="lt-group">
+                                        <div className="lt-group-head">Raw Develop · {selectedAsset?.format}</div>
+                                        <LtSlider
+                                            label="Exposure"
+                                            value={rawDraft.expShift}
+                                            onInteraction={setAdjusting}
+                                            onChange={v => setRawDraft(d => ({ ...d, expShift: v }))}
+                                            spec={{ min: 0.25, max: 4, step: 0.05, neutral: 1, format: v => `${v.toFixed(2)}×` }}
+                                        />
+                                        <div className="lt-row">
+                                            <label>Camera white balance</label>
+                                            <button
+                                                className={`lt-switch${rawDraft.useCameraWb ? ' on' : ''}`}
+                                                onClick={() => setRawDraft(d => ({ ...d, useCameraWb: !d.useCameraWb }))}
+                                            />
+                                        </div>
+                                        <div className="lt-row">
+                                            <label>Full-resolution develop (slow)</label>
+                                            <button
+                                                className={`lt-switch${!rawDraft.halfSize ? ' on' : ''}`}
+                                                onClick={() => setRawDraft(d => ({ ...d, halfSize: !d.halfSize }))}
+                                            />
+                                        </div>
+                                        <button
+                                            className="lt-btn"
+                                            disabled={rawDecode === 'decoding'}
+                                            onClick={() => {
+                                                const next = { ...rawDraft }
+                                                setAppliedRaw(next)
+                                                if (selectedAsset?.id) updateImportedAsset(selectedAsset.id, { develop: next })
+                                            }}
+                                        >
+                                            {rawDecode === 'decoding' ? 'Developing…' : 'Develop raw'}
+                                        </button>
+                                        <button
+                                            className={`lt-btn${pickingWb ? ' active' : ''}`}
+                                            onClick={() => setPickingWb(v => !v)}
+                                            title="Click a neutral grey in the preview to set white balance"
+                                        >
+                                            {pickingWb ? 'Click a neutral area…' : 'Pick neutral point'}
+                                        </button>
+                                        {rawDraft.userMul && (
+                                            <button
+                                                className="lt-btn"
+                                                onClick={() => setRawDraft(d => ({ ...d, userMul: null }))}
+                                            >
+                                                Reset custom WB
+                                            </button>
+                                        )}
+                                        <button
+                                            className="lt-btn"
+                                            disabled={tiffBusy}
+                                            title="Full-resolution develop with the Light Table grade and geometry crop baked in as 16-bit TIFF for print."
+                                            onClick={async () => {
+                                                if (!selectedAsset || tiffBusy) return
+                                                setTiffBusy(true)
+                                                try {
+                                                    const rawFrame = await developRawAsset16(selectedAsset, appliedRaw, recipeRef.current.geometry?.crop || null)
+                                                    if (!rawFrame) { toast('16-bit develop failed — no frame to export', 'error'); return }
+                                                    const frame = await new Promise((resolve, reject) => {
+                                                        const worker = new Worker(new URL('../../lib/gradeWorker.js', import.meta.url), { type: 'module' })
+                                                        worker.onmessage = ({ data }) => {
+                                                            worker.terminate()
+                                                            data?.error ? reject(new Error(data.error)) : resolve(data.frame)
+                                                        }
+                                                        worker.onerror = (err) => { worker.terminate(); reject(new Error(err.message)) }
+                                                        worker.postMessage({ id: 0, frame: rawFrame, recipe: recipeRef.current }, [rawFrame.data.buffer])
+                                                    })
+                                                    const tiff = buildTiff16(frame.width, frame.height, frame.data)
+                                                    const link = document.createElement('a')
+                                                    link.href = URL.createObjectURL(tiff)
+                                                    link.download = `${(selectedAsset.name || 'image').replace(/\.[^.]+$/, '')}-developed-16bit.tiff`
+                                                    link.click()
+                                                    setTimeout(() => URL.revokeObjectURL(link.href), 5000)
+                                                    toast('Graded 16-bit TIFF exported for print', 'success')
+                                                } finally {
+                                                    setTiffBusy(false)
+                                                }
+                                            }}
+                                        >
+                                            {tiffBusy ? 'Developing 16-bit…' : 'Export 16-bit TIFF (print)'}
+                                        </button>
+                                        {rawDecode === 'ready' && <p className="lt-help">Developed from raw sensor data via LibRaw.{rawDraft.userMul ? ' Custom WB active.' : ''}</p>}
+                                        {rawDecode === 'fallback' && <p className="lt-help">Raw bytes not available for this photo — showing the embedded preview.</p>}
+                                        {rawDecode === 'fallback' && <p className="lt-help">Raw bytes not available for this photo — showing the embedded preview.</p>}
+                                    </div>
+                                )}
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Presets</div>
+                                    <LtPresetStrip
+                                        image={imageRef.current}
+                                        recipe={recipe}
+                                        activeId={activePreset}
+                                        onApply={applyPreset}
+                                    />
+                                </div>
+                                {DEVELOP_GROUPS.map(group => (
+                                    <SliderGroup
+                                        key={group.id}
+                                        label={group.label}
+                                        controls={group.controls}
+                                        values={recipe.params}
+                                        onChange={updateParam}
+                                        onInteraction={setAdjusting}
+                                        onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
+                                    />
+                                ))}
+                            </>
+                        )}
+
+                        {/* ── Detail ──────────────────────────────────── */}
+                        {tab === 'detail' && (
+                            <>
+                                {DETAIL_GROUP.map(group => (
+                                    <SliderGroup
+                                        key={group.id}
+                                        label={group.label}
+                                        controls={group.controls}
+                                        values={recipe.params}
+                                        onChange={updateParam}
+                                        onInteraction={setAdjusting}
+                                        onReset={() => group.controls.forEach(([key]) => updateParam(key, neutralFor(key)))}
+                                    />
+                                ))}
+                                <p className="lt-help">
+                                    The pipeline drives one sharpening pass and one noise-reduction
+                                    pass. Radius, Detail, Masking and the per-channel breakdown
+                                    need separable stages in the shader before their sliders
+                                    would move a pixel — they arrive with that, not before.
+                                </p>
+                            </>
+                        )}
+
+                        {/* ── Effects ─────────────────────────────────── */}
+                        {tab === 'effects' && (
+                            <>
+                                {FX_GROUPS.map(group => (
+                                    <SliderGroup
+                                        key={group.id}
+                                        label={group.label}
+                                        controls={group.controls.map(key => FX_CONTROL_SPEC[key])}
+                                        values={recipe.fx}
+                                        onInteraction={setAdjusting}
+                                        onChange={updateFx}
+                                        onReset={() => group.controls.forEach(key => updateFx(key, 0))}
+                                    />
+                                ))}
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Monochrome</div>
+                                    <div className="lt-row">
+                                        <label>Black &amp; white</label>
+                                        <button
+                                            className={`lt-switch${recipe.bw ? ' on' : ''}`}
+                                            onClick={() => updateRecipe({ bw: !recipe.bw })}
+                                            aria-pressed={recipe.bw}
+                                            aria-label="Toggle black and white"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* ── Curves ──────────────────────────────────── */}
+                        {tab === 'curves' && (
+                            <div className="lt-group">
+                                <div className="lt-group-head">
+                                    Tone Curve
+                                    <button
+                                        className="lt-btn ghost"
+                                        onClick={() => updateRecipe({ curves: createRecipe().curves })}
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                                <LtCurveEditor
+                                    curves={recipe.curves}
+                                    activeChannel={curveChannel}
+                                    onChannelChange={setCurveChannel}
+                                    onChange={(channel, points) => {
+                                        updateRecipe({ curves: { ...recipeRef.current.curves, [channel]: points } })
+                                        setActivePreset('custom')
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {/* ── Geometry ───────────────────────────────── */}
+                        {tab === 'geometry' && (
+                            <>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Crop</div>
+                                    <button
+                                        className={`lt-btn${cropping ? ' active' : ''}`}
+                                        style={{ width: '100%' }}
+                                        onClick={() => setCropping(v => !v)}
+                                    >
+                                        {cropping ? 'Apply crop' : 'Crop on canvas'}
+                                    </button>
+                                    <div className="lt-row" style={{ marginTop: 8 }}>
+                                        <label>Clear crop</label>
+                                        <button className="lt-btn" onClick={() => updateGeometry({ crop: null })}>Reset</button>
+                                    </div>
+                                </div>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Aspect Ratio</div>
+                                    <div className="lt-crop-grid">
+                                        {ASPECTS.map(a => (
+                                            <button key={a.id} className="lt-btn" onClick={() => applyAspect(a.id)}>{a.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Rotate</div>
+                                    <div className="lt-row">
+                                        <label>Rotation</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="359"
+                                            value={recipe.geometry.rotate || 0}
+                                            onChange={e => updateGeometry({ rotate: Number(e.target.value) || 0 })}
+                                        />
+                                        <span className="lt-crop-info">degrees</span>
+                                    </div>
+                                    <div className="lt-row">
+                                        <label>Rotate by</label>
+                                        <button className="lt-btn" onClick={() => rotate(-90)}>↺ 90°</button>
+                                        <button className="lt-btn" onClick={() => rotate(90)}>↻ 90°</button>
+                                    </div>
+                                </div>
+                                <div className="lt-group">
+                                    <div className="lt-group-head">Flip</div>
+                                    <div className="lt-row">
+                                        <label>Flip horizontal</label>
+                                        <button
+                                            className={`lt-switch${recipe.geometry.flipH ? ' on' : ''}`}
+                                            onClick={() => updateGeometry({ flipH: !recipe.geometry.flipH })}
+                                            aria-pressed={recipe.geometry.flipH}
+                                            aria-label="Flip horizontal"
+                                        />
+                                    </div>
+                                    <div className="lt-row">
+                                        <label>Flip vertical</label>
+                                        <button
+                                            className={`lt-switch${recipe.geometry.flipV ? ' on' : ''}`}
+                                            onClick={() => updateGeometry({ flipV: !recipe.geometry.flipV })}
+                                            aria-pressed={recipe.geometry.flipV}
+                                            aria-label="Flip vertical"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* ── LUT ─────────────────────────────────────── */}
+                        {tab === 'lut' && (
+                            <div className="lt-group">
+                                <div className="lt-group-head">Look Up Table</div>
+                                <label className="lt-file-btn">
+                                    {recipe.lut ? recipe.lut.name : 'Import .cube LUT'}
+                                    <input type="file" accept=".cube,text/plain" onChange={importLut} style={{ display: 'none' }} />
+                                </label>
+                                {recipe.lut && (
+                                    <>
+                                        <div style={{ marginTop: 10 }}>
+                                            <LtSlider
+                                                label="Strength"
+                                                value={recipe.lutStrength}
+                                                onChange={v => updateRecipe({ lutStrength: v })}
+                                                spec={{ min: 0, max: 1, step: 0.01, bipolar: false, neutral: 1 }}
+                                            />
+                                        </div>
+                                        <div className="lt-row">
+                                            <label>Export this LUT</label>
+                                            <button className="lt-btn" onClick={exportLut}>↓ .cube</button>
+                                        </div>
+                                        <div className="lt-row">
+                                            <label>Remove LUT</label>
+                                            <button className="lt-btn danger" onClick={() => updateRecipe({ lut: null })}>Remove</button>
+                                        </div>
+                                    </>
+                                )}
+                                <div className="lt-group-head" style={{ marginTop: 14 }}>Recipe</div>
+                                <button className="lt-btn" style={{ width: '100%' }} onClick={exportRecipe}>
+                                    Export recipe JSON
+                                </button>
+                                <p className="lt-help">
+                                    Recipes are portable. The same file drives the preview, the
+                                    export and the live treatment when an image is placed on a spread.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </aside>
+
+                {/* ── Status bar ───────────────────────────────────── */}
+                <footer className="lt-status">
+                    <span>
+                        <span className={`dot ${rendererMode === 'gpu' ? 'gpu' : rendererMode === 'cpu' ? 'cpu' : 'off'}`} />
+                        {rendererMode === 'gpu' ? 'GPU' : rendererMode === 'cpu' ? 'CPU fallback' : 'initialising'}
+                    </span>
+                    <span>{gallery.length} image{gallery.length === 1 ? '' : 's'}</span>
+                    {selectedAsset && <span>{imgDims}</span>}
+                    {recipe.geometry.crop && <span>cropped</span>}
+                    {recipe.lut && <span>LUT: {recipe.lut.name}</span>}
+                    <span className="spacer" />
+                    <span>\ compare · ← → browse · A auto · C crop · R rotate · F flip</span>
+                </footer>
+            </div>
+            {storageOpen && <StorageManager onClose={() => setStorageOpen(false)} />}
+        </>
+    )
+}
+
+export default LightTable

@@ -1,0 +1,1 @@
+{"name":"@svrn/publishing-node","private":true,"version":"1.0.0","scripts":{"start":"node ../../server/server.cjs"}}

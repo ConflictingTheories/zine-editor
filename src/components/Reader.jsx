@@ -1,0 +1,456 @@
+/*
+ * Component: Reader
+ * Public pixozine reader view for browsing published content with navigation controls.
+ */
+
+import React, { useState, useEffect, useRef } from 'react'
+import { useVP } from '../context/VPContext.jsx'
+import ShaderElement from './ShaderElement.jsx'
+import Object3D from './Object3D.jsx'
+import PlayableEmbed from './PlayableEmbed.jsx'
+import { getPanelBackground, PhotoFrameSurface } from './ElementContent.jsx'
+import { resolvePublicationAsset } from '../utils/assets.js'
+import { bookGeometry, legacyPageSize } from '../lib/bookGeometry.js'
+import { isPageLocked, hasLegacyPassword, unlockPage, migrateLegacyPageLock } from '../../packages/svrn-format/src/pageCrypto.js'
+
+const ANIMATION_MAP = {
+    'flash-in': 'reader-flash-in',
+    'lightning': 'reader-el-lightning',
+    'shake': 'reader-el-shake',
+    'pulse': 'reader-el-pulse',
+    'spin': 'reader-el-spin',
+    'glitch': 'reader-el-glitch',
+    'flicker': 'reader-el-flicker',
+    'breathe': 'reader-el-breathe',
+    'bounce': 'reader-el-bounce',
+    'wobble': 'reader-el-wobble',
+    'blink': 'reader-el-blink',
+    'drift': 'reader-el-drift',
+    'fly-in': 'reader-el-fly-in'
+}
+
+const BALLOON_PROPS = {
+    dialog: { background: '#fff', border: '2px solid #000', borderRadius: '20px' },
+    thought: { background: '#fff', border: '2px solid #000', borderRadius: '50%' },
+    shout: { background: '#fff', border: '4px solid #000', fontWeight: 'bold' },
+    caption: { background: '#000', color: '#fff' },
+    whisper: { background: '#f8f8f8', border: '1px dashed #999', borderRadius: '16px', fontStyle: 'italic' },
+    narration: { background: '#ffe', border: '1px solid #cc9', fontStyle: 'italic' }
+}
+
+const styles = {
+    toolbarSpacer: { flex: 1 },
+    page: (page, project) => {
+        const size = project?.editorMode === 'photo-portfolio'
+            ? bookGeometry(project, page)
+            : legacyPageSize(page?.orientation === 'landscape')
+        return {
+            background: page.background || '#fff',
+            position: 'relative',
+            width: `${size.width}px`,
+            height: `${size.height}px`,
+            minHeight: 0,
+            flex: '0 0 auto'
+        }
+    },
+    texture: (page) => ({
+        position: 'absolute', inset: 0,
+        backgroundImage: `url(${resolvePublicationAsset(page.texture)})`,
+        backgroundSize: 'cover', opacity: 0.2,
+        pointerEvents: 'none'
+    }),
+    element: (el, hidden) => {
+        const animName = ANIMATION_MAP[el.animation] || null
+        const animDuration = el.animDuration ?? 1
+        const animIter = el.animLoop ? 'infinite' : '1'
+        return {
+            position: 'absolute',
+            left: el.x, top: el.y, width: el.width, height: el.height,
+            transform: `rotate(${el.rotation || 0}deg)`,
+            zIndex: el.zIndex,
+            opacity: el.opacity ?? 1,
+            mixBlendMode: el.blendMode || 'normal',
+            cursor: el.action ? 'pointer' : 'default',
+            display: hidden ? 'none' : undefined,
+            // Visual effects (were missing)
+            boxShadow: el.shadow || 'none',
+            filter: el.blur ? `blur(${el.blur}px)` : el.filter || 'none',
+            border: el.borderWidth ? `${el.borderWidth}px solid ${el.borderColor || '#000'}` : 'none',
+            borderRadius: el.borderRadius ? `${el.borderRadius}px` : '0',
+            // CSS animation
+            animation: animName ? `${animName} ${animDuration}s ease ${animIter}` : 'none'
+        }
+    },
+    text: (el) => ({
+        fontSize: el.fontSize, color: el.color, fontFamily: el.fontFamily || 'var(--font-body, serif)',
+        textAlign: el.align, fontWeight: el.bold ? 'bold' : 'normal',
+        fontStyle: el.italic ? 'italic' : 'normal',
+        lineHeight: el.lineHeight || 'normal',
+        letterSpacing: el.letterSpacing ? `${el.letterSpacing}px` : 'normal',
+        textShadow: el.textShadow || 'none',
+        WebkitTextStroke: el.strokeWidth ? `${el.strokeWidth}px ${el.strokeColor || '#fff'}` : 'none'
+    }),
+    image: (el) => ({
+        width: '100%', height: '100%',
+        objectFit: el.objectFit || 'contain',
+        borderRadius: el.imgRadius ? `${el.imgRadius}px` : '0'
+    }),
+    panel: (el) => ({
+        width: '100%', height: '100%',
+        border: el.panelBorderWidth !== undefined ? `${el.panelBorderWidth}px ${el.panelBorderStyle || 'solid'} ${el.panelBorderColor || '#000'}` : 'var(--panel-border)',
+        borderRadius: el.panelRadius !== undefined ? `${el.panelRadius}px` : 'var(--radius)',
+        background: getPanelBackground(el),
+        boxShadow: el.panelShadow || 'none',
+        boxSizing: 'border-box'
+    }),
+    shape: (el) => {
+        const base = {
+            width: '100%', height: '100%',
+            background: el.shape === 'triangle' ? 'transparent' : (el.fill || '#000'),
+            borderRadius: el.shape === 'circle' ? '50%' : 0
+        }
+        if (el.shape === 'diamond') base.transform = 'rotate(45deg)'
+        if (el.shape === 'triangle') {
+            base.width = '0'
+            base.height = '0'
+            base.borderLeft = `${el.width / 2}px solid transparent`
+            base.borderRight = `${el.width / 2}px solid transparent`
+            base.borderBottom = `${el.height}px solid ${el.fill || '#000'}`
+        }
+        return base
+    },
+    balloon: (el) => {
+        const bStyle = BALLOON_PROPS[el.balloonType || 'dialog'] || BALLOON_PROPS.dialog
+        return {
+            fontSize: el.fontSize || 14,
+            fontFamily: el.fontFamily || 'var(--font-body, serif)',
+            fontWeight: el.bold ? 'bold' : bStyle.fontWeight || 'normal',
+            fontStyle: el.italic ? 'italic' : bStyle.fontStyle || 'normal',
+            lineHeight: el.lineHeight || 'normal',
+            letterSpacing: el.letterSpacing ? `${el.letterSpacing}px` : 'normal',
+            padding: '10px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            textAlign: 'center', width: '100%', height: '100%',
+            ...bStyle
+        }
+    },
+    video: { width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' },
+    audioLog: { width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', border: '1px solid #d4af37', padding: 10, color: '#fff', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' },
+    modalControls: {
+        display: 'flex', gap: '10px', marginTop: '15px'
+    }
+}
+
+/**
+ * Component: Reader
+ * Renders a pixozine for reading with support for page navigation, content
+ * gating (paywalls/passwords), media playback, and element interactions.
+ */
+function Reader() {
+    const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx, toast, replacePage } = useVP()
+    const { currentProject, readerMode } = vpState
+    const [pageIdx, setPageIdx] = useState(0)
+    const [unlockedPages, setUnlockedPages] = useState(new Set())
+    const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
+    const [decryptedPages, setDecryptedPages] = useState({}) // pageIdx -> decrypted working copy (session only)
+    const [toggledLabels, setToggledLabels] = useState(new Set())
+    const [flags, setFlags] = useState(() => ({ ...(currentProject?.flags || {}) }))
+    const [inventory, setInventory] = useState(() => new Set(currentProject?.inventory || []))
+    const [achievements, setAchievements] = useState(() => new Set(currentProject?.achievements || []))
+    const [readerScale, setReaderScale] = useState(1)
+    const readerWrapRef = useRef(null)
+    const project = currentProject
+    // Keep hooks unconditional. Preview can briefly render while the project
+    // changes; returning before the effects below would change hook order and
+    // crash React, leaving the preview blank.
+    const pageCount = project?.pages?.length || 0
+    const safePageIdx = pageCount ? Math.min(pageIdx, pageCount - 1) : 0
+    const page = decryptedPages[safePageIdx] || project?.pages?.[safePageIdx]
+    const pageSize = project?.editorMode === 'photo-portfolio'
+        ? bookGeometry(project, page)
+        : legacyPageSize(page?.orientation === 'landscape')
+
+    useEffect(() => {
+        const wrap = readerWrapRef.current
+        if (!wrap) return
+        const fit = () => {
+            const scale = Math.min(
+                1,
+                Math.max(1, wrap.clientWidth - 48) / pageSize.width,
+                Math.max(1, wrap.clientHeight - 48) / pageSize.height
+            )
+            setReaderScale(previous => Math.abs(previous - scale) < 0.001 ? previous : scale)
+        }
+        const observer = new ResizeObserver(fit)
+        observer.observe(wrap)
+        fit()
+        return () => observer.disconnect()
+    }, [pageSize.width, pageSize.height])
+
+    // BGM is owned by VPContext, not by an individual page component. Do not
+    // stop it in the page effect cleanup: changing pages must not interrupt it.
+    const pageAudio = page?.backgroundAudio || (page?.bgm ? { src: page.bgm, loop: true } : null)
+    const backgroundAudio = pageAudio || project?.backgroundAudio || null
+    const audioSrc = typeof backgroundAudio === 'string' ? backgroundAudio : backgroundAudio?.src
+    const audioLoop = backgroundAudio && typeof backgroundAudio === 'object' ? backgroundAudio.loop !== false : true
+    useEffect(() => {
+        // A page without its own audio inherits the already-playing project
+        // track. Never stop here: this effect runs on every page navigation.
+        if (audioSrc) playBGM({ src: audioSrc, loop: audioLoop })
+    }, [audioSrc, audioLoop])
+
+    useEffect(() => {
+        if (pageCount && pageIdx !== safePageIdx) setPageIdx(safePageIdx)
+    }, [pageCount, pageIdx, safePageIdx])
+
+    useEffect(() => {
+        setFlags({ ...(currentProject?.flags || {}) })
+        setInventory(new Set(currentProject?.inventory || []))
+        setAchievements(new Set(currentProject?.achievements || []))
+    }, [currentProject?.id])
+
+    useEffect(() => {
+        if (!page) return
+        page.interactions?.forEach(handleInteraction)
+        page.elements?.filter(element => element.trigger === 'page-enter').forEach(handleInteraction)
+    }, [page?.id, safePageIdx])
+
+    if (!project || !page) return <div className="reader-empty">No project loaded</div>
+
+    const handleNext = () => {
+        let nextIdx = safePageIdx + 1
+        while (nextIdx < project.pages.length) {
+            const p = project.pages[nextIdx]
+            if (!p.isLocked || unlockedPages.has(nextIdx)) {
+                setPageIdx(nextIdx)
+                return
+            }
+            nextIdx++
+        }
+    }
+
+    const handlePrev = () => {
+        let prevIdx = safePageIdx - 1
+        while (prevIdx >= 0) {
+            const p = project.pages[prevIdx]
+            if (!p.isLocked || unlockedPages.has(prevIdx)) {
+                setPageIdx(prevIdx)
+                return
+            }
+            prevIdx--
+        }
+    }
+
+    function handleInteraction(el) {
+        const { action, actionVal } = el
+        if (!action || (el.conditionFlag && !flags[el.conditionFlag])) return
+
+        switch (action) {
+            case 'goto': {
+                const target = parseInt(actionVal, 10) - 1
+                if (isNaN(target) || target < 0 || target >= project.pages.length) break
+                const targetPage = project.pages[target]
+                if (targetPage?.isLocked && !unlockedPages.has(target)) {
+                    setPasswordModal({ active: true, targetIdx: target, value: '' })
+                } else {
+                    setPageIdx(target)
+                }
+                break
+            }
+            case 'unlock':
+                const unlockIdx = parseInt(actionVal) - 1
+                if (!isNaN(unlockIdx)) {
+                    setUnlockedPages(prev => new Set(prev).add(unlockIdx))
+                }
+                break
+            case 'password':
+                const passIdx = parseInt(actionVal) - 1
+                if (!isNaN(passIdx)) {
+                    setPasswordModal({ active: true, targetIdx: passIdx, value: '' })
+                }
+                break
+            case 'vfx':
+                // fallback to "flash" when actionVal is missing so older elements still trigger
+                triggerVfx(actionVal || 'flash')
+                break
+            case 'sfx':
+                playSFX(actionVal)
+                break
+            case 'link':
+                window.open(actionVal, '_blank')
+                break
+            case 'toggle':
+                if (actionVal) setToggledLabels(prev => {
+                    const next = new Set(prev)
+                    if (next.has(actionVal)) next.delete(actionVal)
+                    else next.add(actionVal)
+                    return next
+                })
+                break
+            case 'set-flag':
+                if (actionVal) setFlags(prev => ({ ...prev, [actionVal]: true }))
+                break
+            case 'add-item':
+                if (actionVal) setInventory(prev => new Set(prev).add(actionVal))
+                break
+            case 'award':
+                if (actionVal) setAchievements(prev => new Set(prev).add(actionVal))
+                break
+            default:
+                break
+        }
+    }
+
+    const handlePasswordSubmit = async () => {
+        const targetIdx = passwordModal.targetIdx
+        const targetPage = project.pages[targetIdx]
+        if (!targetPage) {
+            toast('Incorrect password', 'error')
+            return
+        }
+        try {
+            if (isPageLocked(targetPage)) {
+                // Real decryption: wrong password fails closed (AES-GCM auth).
+                const working = await unlockPage(targetPage, passwordModal.value)
+                setDecryptedPages(prev => ({ ...prev, [targetIdx]: working }))
+            } else if (hasLegacyPassword(targetPage)) {
+                // Transparent migration: a correct legacy plaintext password
+                // re-encrypts the page on this unlock. The migrated (locked)
+                // page is persisted so the next sync stores the envelope,
+                // never the plaintext.
+                const migrated = await migrateLegacyPageLock(targetPage, passwordModal.value)
+                replacePage(targetIdx, migrated)
+                const working = await unlockPage(migrated, passwordModal.value)
+                setDecryptedPages(prev => ({ ...prev, [targetIdx]: working }))
+                toast('Page password upgraded to encryption', 'success')
+            } else {
+                toast('Incorrect password', 'error')
+                return
+            }
+            setUnlockedPages(prev => new Set(prev).add(targetIdx))
+            setPageIdx(targetIdx)
+            setPasswordModal({ active: false, targetIdx: -1, value: '' })
+        } catch {
+            toast('Incorrect password', 'error')
+        }
+    }
+
+    return (
+        <div className="reader-view">
+            <div className="reader-toolbar">
+                <button className="reader-close btn-secondary" onClick={() => {
+                    if (readerMode === 'preview') showView('editor')
+                    else showView('discover')
+                }}>✕ Close</button>
+                <div style={styles.toolbarSpacer}></div>
+                <span>{safePageIdx + 1} / {project.pages.length}</span>
+            </div>
+
+            <div className="reader-canvas-wrap" ref={readerWrapRef}>
+                <div className="reader-page-fit" style={{ width: pageSize.width * readerScale, height: pageSize.height * readerScale }}>
+                    <div className="reader-page" style={{ ...styles.page(page, project), transform: `scale(${readerScale})`, transformOrigin: 'top left' }}>
+                        {page.texture && (
+                            <div style={styles.texture(page)} />
+                        )}
+                        {(page.elements || []).filter(e => !e.hidden).map(el => {
+                            const libraryAsset = el.assetId
+                                ? (vpState.library?.imported || []).find(asset => asset.id === el.assetId)
+                                : null
+                            const renderedElement = libraryAsset?.src ? { ...el, src: libraryAsset.src } : el
+                            const hiddenByToggle = el.isHidden && !toggledLabels.has(el.label)
+                            const hiddenByFlag = el.requiredFlag && !flags[el.requiredFlag]
+                            return (
+                                <div
+                                    key={el.id}
+                                    className="reader-el reader-el-item"
+                                    data-label={el.label || ''}
+                                    style={styles.element(renderedElement, hiddenByToggle || hiddenByFlag)}
+                                    onClick={() => (!el.trigger || el.trigger === 'click') && handleInteraction(el)}
+                                    onMouseEnter={() => el.trigger === 'hover' && handleInteraction(el)}
+                                >
+                                    {el.type === 'text' && (
+                                        <div style={styles.text(el)}>{el.content}</div>
+                                    )}
+                                    {el.type === 'image' && (
+                                        <img src={renderedElement.src} style={styles.image(renderedElement)} alt="" />
+                                    )}
+                                    {el.type === 'photo-frame' && (
+                                        <PhotoFrameSurface el={renderedElement} />
+                                    )}
+                                    {el.type === 'panel' && (
+                                        <div style={styles.panel(el)} />
+                                    )}
+                                    {el.type === 'shape' && (
+                                        <div style={styles.shape(el)} />
+                                    )}
+                                    {el.type === 'shader' && (
+                                        <ShaderElement preset={el.shaderPreset} width={el.width} height={el.height} />
+                                    )}
+                                    {el.type === 'object' && (
+                                        <Object3D
+                                            model={el.objModel || 'crystal'}
+                                            color={el.objColor || '#4488ff'}
+                                            autoRotate={el.objSpin !== false}
+                                            width={el.width}
+                                            height={el.height}
+                                        />
+                                    )}
+                                    {el.type === 'balloon' && (
+                                        <div style={styles.balloon(el)}>{el.content}</div>
+                                    )}
+                                    {el.type === 'video' && (
+                                        el.src
+                                            ? <video src={el.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls autoPlay muted />
+                                            : <div style={styles.video}>VIDEO: No Source</div>
+                                    )}
+                                    {el.type === 'playable' && (
+                                        <PlayableEmbed playable={el.playable || el} />
+                                    )}
+                                    {el.type === 'audio-log' && (
+                                        <div style={styles.audioLog}>
+                                            <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+                                                <div style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                                    onClick={(e) => { e.stopPropagation(); if (el.src) { const a = new Audio(el.src); a.play().catch(() => { }) } }}
+                                                >▶</div>
+                                                <span style={{ fontSize: 12 }}>{el.label || 'AUDIO LOG'}</span>
+                                            </div>
+                                            <div style={{ flex: 1, background: '#222', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#666' }}>[{el.vizTheme || 'bars'}]</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            <div className="reader-controls">
+                <button className="btn-primary" onClick={handlePrev}>◀ Prev</button>
+                <button className="btn-primary" onClick={handleNext}>Next ▶</button>
+            </div>
+
+            {passwordModal.active && (
+                <div className="modal-overlay active">
+                    <div className="modal-box">
+                        <h3>🔒 Locked</h3>
+                        <p>Enter password to unlock path</p>
+                        <input
+                            type="password"
+                            className="input-main"
+                            value={passwordModal.value}
+                            onChange={(e) => setPasswordModal(prev => ({ ...prev, value: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+                            autoFocus
+                        />
+                        <div style={styles.modalControls}>
+                            <button className="btn-primary" onClick={handlePasswordSubmit}>Unlock</button>
+                            <button className="btn-secondary" onClick={() => setPasswordModal({ active: false, targetIdx: -1, value: '' })}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+export default Reader
