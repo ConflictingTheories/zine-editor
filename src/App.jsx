@@ -97,7 +97,7 @@ function EmptyMode({ mode }) {
         },
         editor: {
             title: 'Nothing open',
-            body: 'Pick up a zine or a book from the Library, or start something new.',
+            body: 'Pick up a pixozine or a book from the Library, or start something new.',
             cta: 'Open the Library'
         }
     }[mode] || {}
@@ -129,8 +129,8 @@ function App() {
         const view = vpState.currentView
 
         /**
-         * Portfolio has its own view key. When the open project is a zine and
-         * the user clicks Portfolio, showing them the zine editor means the mode
+         * Portfolio has its own view key. When the open project is a pixozine and
+         * the user clicks Portfolio, showing them the pixozine editor means the mode
          * switch silently does nothing — the button lights up and the same
          * screen is still there. Route to the hub instead so they can pick or
          * make a book.

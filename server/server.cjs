@@ -7,8 +7,9 @@ const path = require('path');
 const economyService = require('./economyService.cjs');
 const vault = require('./vaultService.cjs');
 const accountRoutes = require('./accountRoutes.cjs');
-const { seedDemoUser, DEMO_TOKEN } = require('./demoAccount.cjs');
+const { seedDemoUser, DEMO_TOKEN, isDemoAccountAllowed } = require('./demoAccount.cjs');
 const { registerSvrnRoutes } = require('./svrnRoutes.cjs');
+const { normalizeZineData, serializeZineData } = require('./zineStore.cjs');
 
 const {
     app,
@@ -21,7 +22,7 @@ const {
     jwtExpiry: JWT_EXPIRY,
 } = require('./runtime.cjs');
 
-const { server, jwt: jwtConfig, database, payment, xrp } = CONFIG;
+const { server, jwt: jwtConfig, database, payment } = CONFIG;
 const JWT_SECRET = jwtConfig.secret;
 const { isFunded, evaluateAccess, registerAccountRoutes } = accountRoutes;
 
@@ -127,7 +128,7 @@ app.post('/api/zines', authenticateToken, async (req, res) => {
                 .where({ id: serverId, user_id: req.user.id })
                 .update({
                     title,
-                    data: JSON.stringify(data),
+                    data: serializeZineData(data),
                     updated_at: db.fn.now()
                 });
             res.json({ id: serverId, status: 'updated' });
@@ -135,7 +136,7 @@ app.post('/api/zines', authenticateToken, async (req, res) => {
             const [id] = await db('zines').insert({
                 user_id: req.user.id,
                 title,
-                data: JSON.stringify(data)
+                data: serializeZineData(data)
             });
             res.json({ id, status: 'created' });
         }
@@ -229,76 +230,97 @@ app.get('/api/published', async (req, res) => {
 // Takes the full publication and monetization configuration in one call. The
 // old handler only stored title/genre/tags, so every monetization field the
 // publish dialog collected was silently discarded — the feature could not work
+/**
+ * Resolve the publish fields shared by the REST publish route and the MCP
+ * publish_zine tool, so agents publishing via MCP get the same monetization
+ * semantics as the editor (P2). Throws with `status = 400` on invalid input.
+ * @param {object} fields — author_name/author, genre, tags, description,
+ *   cover_image, monetization_type, price, funding_goal, currency
+ * @param {{ monetization_type: string|null }} existing — current zine row
+ * @returns {{ model: string, update: object }} — the update object for knex
+ */
+function resolvePublishFields(fields, existing) {
+    const {
+        author_name, author, genre, tags, description, cover_image,
+        monetization_type, price, funding_goal, currency
+    } = fields || {};
+
+    const bad = (msg) => { const e = new Error(msg); e.status = 400; throw e; };
+
+    const model = MONETIZATION_TYPES.includes(monetization_type)
+        ? monetization_type
+        : (existing.monetization_type || 'free');
+
+    // A paid model needs a price; a free or crowdfunded one must not carry
+    // a price, or a reader would be charged for nothing.
+    let priceUnits = 0;
+    let fundingGoal = null;
+
+    if (model === 'one_time' || model === 'subscription') {
+        const parsed = Number(price);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            bad(`A ${model} zine needs a price above zero`);
+        }
+        if (parsed > MAX_PRICE_USD) {
+            bad(`Price cannot exceed $${MAX_PRICE_USD}`);
+        }
+        priceUnits = Math.round(parsed * vault.UNITS_PER_USD);
+    } else if (model === 'crowdfund') {
+        const parsed = Number(funding_goal);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            bad('A crowdfunded zine needs a funding goal');
+        }
+        fundingGoal = parsed;
+    }
+
+    return {
+        model,
+        priceUnits,
+        update: {
+            is_published: 1,
+            published_at: db.fn.now(),
+            author_name: author_name || author || null,
+            genre: genre || null,
+            tags: tags || null,
+            description: description || null,
+            cover_image: cover_image || null,
+            monetization_type: model,
+            access_level: model === 'free' ? 'public' : 'gated',
+            price_units: priceUnits,
+            currency: currency || 'USD',
+            funding_goal: fundingGoal,
+            // Re-publishing a crowdfund zine starts a new goal, so any
+            // amount already raised no longer counts toward it.
+            amount_raised: 0,
+            is_funded: 0
+        }
+    };
+}
+
 // end to end no matter what the client sent.
 app.post('/api/publish/:id', authenticateToken, async (req, res) => {
     try {
-        const {
-            author_name, genre, tags, description, cover_image,
-            monetization_type, price, funding_goal, currency
-        } = req.body;
-
         const existing = await db('zines')
             .select('id', 'monetization_type', 'amount_raised')
             .where({ id: req.params.id, user_id: req.user.id })
             .first();
         if (!existing) return res.status(404).json({ error: 'Zine not found or not owned' });
 
-        const model = MONETIZATION_TYPES.includes(monetization_type)
-            ? monetization_type
-            : (existing.monetization_type || 'free');
-
-        // A paid model needs a price; a free or crowdfunded one must not carry
-        // a price, or a reader would be charged for nothing.
-        let priceUnits = 0
-        let fundingGoal = null
-
-        if (model === 'one_time' || model === 'subscription') {
-            const parsed = Number(price)
-            if (!Number.isFinite(parsed) || parsed <= 0) {
-                return res.status(400).json({ error: `A ${model} zine needs a price above zero` })
-            }
-            if (parsed > MAX_PRICE_USD) {
-                return res.status(400).json({ error: `Price cannot exceed $${MAX_PRICE_USD}` })
-            }
-            priceUnits = Math.round(parsed * vault.UNITS_PER_USD)
-        } else if (model === 'crowdfund') {
-            const parsed = Number(funding_goal)
-            if (!Number.isFinite(parsed) || parsed <= 0) {
-                return res.status(400).json({ error: 'A crowdfunded zine needs a funding goal' })
-            }
-            fundingGoal = parsed
-        }
+        const { model, priceUnits, update } = resolvePublishFields(req.body, existing);
 
         const changes = await db('zines')
             .where({ id: req.params.id, user_id: req.user.id })
-            .update({
-                is_published: 1,
-                published_at: db.fn.now(),
-                author_name: author_name || null,
-                genre: genre || null,
-                tags: tags || null,
-                description: description || null,
-                cover_image: cover_image || null,
-                monetization_type: model,
-                access_level: model === 'free' ? 'public' : 'gated',
-                price_units: priceUnits,
-                currency: currency || 'USD',
-                funding_goal: fundingGoal,
-                // Re-publishing a crowdfund zine starts a new goal, so any
-                // amount already raised no longer counts toward it.
-                amount_raised: 0,
-                is_funded: 0
-            });
+            .update(update);
 
         if (changes === 0) return res.status(404).json({ error: 'Zine not found or not owned' });
 
         res.json({
             status: 'published',
             monetization_type: model,
-            price: priceUnits ? vault.fromUnits(priceUnits, { currency: currency || 'USD' }) : null
+            price: priceUnits ? vault.fromUnits(priceUnits, { currency: req.body.currency || 'USD' }) : null
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -350,11 +372,20 @@ app.get('/api/zines/:id', async (req, res) => {
     }
 });
 
+/** Escape a string for interpolation into server-rendered HTML. */
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 /** Parse a zine's stored JSON document, tolerating a corrupt row. */
 function parseZineData(zine) {
     try {
-        const parsed = JSON.parse(zine.data);
-        return { pages: Array.isArray(parsed?.pages) ? parsed.pages : [] };
+        return normalizeZineData(zine.data);
     } catch {
         return { pages: [] };
     }
@@ -369,7 +400,7 @@ function parseZineData(zine) {
  */
 function resolveOptionalUser(token) {
     if (!token) return Promise.resolve(null);
-    if (token === DEMO_TOKEN) return Promise.resolve(null);
+    if (token === DEMO_TOKEN && isDemoAccountAllowed()) return Promise.resolve(null);
     if (token === 'local_offline_token') return Promise.resolve(null);
     return new Promise((resolve) => {
         jwt.verify(token, JWT_SECRET, (err, user) => resolve(err ? null : user));
@@ -381,7 +412,7 @@ app.get('/mcp/zines/:id', authenticateToken, async (req, res) => {
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        res.json({ ...zine, data: JSON.parse(zine.data) });
+        res.json({ ...zine, data: normalizeZineData(zine.data) });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -394,7 +425,7 @@ app.put('/mcp/zines/:id', authenticateToken, async (req, res) => {
             .where({ id: req.params.id, user_id: req.user.id })
             .update({
                 title,
-                data: JSON.stringify(data),
+                data: serializeZineData(data),
                 updated_at: db.fn.now()
             });
         if (updated === 0) return res.status(404).json({ error: 'Zine not found' });
@@ -408,7 +439,7 @@ app.post('/mcp/zines/:id/pages', authenticateToken, async (req, res) => {
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        const data = JSON.parse(zine.data);
+        const data = normalizeZineData(zine.data);
         const newPage = { id: Date.now(), elements: [], background: '#ffffff', texture: null };
         data.pages.push(newPage);
         await db('zines')
@@ -428,7 +459,7 @@ app.put('/mcp/zines/:id/pages/:pageIdx', authenticateToken, async (req, res) => 
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        const data = JSON.parse(zine.data);
+        const data = normalizeZineData(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         if (!data.pages[pageIdx]) return res.status(404).json({ error: 'Page not found' });
         if (background !== undefined) data.pages[pageIdx].background = background;
@@ -449,7 +480,7 @@ app.delete('/mcp/zines/:id/pages/:pageIdx', authenticateToken, async (req, res) 
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        const data = JSON.parse(zine.data);
+        const data = normalizeZineData(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         if (data.pages.length <= 1) return res.status(400).json({ error: 'Cannot delete last page' });
         if (!data.pages[pageIdx]) return res.status(404).json({ error: 'Page not found' });
@@ -471,7 +502,7 @@ app.post('/mcp/zines/:id/pages/:pageIdx/elements', authenticateToken, async (req
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        const data = JSON.parse(zine.data);
+        const data = normalizeZineData(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         if (!data.pages[pageIdx]) return res.status(404).json({ error: 'Page not found' });
         const el = { ...element, id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9), zIndex: data.pages[pageIdx].elements.length };
@@ -493,7 +524,7 @@ app.put('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToken, 
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        const data = JSON.parse(zine.data);
+        const data = normalizeZineData(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         const el = data.pages[pageIdx]?.elements.find(e => e.id === req.params.elementId);
         if (!el) return res.status(404).json({ error: 'Element not found' });
@@ -514,7 +545,7 @@ app.delete('/mcp/zines/:id/pages/:pageIdx/elements/:elementId', authenticateToke
     try {
         const zine = await db('zines').where({ id: req.params.id, user_id: req.user.id }).first();
         if (!zine) return res.status(404).json({ error: 'Zine not found' });
-        const data = JSON.parse(zine.data);
+        const data = normalizeZineData(zine.data);
         const pageIdx = parseInt(req.params.pageIdx);
         const elements = data.pages[pageIdx]?.elements;
         if (!elements) return res.status(404).json({ error: 'Page not found' });
@@ -546,7 +577,7 @@ app.post('/mcp/initialize', (req, res) => {
             prompts: {}
         },
         serverInfo: {
-            name: 'zine-builder-mcp',
+            name: 'pixozine-builder-mcp',
             version: '1.0.0'
         }
     });
@@ -557,19 +588,19 @@ app.post('/mcp/resources/list', (req, res) => {
     res.json({
         resources: [
             {
-                uri: 'zine://themes',
+                uri: 'pixozine://themes',
                 name: 'Available Themes',
-                description: 'List of available zine themes with their properties',
+                description: 'List of available pixozine themes with their properties',
                 mimeType: 'application/json'
             },
             {
-                uri: 'zine://templates',
+                uri: 'pixozine://templates',
                 name: 'Page Templates',
-                description: 'Available page templates for different zine layouts',
+                description: 'Available page templates for different pixozine layouts',
                 mimeType: 'application/json'
             },
             {
-                uri: 'zine://assets',
+                uri: 'pixozine://assets',
                 name: 'Asset Library',
                 description: 'Available assets including shapes, symbols, SFX, and shaders',
                 mimeType: 'application/json'
@@ -584,7 +615,7 @@ app.post('/mcp/resources/read', (req, res) => {
     let resourceData;
 
     switch (uri) {
-        case 'zine://themes':
+        case 'pixozine://themes':
             resourceData = {
                 themes: {
                     classic: { name: 'Classic Literature', colors: { background: '#fdfaf1', text: '#1a1a1a', accent: '#d4af37' }, fonts: { display: 'Playfair Display', body: 'Crimson Text', accent: 'Crimson Text' }, status: 'STABLE' },
@@ -597,7 +628,7 @@ app.post('/mcp/resources/read', (req, res) => {
                 }
             };
             break;
-        case 'zine://templates':
+        case 'pixozine://templates':
             resourceData = {
                 templates: {
                     cover: { name: 'Cover Page', description: 'Title page with decorative elements', elements: ['title_text', 'subtitle_text', 'decorative_panel'] },
@@ -606,7 +637,7 @@ app.post('/mcp/resources/read', (req, res) => {
                 }
             };
             break;
-        case 'zine://assets':
+        case 'pixozine://assets':
             resourceData = {
                 assets: {
                     shapes: ['circle', 'square', 'triangle', 'diamond', 'line_h', 'arrow'],
@@ -635,12 +666,12 @@ app.post('/mcp/prompts/list', (req, res) => {
     res.json({
         prompts: [
             {
-                name: 'create_story_zine',
-                description: 'Generate a complete story zine with multiple pages',
+                name: 'create_story_pixozine',
+                description: 'Generate a complete story pixozine with multiple pages',
                 arguments: [
                     {
                         name: 'theme',
-                        description: 'Theme for the zine',
+                        description: 'Theme for the pixozine',
                         required: true
                     },
                     {
@@ -650,7 +681,7 @@ app.post('/mcp/prompts/list', (req, res) => {
                     },
                     {
                         name: 'title',
-                        description: 'Zine title',
+                        description: 'Pixozine title',
                         required: true
                     }
                 ]
@@ -661,7 +692,7 @@ app.post('/mcp/prompts/list', (req, res) => {
                 arguments: [
                     {
                         name: 'zineId',
-                        description: 'Existing zine ID to add page to',
+                        description: 'Existing pixozine ID to add page to',
                         required: true
                     },
                     {
@@ -673,11 +704,11 @@ app.post('/mcp/prompts/list', (req, res) => {
             },
             {
                 name: 'apply_theme_consistently',
-                description: 'Apply a theme to an entire zine with consistent styling',
+                description: 'Apply a theme to an entire pixozine with consistent styling',
                 arguments: [
                     {
                         name: 'zineId',
-                        description: 'Zine ID to apply theme to',
+                        description: 'Pixozine ID to apply theme to',
                         required: true
                     },
                     {
@@ -751,35 +782,35 @@ app.post('/mcp/tools/list', (req, res) => {
     res.json({
         tools: [
             {
-                name: 'create_zine',
-                description: 'Create a new zine project',
+                name: 'create_pixozine',
+                description: 'Create a new pixozine project',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        title: { type: 'string', description: 'Zine title' },
+                        title: { type: 'string', description: 'Pixozine title' },
                         theme: { type: 'string', description: 'Theme key (optional)', enum: ['classic', 'fantasy', 'cyberpunk', 'conspiracy', 'worldbuilding', 'comics', 'arcane'] }
                     },
                     required: ['title']
                 }
             },
             {
-                name: 'get_zine',
-                description: 'Get zine data by ID',
+                name: 'get_pixozine',
+                description: 'Get pixozine data by ID',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' }
+                        zineId: { type: 'integer', description: 'Pixozine ID' }
                     },
                     required: ['zineId']
                 }
             },
             {
                 name: 'add_page',
-                description: 'Add a new page to a zine',
+                description: 'Add a new page to a pixozine',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         background: { type: 'string', description: 'Page background color (optional)' },
                         texture: { type: 'string', description: 'Page texture URL (optional)' }
                     },
@@ -788,11 +819,11 @@ app.post('/mcp/tools/list', (req, res) => {
             },
             {
                 name: 'delete_page',
-                description: 'Delete a page from a zine',
+                description: 'Delete a page from a pixozine',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index to delete' }
                     },
                     required: ['zineId', 'pageIdx']
@@ -800,11 +831,11 @@ app.post('/mcp/tools/list', (req, res) => {
             },
             {
                 name: 'duplicate_page',
-                description: 'Duplicate a page in a zine',
+                description: 'Duplicate a page in a pixozine',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index to duplicate' }
                     },
                     required: ['zineId', 'pageIdx']
@@ -816,7 +847,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         content: { type: 'string', description: 'Text content' },
                         x: { type: 'number', description: 'X position', default: 80 },
@@ -833,7 +864,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         src: { type: 'string', description: 'Image URL or data URL' },
                         x: { type: 'number', description: 'X position', default: 80 },
@@ -850,7 +881,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         x: { type: 'number', description: 'X position', default: 40 },
                         y: { type: 'number', description: 'Y position', default: 40 },
@@ -866,7 +897,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         shape: { type: 'string', description: 'Shape type', enum: ['circle', 'square', 'triangle', 'diamond', 'line_h', 'arrow'], default: 'circle' },
                         x: { type: 'number', description: 'X position', default: 80 },
@@ -884,7 +915,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         content: { type: 'string', description: 'Balloon text' },
                         balloonType: { type: 'string', description: 'Balloon type', enum: ['dialog', 'thought', 'shout', 'caption', 'whisper', 'narration'], default: 'dialog' },
@@ -900,7 +931,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         sfxType: { type: 'string', description: 'SFX type', enum: ['crash', 'boom', 'zap', 'pow', 'whoosh', 'splat'], default: 'boom' },
                         x: { type: 'number', description: 'X position', default: 80 },
@@ -915,7 +946,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         symbol: { type: 'string', description: 'Symbol type', enum: ['pentagram', 'skull', 'star_symbol', 'eye', 'biohazard', 'radiation', 'compass', 'rune', 'ankh', 'omega', 'infinity', 'trident'], default: 'star_symbol' },
                         x: { type: 'number', description: 'X position', default: 80 },
@@ -930,7 +961,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         shaderPreset: { type: 'string', description: 'Shader preset', enum: ['plasma', 'fire', 'water', 'lightning', 'voidNoise', 'galaxy'], default: 'plasma' },
                         x: { type: 'number', description: 'X position', default: 80 },
@@ -947,7 +978,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         elementId: { type: 'string', description: 'Element ID' },
                         updates: { type: 'object', description: 'Properties to update' }
@@ -961,7 +992,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         elementId: { type: 'string', description: 'Element ID to delete' }
                     },
@@ -974,7 +1005,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         elementId: { type: 'string', description: 'Element ID to duplicate' }
                     },
@@ -987,7 +1018,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         elementId: { type: 'string', description: 'Element ID' },
                         direction: { type: 'string', description: 'Move direction', enum: ['up', 'down', 'top', 'bottom'] }
@@ -997,11 +1028,11 @@ app.post('/mcp/tools/list', (req, res) => {
             },
             {
                 name: 'apply_theme',
-                description: 'Apply a theme to a zine',
+                description: 'Apply a theme to a pixozine',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         theme: { type: 'string', description: 'Theme key', enum: ['classic', 'fantasy', 'cyberpunk', 'conspiracy', 'worldbuilding', 'comics', 'arcane'] }
                     },
                     required: ['zineId', 'theme']
@@ -1013,7 +1044,7 @@ app.post('/mcp/tools/list', (req, res) => {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         pageIdx: { type: 'integer', description: 'Page index' },
                         template: { type: 'string', description: 'Template type', enum: ['cover', 'content', 'back'] }
                     },
@@ -1022,25 +1053,31 @@ app.post('/mcp/tools/list', (req, res) => {
             },
             {
                 name: 'export_html',
-                description: 'Export zine as HTML',
+                description: 'Export pixozine as HTML',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' }
+                        zineId: { type: 'integer', description: 'Pixozine ID' }
                     },
                     required: ['zineId']
                 }
             },
             {
-                name: 'publish_zine',
-                description: 'Publish zine to make it publicly readable',
+                name: 'publish_pixozine',
+                description: 'Publish pixozine to make it publicly readable',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        zineId: { type: 'integer', description: 'Zine ID' },
+                        zineId: { type: 'integer', description: 'Pixozine ID' },
                         author: { type: 'string', description: 'Author name' },
                         genre: { type: 'string', description: 'Genre' },
-                        tags: { type: 'string', description: 'Comma-separated tags' }
+                        tags: { type: 'string', description: 'Comma-separated tags' },
+                        description: { type: 'string', description: 'Pixozine description' },
+                        cover_image: { type: 'string', description: 'Cover image URL' },
+                        monetization_type: { type: 'string', enum: ['free', 'one_time', 'crowdfund', 'subscription'], description: 'Monetization model' },
+                        price: { type: 'number', description: 'Price in USD (required for one_time/subscription)' },
+                        funding_goal: { type: 'number', description: 'Funding goal in USD (required for crowdfund)' },
+                        currency: { type: 'string', description: 'Currency code, default USD' }
                     },
                     required: ['zineId']
                 }
@@ -1057,11 +1094,11 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
         let result;
 
         switch (name) {
-            case 'create_zine':
-                result = await handleCreateZine(req.user.id, args);
+            case 'create_pixozine':
+                result = await handleCreatePixozine(req.user.id, args);
                 break;
-            case 'get_zine':
-                result = await handleGetZine(req.user.id, args.zineId);
+            case 'get_pixozine':
+                result = await handleGetPixozine(req.user.id, args.zineId);
                 break;
             case 'add_page':
                 result = await handleAddPage(req.user.id, args);
@@ -1117,8 +1154,8 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
             case 'export_html':
                 result = await handleExportHTML(req.user.id, args.zineId);
                 break;
-            case 'publish_zine':
-                result = await handlePublishZine(req.user.id, args);
+            case 'publish_pixozine':
+                result = await handlePublishPixozine(req.user.id, args);
                 break;
             default:
                 throw new Error(`Unknown tool: ${name}`);
@@ -1126,12 +1163,12 @@ app.post('/mcp/tools/call', authenticateToken, async (req, res) => {
 
         res.json(result);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(error.status || 500).json({ error: error.message });
     }
 });
 
 // Tool handlers
-async function handleCreateZine(userId, args) {
+async function handleCreatePixozine(userId, args) {
     const data = {
         pages: [{ id: Date.now(), elements: [], background: '#ffffff', texture: null }],
     };
@@ -1143,16 +1180,16 @@ async function handleCreateZine(userId, args) {
     return { zineId, message: 'Zine created successfully' };
 }
 
-async function handleGetZine(userId, zineId) {
+async function handleGetPixozine(userId, zineId) {
     const zine = await db('zines').where({ id: zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    return { ...zine, data: JSON.parse(zine.data) };
+    return { ...zine, data: normalizeZineData(zine.data) };
 }
 
 async function handleAddPage(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const newPage = {
         id: Date.now(),
         elements: [],
@@ -1167,7 +1204,7 @@ async function handleAddPage(userId, args) {
 async function handleAddTextElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const element = {
         id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1191,7 +1228,7 @@ async function handleAddTextElement(userId, args) {
 async function handleAddImageElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const element = {
         id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1211,7 +1248,7 @@ async function handleAddImageElement(userId, args) {
 async function handleAddPanelElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const element = {
         id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1234,7 +1271,7 @@ async function handleAddPanelElement(userId, args) {
 async function handleAddBalloonElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const element = {
         id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1256,7 +1293,7 @@ async function handleAddBalloonElement(userId, args) {
 async function handleUpdateElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const el = data.pages[args.pageIdx]?.elements.find(e => e.id === args.elementId);
     if (!el) throw new Error('Element not found');
     Object.assign(el, args.updates);
@@ -1267,7 +1304,7 @@ async function handleUpdateElement(userId, args) {
 async function handleApplyTheme(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     // Apply theme colors - simplified version
     const themeColors = {
         classic: { background: '#fdfaf1', text: '#1a1a1a', accent: '#d4af37' },
@@ -1295,7 +1332,7 @@ async function handleApplyTheme(userId, args) {
 async function handleApplyTemplate(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
 
     const templates = {
@@ -1339,10 +1376,10 @@ async function handleApplyTemplate(userId, args) {
 async function handleExportHTML(userId, zineId) {
     const zine = await db('zines').where({ id: zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const project = { title: zine.title, pages: JSON.parse(zine.data) };
+    const project = { title: zine.title, pages: normalizeZineData(zine.data).pages };
 
     // Basic HTML export - in full implementation, use the client-side exportToHTML logic
-    let html = `<!DOCTYPE html><html><head><title>${project.title}</title></head><body>`;
+    let html = `<!DOCTYPE html><html><head><title>${escapeHtml(project.title)}</title></head><body>`;
     project.pages.forEach((p, i) => {
         html += `<div>Page ${i + 1}</div>`;
     });
@@ -1351,24 +1388,26 @@ async function handleExportHTML(userId, zineId) {
     return { html };
 }
 
-async function handlePublishZine(userId, args) {
-    const changes = await db('zines')
+async function handlePublishPixozine(userId, args) {
+    const existing = await db('zines')
+        .select('id', 'monetization_type')
         .where({ id: args.zineId, user_id: userId })
-        .update({
-            is_published: 1,
-            published_at: db.fn.now(),
-            author_name: args.author || 'Anonymous',
-            genre: args.genre || 'classic',
-            tags: args.tags || ''
-        });
-    if (changes === 0) throw new Error('Zine not found');
-    return { status: 'published' };
+        .first();
+    if (!existing) throw new Error('Zine not found');
+    const { model, priceUnits, update } = resolvePublishFields(args, existing);
+    await db('zines').where({ id: args.zineId, user_id: userId }).update(update);
+    return {
+        status: 'published',
+        monetization_type: model,
+        price_units: priceUnits,
+        currency: args.currency || 'USD'
+    };
 }
 
 async function handleDeletePage(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const pageIdx = parseInt(args.pageIdx);
     if (data.pages.length <= 1) throw new Error('Cannot delete last page');
     if (!data.pages[pageIdx]) throw new Error('Page not found');
@@ -1383,7 +1422,7 @@ async function handleDeletePage(userId, args) {
 async function handleDuplicatePage(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const pageIdx = parseInt(args.pageIdx);
     if (!data.pages[pageIdx]) throw new Error('Page not found');
     const newPage = JSON.parse(JSON.stringify(data.pages[pageIdx]));
@@ -1400,7 +1439,7 @@ async function handleDuplicatePage(userId, args) {
 async function handleAddShapeElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const shapes = { circle: { shape: 'circle', width: 100, height: 100 }, square: { shape: 'rect', width: 100, height: 100 }, triangle: { shape: 'triangle', width: 100, height: 100 }, diamond: { shape: 'diamond', width: 80, height: 100 }, line_h: { shape: 'line_h', width: 200, height: 4 }, arrow: { type: 'text', content: '➤', fontSize: 48, color: '#0a0a0a', width: 60, height: 60, fontFamily: 'sans-serif' } };
     const shapeConfig = shapes[args.shape] || shapes.circle;
@@ -1427,7 +1466,7 @@ async function handleAddShapeElement(userId, args) {
 async function handleAddSFXElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const sfx = { crash: 'CRASH!', boom: 'BOOM!', zap: 'ZAP!', pow: 'POW!', whoosh: 'WHOOSH!', splat: 'SPLAT!' };
     const element = {
@@ -1453,7 +1492,7 @@ async function handleAddSFXElement(userId, args) {
 async function handleAddSymbolElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const symbols = { pentagram: '⛤', skull: '☠', star_symbol: '✦', eye: '👁', biohazard: '☣', radiation: '☢', compass: '🧭', rune: 'ᚱ', ankh: '☥', omega: 'Ω', infinity: '∞', trident: '🔱' };
     const element = {
@@ -1477,7 +1516,7 @@ async function handleAddSymbolElement(userId, args) {
 async function handleAddShaderElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     if (!data.pages[args.pageIdx]) throw new Error('Page not found');
     const element = {
         id: 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1498,7 +1537,7 @@ async function handleAddShaderElement(userId, args) {
 async function handleDeleteElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const pageIdx = parseInt(args.pageIdx);
     const elements = data.pages[pageIdx]?.elements;
     if (!elements) throw new Error('Page not found');
@@ -1515,7 +1554,7 @@ async function handleDeleteElement(userId, args) {
 async function handleDuplicateElement(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const pageIdx = parseInt(args.pageIdx);
     const el = data.pages[pageIdx]?.elements.find(e => e.id === args.elementId);
     if (!el) throw new Error('Element not found');
@@ -1534,7 +1573,7 @@ async function handleDuplicateElement(userId, args) {
 async function handleMoveLayer(userId, args) {
     const zine = await db('zines').where({ id: args.zineId, user_id: userId }).first();
     if (!zine) throw new Error('Zine not found');
-    const data = JSON.parse(zine.data);
+    const data = normalizeZineData(zine.data);
     const pageIdx = parseInt(args.pageIdx);
     const elements = data.pages[pageIdx]?.elements;
     if (!elements) throw new Error('Page not found');
@@ -1564,10 +1603,13 @@ async function handleMoveLayer(userId, args) {
 
 // Additional MCP endpoints for export and other features
 app.post('/mcp/export/html', authenticateToken, (req, res) => {
-    const { project } = req.body;
+    const { project } = req.body || {};
+    if (!project || !Array.isArray(project.pages)) {
+        return res.status(400).json({ error: 'Request body must include project.pages' });
+    }
     // Placeholder for HTML export - in full implementation, adapt client-side exportToHTML
     // For now, return basic HTML structure
-    let html = `<!DOCTYPE html><html><head><title>${project.title}</title></head><body>`;
+    let html = `<!DOCTYPE html><html><head><title>${escapeHtml(project.title)}</title></head><body>`;
     project.pages.forEach((p, i) => {
         html += `<div>Page ${i + 1}</div>`;
     });
@@ -1576,8 +1618,9 @@ app.post('/mcp/export/html', authenticateToken, (req, res) => {
 });
 
 app.post('/mcp/export/pdf', authenticateToken, (req, res) => {
-    // Placeholder for PDF export
-    res.json({ message: 'PDF export not implemented server-side yet' });
+    // Server-side PDF export is not implemented; the client-side exportToHTML
+    // path (src/utils/exportSystem.js) is the supported route.
+    res.status(501).json({ error: 'PDF export is not implemented server-side; use the client export' });
 });
 
 // ============================================
@@ -1731,7 +1774,11 @@ const boot = async () => {
         console.log('Database migrations completed');
 
         const demo = await seedDemoUser(db, bcrypt, vault);
-        console.log(`Demo account ready: ${demo.username} (${DEMO_TOKEN})`);
+        if (demo) {
+            console.log(`Demo account ready: ${demo.username} (${DEMO_TOKEN})`);
+        } else {
+            console.log('Demo account disabled (ALLOW_DEMO_ACCOUNT=false or production)');
+        }
     } catch (error) {
         console.error('Database startup failed:', error);
     }

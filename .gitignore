@@ -6,3 +6,4 @@ dist-editor/
 dist-reader/
 dist-*/qa-*.png
 qa-*.mjs
+*.bak

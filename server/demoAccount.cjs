@@ -37,6 +37,20 @@ const DEMO_TOPUP_UNITS = 2500
 
 /** The offline token the client presents to the API in demo mode. */
 const DEMO_TOKEN = 'svrn_demo_token'
+/**
+ * Whether the server seeds and honors the demo account (P6).
+ * Default ON for dev, OFF in production; an explicit
+ * ALLOW_DEMO_ACCOUNT=true/false always wins. Anyone with repo access can
+ * mint a demo session from the committed token string, so it must never be
+ * accepted by a hosted deployment.
+ * @returns {boolean}
+ */
+function isDemoAccountAllowed() {
+    const flag = process.env.ALLOW_DEMO_ACCOUNT;
+    if (flag === 'true') return true;
+    if (flag === 'false') return false;
+    return process.env.NODE_ENV !== 'production';
+}
 
 /**
  * Build the client-side demo session. Mirrors the server's seeded user so the
@@ -60,6 +74,7 @@ function createDemoSession() {
  * @returns {Promise<object>} the demo user row
  */
 async function seedDemoUser(db, bcrypt, vault) {
+    if (!isDemoAccountAllowed()) return null;
     const passwordHash = await bcrypt.hash(DEMO_USER.email, 10)
 
     const existing = await db('users').where({ email: DEMO_USER.email }).first()
@@ -98,6 +113,7 @@ async function seedDemoUser(db, bcrypt, vault) {
 }
 
 module.exports = {
+    isDemoAccountAllowed,
     DEMO_USER,
     DEMO_STARTING_UNITS,
     DEMO_TOPUP_UNITS,

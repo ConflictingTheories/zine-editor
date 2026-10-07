@@ -6,8 +6,8 @@ export const EDITOR_MODE_PHOTO_PORTFOLIO = 'photo-portfolio'
 export const EDITOR_MODES = [
     {
         id: EDITOR_MODE_ZINE,
-        label: 'Interactive Zine',
-        shortLabel: 'Zine',
+        label: 'Interactive Pixozine',
+        shortLabel: 'Pixozine',
         description: 'Full toolkit for comics, stories, shaders, and interactive pages.'
     },
     {

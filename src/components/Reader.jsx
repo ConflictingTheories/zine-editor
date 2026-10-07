@@ -1,6 +1,6 @@
 /*
  * Component: Reader
- * Public zine reader view for browsing published content with navigation controls.
+ * Public pixozine reader view for browsing published content with navigation controls.
  */
 
 import React, { useState, useEffect, useRef } from 'react'
@@ -10,6 +10,7 @@ import Object3D from './Object3D.jsx'
 import { getPanelBackground, PhotoFrameSurface } from './ElementContent.jsx'
 import { resolvePublicationAsset } from '../utils/assets.js'
 import { bookGeometry, legacyPageSize } from '../lib/bookGeometry.js'
+import { isPageLocked, hasLegacyPassword, unlockPage, migrateLegacyPageLock } from '../../packages/svrn-format/src/pageCrypto.js'
 
 const ANIMATION_MAP = {
     'flash-in': 'reader-flash-in',
@@ -141,15 +142,16 @@ const styles = {
 
 /**
  * Component: Reader
- * Renders a zine for reading with support for page navigation, content
+ * Renders a pixozine for reading with support for page navigation, content
  * gating (paywalls/passwords), media playback, and element interactions.
  */
 function Reader() {
-    const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx, toast } = useVP()
+    const { vpState, showView, playBGM, stopBGM, playSFX, triggerVfx, toast, replacePage } = useVP()
     const { currentProject, readerMode } = vpState
     const [pageIdx, setPageIdx] = useState(0)
     const [unlockedPages, setUnlockedPages] = useState(new Set())
     const [passwordModal, setPasswordModal] = useState({ active: false, targetIdx: -1, value: '' })
+    const [decryptedPages, setDecryptedPages] = useState({}) // pageIdx -> decrypted working copy (session only)
     const [toggledLabels, setToggledLabels] = useState(new Set())
     const [flags, setFlags] = useState(() => ({ ...(currentProject?.flags || {}) }))
     const [inventory, setInventory] = useState(() => new Set(currentProject?.inventory || []))
@@ -162,7 +164,7 @@ function Reader() {
     // crash React, leaving the preview blank.
     const pageCount = project?.pages?.length || 0
     const safePageIdx = pageCount ? Math.min(pageIdx, pageCount - 1) : 0
-    const page = project?.pages?.[safePageIdx]
+    const page = decryptedPages[safePageIdx] || project?.pages?.[safePageIdx]
     const pageSize = project?.editorMode === 'photo-portfolio'
         ? bookGeometry(project, page)
         : legacyPageSize(page?.orientation === 'landscape')
@@ -298,13 +300,36 @@ function Reader() {
         }
     }
 
-    const handlePasswordSubmit = () => {
-        const targetPage = project.pages[passwordModal.targetIdx]
-        if (targetPage && targetPage.password === passwordModal.value) {
-            setUnlockedPages(prev => new Set(prev).add(passwordModal.targetIdx))
-            setPageIdx(passwordModal.targetIdx)
+    const handlePasswordSubmit = async () => {
+        const targetIdx = passwordModal.targetIdx
+        const targetPage = project.pages[targetIdx]
+        if (!targetPage) {
+            toast('Incorrect password', 'error')
+            return
+        }
+        try {
+            if (isPageLocked(targetPage)) {
+                // Real decryption: wrong password fails closed (AES-GCM auth).
+                const working = await unlockPage(targetPage, passwordModal.value)
+                setDecryptedPages(prev => ({ ...prev, [targetIdx]: working }))
+            } else if (hasLegacyPassword(targetPage)) {
+                // Transparent migration: a correct legacy plaintext password
+                // re-encrypts the page on this unlock. The migrated (locked)
+                // page is persisted so the next sync stores the envelope,
+                // never the plaintext.
+                const migrated = await migrateLegacyPageLock(targetPage, passwordModal.value)
+                replacePage(targetIdx, migrated)
+                const working = await unlockPage(migrated, passwordModal.value)
+                setDecryptedPages(prev => ({ ...prev, [targetIdx]: working }))
+                toast('Page password upgraded to encryption', 'success')
+            } else {
+                toast('Incorrect password', 'error')
+                return
+            }
+            setUnlockedPages(prev => new Set(prev).add(targetIdx))
+            setPageIdx(targetIdx)
             setPasswordModal({ active: false, targetIdx: -1, value: '' })
-        } else {
+        } catch {
             toast('Incorrect password', 'error')
         }
     }

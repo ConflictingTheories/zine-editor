@@ -57,7 +57,7 @@ docker-compose down
 
 ```bash
 # Build
-docker build -f Dockerfile.backend -t void-press-backend .
+docker build -f Dockerfile.backend -t svrn-backend .
 
 # Run
 docker run -p 3000:3000 \
@@ -65,19 +65,19 @@ docker run -p 3000:3000 \
   -e JWT_SECRET=your_secret_key \
   -e STRIPE_SECRET_KEY=sk_test_xxx \
   -v $(pwd)/data:/app/data \
-  void-press-backend
+  svrn-backend
 ```
 
 ### Frontend Only
 
 ```bash
 # Build
-docker build -f Dockerfile.frontend -t void-press-frontend .
+docker build -f Dockerfile.frontend -t svrn-frontend .
 
 # Run
 docker run -p 5174:5174 \
   -e VITE_API_BASE_URL=http://localhost:3000 \
-  void-press-frontend
+  svrn-frontend
 ```
 
 ## Production Deployment
@@ -150,7 +150,7 @@ kill -9 <PID>
 # Database file: /app/data/database.sqlite
 
 # Or via container shell
-docker exec -it void-press-backend sqlite3 /app/data/database.sqlite
+docker exec -it svrn-backend sqlite3 /app/data/database.sqlite
 ```
 
 ### Build fails

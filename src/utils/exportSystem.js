@@ -6,6 +6,14 @@ import { resolvePublicationAsset } from './assets.js'
 import { printElements } from './publication.js'
 import { packSvrn, unpackSvrn } from '../../packages/svrn-format/src/index.js'
 
+// P10: a page is export-locked when it carries an encryption envelope or a
+// legacy plaintext password. Locked pages render as opaque placeholders in
+// every export path — no content, no password, no key material.
+const isExportLocked = (p) => !!(p && (p.lock || (p.isLocked && p.password)))
+const lockedPlaceholderHTML = (label = 'This page is locked') =>
+    `<div style="position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;background:#111;color:#888;font-family:sans-serif"><div style="font-size:3rem">🔒</div><div>${label}</div></div>`
+
+
 // Server-side export using MCP (for automation)
 export const exportToHTMLServer = async (project, token) => {
     const mcp = new MCPClient()
@@ -23,7 +31,7 @@ export const exportToSvrn = async (project) => {
     const { archive, manifest } = await packSvrn(project, { baseUrl: window.location.href })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(new Blob([archive], { type: 'application/vnd.svrn+zip' }))
-    link.download = `${(manifest.issue.title || 'svrn-zine').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'svrn-zine'}.svrn`
+    link.download = `${(manifest.issue.title || 'svrn-pixozine').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'svrn-pixozine'}.svrn`
     link.click()
     setTimeout(() => URL.revokeObjectURL(link.href), 1000)
     return manifest
@@ -126,6 +134,7 @@ const prepareHtmlExport = async (sourceProject, embedAssets) => {
 
     const pages = await Promise.all((sourceProject.pages || []).map(async page => ({
         ...page,
+        password: undefined, // P10: plaintext passwords never leave in exports
         texture: await prepareAsset(page.texture),
         bgm: await prepareAsset(page.bgm),
         elements: await Promise.all((page.elements || []).map(async element => ({
@@ -181,6 +190,8 @@ export const exportToHTML = async (sourceProject, embedAssets = false) => {
             .reader-main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(circle at center,#2a2a2a 0%,#121212 100%)}
             .page-wrap{width:var(--page-width);height:var(--page-height);background:#fff;box-shadow:0 0 50px rgba(0,0,0,0.6);position:absolute;top:50%;left:50%;display:none;transform:translate(-50%,-50%) scale(var(--page-scale,1));transform-origin:center;overflow:hidden}
             .page-wrap.active{display:block;animation:fadeIn 0.25s ease}
+            .locked-page{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;background:#111;color:#888;font-family:var(--font-ui,sans-serif)}
+            .locked-page .locked-icon{font-size:3rem}
             @keyframes fadeIn{from{opacity:0}to{opacity:1}}
             .reader-controls{flex:0 0 auto;padding:12px;background:#1a1a1a;border-top:1px solid #333;display:flex;justify-content:center;gap:20px;align-items:center;z-index:10}
             .btn{background:transparent;border:1px solid #444;color:#aaa;padding:8px 20px;border-radius:4px;cursor:pointer;transition:all 0.2s;font-size:0.9em;text-transform:uppercase;letter-spacing:0.5px}
@@ -208,7 +219,7 @@ export const exportToHTML = async (sourceProject, embedAssets = false) => {
         html += `<div id="vp-overlay"><h1 style="color:#fff;font-size:3rem;margin-bottom:0.5rem;font-family:var(--font-ui, sans-serif);letter-spacing:4px">${escapeHtml(project.title || 'SVRN PUBLISHING')}</h1><div style="color:#666;letter-spacing:2px;font-size:0.9rem">${isPortfolio ? 'PORTFOLIO BOOK' : 'INTERACTIVE ZINE'}</div><button class="start-btn" onclick="startZine()">Open ${isPortfolio ? 'book' : 'zine'}</button></div>`;
 
         html += `<div class="reader-header">
-            <div class="reader-title">${escapeHtml(project.title || (isPortfolio ? 'Untitled Portfolio' : 'Untitled Zine'))}</div>
+            <div class="reader-title">${escapeHtml(project.title || (isPortfolio ? 'Untitled Portfolio' : 'Untitled Pixozine'))}</div>
             <button id="vp-mute" class="mute-btn" onclick="toggleMute()" title="Toggle Audio">♪</button>
         </div>`;
 
@@ -216,9 +227,17 @@ export const exportToHTML = async (sourceProject, embedAssets = false) => {
 
         project.pages.forEach((p, i) => {
             const { width, height } = pageSizes[i]
-            html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-width="${width}" data-height="${height}" data-bgm="${escapeHtml(p.bgm || '')}" data-locked="${p.isLocked ? '1' : ''}" data-pass="${escapeHtml(p.password || '')}" style="--page-width:${width}px;--page-height:${height}px;background:${p.background || '#ffffff'}">`;
-            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>`;
-            p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
+            // P10: a locked page exports as an opaque placeholder. No content,
+            // no password, no key material — the secret stays in the envelope,
+            // which never ships in a static export.
+            const locked = !!(p.lock || (p.isLocked && p.password))
+            html += `<div class="page-wrap${i === 0 ? ' active' : ''}" id="p${i}" data-width="${width}" data-height="${height}" data-bgm="${escapeHtml(p.bgm || '')}" data-locked="${locked ? '1' : ''}" style="--page-width:${width}px;--page-height:${height}px;background:${locked ? '#111111' : (p.background || '#ffffff')}">`;
+            if (locked) {
+                html += `<div class="locked-page"><div class="locked-icon">🔒</div><div>This page is locked</div></div>`;
+            } else {
+                if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${p.texture}');background-size:cover;opacity:.2"></div>`;
+                (p.elements || []).filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
+            }
             html += `</div>`;
         });
 
@@ -362,7 +381,7 @@ export const exportToHTML = async (sourceProject, embedAssets = false) => {
         html += `<div class="modal" id="pw"><div class="modal-content"><h3>🔒 Locked</h3><p>Enter password to unlock path</p><input type="password" id="pi"><div style="display:flex;gap:10px"><button class="btn" onclick="PWS()" style="flex:1">Unlock</button><button class="btn" onclick="document.getElementById('pw').classList.remove('active')" style="flex:1;background:#333;color:#fff">Cancel</button></div></div></div>`;
         html += `<script>${MINI_MUSHU}</script><script>${sc}</script><script>${msc}</script></body></html>`;
 
-        const fileBase = (project.title || (isPortfolio ? 'portfolio-book' : 'svrn-zine'))
+        const fileBase = (project.title || (isPortfolio ? 'portfolio-book' : 'svrn-pixozine'))
             .replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'svrn-publication'
         const fileName = `${fileBase}.html`
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
@@ -381,7 +400,7 @@ export const exportToHTML = async (sourceProject, embedAssets = false) => {
 export const exportToInteractive = async (project, embedAssets = false) => {
     const ld = document.createElement('div');
     ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
-    ld.innerHTML = '<div>Building Interactive Zine...</div>';
+    ld.innerHTML = '<div>Building Interactive Pixozine...</div>';
     document.body.appendChild(ld);
 
     let pageFlipScript = `<script src="/libs/page-flip.browser.js"></script>`;
@@ -431,9 +450,13 @@ export const exportToInteractive = async (project, embedAssets = false) => {
 
         html += `<div class="book-stage"><div id="book">`;
         project.pages.forEach((p, i) => {
-            html += `<div class="page" id="p${i}" data-bgm="${p.bgm || ''}" style="background:${p.background}">`;
-            if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>`;
-            p.elements.filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
+            html += `<div class="page" id="p${i}" data-bgm="${p.bgm || ''}" style="background:${isExportLocked(p) ? '#111111' : p.background}">`;
+            if (isExportLocked(p)) {
+                html += lockedPlaceholderHTML();
+            } else {
+                if (p.texture) html += `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>`;
+                (p.elements || []).filter(e => !e.hidden).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach(e => { html += elementToHTML(e) });
+            }
             html += `<div style="position:absolute;bottom:10px;width:100%;text-align:center;color:#aaa;font-size:12px;pointer-events:none">${i + 1}</div>`;
             html += `</div>`;
         });
@@ -556,7 +579,7 @@ export const exportToPDF = async (project, embedAssets = false) => {
                 ld.innerHTML = `<div>Generating PDF... Page ${i + 1}/${project.pages.length}</div>`;
 
                 if (mushu) {
-                    for (const el of p.elements) {
+                    for (const el of (p.elements || [])) {
                         if (el.type === 'shader' && el.shaderCode) {
                             try {
                                 const c = document.createElement('canvas');
@@ -571,9 +594,10 @@ export const exportToPDF = async (project, embedAssets = false) => {
 
                 container.style.width = `${pageWidth}px`
                 container.style.height = `${pageHeight}px`
-                container.innerHTML = `<div style="width:100%;height:100%;position:relative;background:${p.background}">
+                container.innerHTML = `<div style="width:100%;height:100%;position:relative;background:${isExportLocked(p) ? '#111111' : p.background}">
+                    ${isExportLocked(p) ? lockedPlaceholderHTML() : `
                     ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
-                    ${printElements(p.elements).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                    ${printElements(p.elements || []).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}`}
                 </div>`;
 
                 // Allow DOM to settle and images to load
@@ -594,7 +618,7 @@ export const exportToPDF = async (project, embedAssets = false) => {
                 // trim exactly rather than being scaled by a px->in guess.
                 pdf.addImage(imgData, 'JPEG', 0, 0, geo.inchW, geo.inchH);
 
-                p.elements.forEach(e => { if (e.shaderImage) delete e.shaderImage; });
+                (p.elements || []).forEach(e => { if (e.shaderImage) delete e.shaderImage; });
             }
             pdf.save(`${(project.title || 'svrn-book').replace(/[^\w-]+/g, '-').toLowerCase()}.pdf`);
         } finally {
@@ -610,14 +634,14 @@ export const exportToPDF = async (project, embedAssets = false) => {
 export const exportToFoldablePDF = async (project, embedAssets = false) => {
     const ld = document.createElement('div');
     ld.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:sans-serif;color:#fff";
-    ld.innerHTML = '<div>Initializing Foldable Zine Export...</div>';
+    ld.innerHTML = '<div>Initializing Foldable Pixozine Export...</div>';
     document.body.appendChild(ld);
 
     const SHEET_W = 1056;
     const SHEET_H = 816;
     const CELL_W = SHEET_W / 4;
     const CELL_H = SHEET_H / 2;
-    // Classic one-sheet cut-and-fold mini zine. The top row is rotated:
+    // Classic one-sheet cut-and-fold mini pixozine. The top row is rotated:
     // printed flat = 5,4,3,2 / 6,7,8,1; folded output reads 1 through 8.
     const PAGE_INDEX_MAP = [4, 3, 2, 1, 5, 6, 7, 0];
     const PAGE_TRANSFORMS = [
@@ -672,16 +696,18 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
             }
 
             for (let sheet = 0; sheet < sheetCount; sheet++) {
-                ld.innerHTML = `<div>Generating one-sheet zine ${sheet + 1} of ${sheetCount}…</div>`
+                ld.innerHTML = `<div>Generating one-sheet pixozine ${sheet + 1} of ${sheetCount}…</div>`
                 const pages = Array.from({ length: 8 }, (_, i) => sourcePages[(sheet * 8) + i] || blankPage())
                 let htmlString = ''
                 for (let i = 0; i < 8; i++) {
                     const p = pages[PAGE_INDEX_MAP[i]]
                     const tr = PAGE_TRANSFORMS[i]
-                    htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:${CELL_W}px;height:${CELL_H}px;transform:rotate(${tr.rot}deg);transform-origin:center center;background:${p.background || '#fff'};overflow:hidden;border:1px dashed #bbb;box-sizing:border-box">
+                    const cellLocked = isExportLocked(p)
+                    htmlString += `<div style="position:absolute;left:${tr.x}px;top:${tr.y}px;width:${CELL_W}px;height:${CELL_H}px;transform:rotate(${tr.rot}deg);transform-origin:center center;background:${cellLocked ? '#111111' : (p.background || '#fff')};overflow:hidden;border:1px dashed #bbb;box-sizing:border-box">
                         <div style="transform:scale(0.5);transform-origin:top left;width:${PAGE_W}px;height:${PAGE_H}px;position:relative">
+                            ${cellLocked ? lockedPlaceholderHTML() : `
                             ${p.texture ? `<div style="position:absolute;inset:0;background-image:url('${resolvePublicationAsset(p.texture)}');background-size:cover;opacity:.2"></div>` : ''}
-                            ${printElements(p.elements).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}
+                            ${printElements(p.elements || []).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(e => elementToHTML(e, false)).join('')}`}
                         </div>
                     </div>`
                 }
@@ -705,7 +731,7 @@ export const exportToFoldablePDF = async (project, embedAssets = false) => {
             // Cleanup shader snapshots
             sourcePages.forEach(p => (p.elements || []).forEach(e => { if (e.shaderImage) delete e.shaderImage; }));
 
-            pdf.save('svrn-one-sheet-zine.pdf');
+            pdf.save('svrn-one-sheet-pixozine.pdf');
         } finally {
             container.remove();
         }

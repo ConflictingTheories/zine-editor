@@ -294,7 +294,7 @@ function App() {
       const unpacked = await unpackSvrn(issue.archive)
       const urlCache = {}
       for (const [path, bytes] of Object.entries(unpacked.entries)) {
-        if (path !== 'content/zine.json' && path !== 'manifest.json') {
+        if (path !== 'content/pixozine.json' && path !== 'content/zine.json' && path !== 'manifest.json') {
           // Identify mime implicitly by extension? Blob lets browser guess usually
           urlCache[path] = URL.createObjectURL(new Blob([bytes]))
         }
@@ -474,7 +474,7 @@ function App() {
             {[...issues].sort((a, b) => `${a.manifest?.issue?.series || ''}${a.manifest?.issue?.volume || ''}${a.manifest?.issue?.issue || ''}`.localeCompare(`${b.manifest?.issue?.series || ''}${b.manifest?.issue?.volume || ''}${b.manifest?.issue?.issue || ''}`)).map(issue => <button className="issue" key={issue.id} onClick={() => select(issue)}>{issue.manifest?.issue?.title || issue.id}<small>{[issue.manifest?.issue?.series, issue.manifest?.issue?.volume && `Vol. ${issue.manifest.issue.volume}`, issue.manifest?.issue?.issue && `Issue ${issue.manifest.issue}`, issue.source].filter(Boolean).join(' · ')}</small></button>)}
           </aside>
           <article>
-            {!current ? <p>Import a zine or subscribe to a publishing node.</p> : <>
+            {!current ? <p>Import a pixozine or subscribe to a publishing node.</p> : <>
               <h2>{project.title}</h2>
               {(project.series || project.volume || project.issue) && <p className="issue-meta">{[project.series, project.volume && `Volume ${project.volume}`, project.issue && `Issue ${project.issue}`].filter(Boolean).join(' · ')}</p>}
               {resolvedAudio && <audio ref={audioRef} autoPlay loop playsInline muted aria-hidden="true" style={{ display: 'none' }} />}
