@@ -125,10 +125,33 @@ export async function packSvrn(projectInput, { baseUrl } = {}) {
   }
   const content = encoder.encode(JSON.stringify(project))
   const contentHash = await sha256(content)
+
+  // Extract playable (embedded game) elements for the manifest
+  const playables = [];
+  for (const page of project.pages || []) {
+    for (const el of page.elements || []) {
+      if (el.type === 'playable' && el.bundle && el.bundle.uri) {
+        playables.push({
+          elementId: el.id,
+          pageId: page.id,
+          title: el.title || 'Embedded Game',
+          bundle: {
+            uri: el.bundle.uri,
+            manifestHash: el.bundle.manifestHash || null,
+            playerVersion: el.bundle.playerVersion || '1.0.0',
+          },
+          width: el.width || 400,
+          height: el.height || 300,
+        });
+      }
+    }
+  }
+
   const manifest = {
     formatVersion: FORMAT_VERSION, issue: { id: project.id, title: project.title, author: project.author, description: project.description, tags: project.tags, series: project.series, volume: project.volume, issue: project.issue },
     entry: CONTENT_PATH, assets, hashes: { [CONTENT_PATH]: contentHash, ...Object.fromEntries(assets.map(asset => [asset.path, asset.sha256])) },
-    capabilities: capabilitiesFor(project), signature: null
+    capabilities: capabilitiesFor(project), signature: null,
+    playables,
   }
   const archive = zipSync({ [MANIFEST_PATH]: strToU8(JSON.stringify(manifest, null, 2)), [CONTENT_PATH]: content, ...files }, { level: 6 })
   return { archive, manifest, project }
