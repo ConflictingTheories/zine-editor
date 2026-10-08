@@ -891,6 +891,27 @@ function PropertyPanel({ activeTab = 'props' }) {
                             handleChange('dimensions', d);
                         }} min={1} />
                     </div>
+                    <div className="form-row">
+                        <label>Bundle URL</label>
+                        <input type="text" value={element.bundle?.uri || ''} onChange={(e) => {
+                            const b = { ...(element.bundle || {}), uri: e.target.value };
+                            handleChange('bundle', b);
+                        }} placeholder="https://…/game.spritz or /api/spritz/123" />
+                    </div>
+                    <div className="form-row">
+                        <label>Manifest Hash (SHA-256)</label>
+                        <input type="text" value={element.bundle?.manifestHash || ''} onChange={(e) => {
+                            const b = { ...(element.bundle || {}), manifestHash: e.target.value };
+                            handleChange('bundle', b);
+                        }} placeholder="sha256:…" />
+                    </div>
+                    <div className="form-row">
+                        <label>Player Version</label>
+                        <input type="text" value={element.bundle?.playerVersion || '1.0.0'} onChange={(e) => {
+                            const b = { ...(element.bundle || {}), playerVersion: e.target.value };
+                            handleChange('bundle', b);
+                        }} placeholder="1.0.0" />
+                    </div>
                 </div>
             )}
 
