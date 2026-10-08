@@ -119,17 +119,29 @@ async function main() {
       throw e
     }
 
-    // TODO(engine): SpritzPlayer needs a standalone embedding API, e.g.
-    //   await player.mountBundle(rootEl, bytes, { manifest: prepared.manifest })
-    // Today the runtime lifecycle is driven by init(engine) with a full engine
-    // instance — there is no mount(el, bytes) entry point. Until that API
-    // exists, the validated bundle cannot be executed from this shell.
-    // The validation above is real and complete; only the final mount is stubbed.
+    // Mount the bundle using SpritzPlayer.mountBundle() - real engine bootstrap
     console.info('[svrn-player] bundle validated:', prepared.manifest.title, `(${prepared.migration})`)
-    showError(
-      'Player runtime pending',
-      'This bundle validated successfully, but the engine\'s standalone player API is not yet available. (Engine task: add mountBundle() to SpritzPlayer.)'
-    )
+    setStatus('Starting game…')
+
+    try {
+      const rootEl = document.getElementById('player-root') || document.body;
+      const result = await SpritzPlayer.mountBundle(rootEl, bytes, {
+        manifestHash: expectedHash,
+        width: 480,
+        height: 640,
+      });
+      console.info('[svrn-player] game mounted:', result.manifest.title);
+      setStatus('');
+
+      // Store for cleanup
+      window.__svrnPlayer = result;
+    } catch (mountErr) {
+      console.error('[svrn-player] mount failed:', mountErr);
+      showError(
+        'Could not start game',
+        `Bundle validated but failed to mount: ${mountErr.message}`
+      );
+    }
   } catch (err) {
     console.error('[svrn-player]', err)
     showError('Could not load playable', err.message || 'Unknown error.')
