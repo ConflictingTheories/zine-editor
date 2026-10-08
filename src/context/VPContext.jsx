@@ -2238,6 +2238,22 @@ const VPProvider = ({ children }) => {
                 height: 200,
                 opacity: 1
             }
+        } else if (type === 'playable') {
+            // Playable = embedded spritz (game). assetId is the spritz ID or URL.
+            el = {
+                ...base,
+                type: 'playable',
+                width: 400,
+                height: 300,
+                title: 'Embedded Game',
+                description: '',
+                poster: '',
+                bundle: {
+                    uri: assetId || '',
+                    manifestHash: '',
+                    playerVersion: '1.0.0'
+                }
+            }
         }
         addElement(pageIdx, el)
     }
