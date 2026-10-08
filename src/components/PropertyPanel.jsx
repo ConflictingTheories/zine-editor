@@ -862,6 +862,59 @@ function PropertyPanel({ activeTab = 'props' }) {
                 </div>
             )}
 
+            {element.type === 'playable' && (
+                <div className="prop-section">
+                    <h4>Playable</h4>
+                    <div className="form-row">
+                        <label>Title</label>
+                        <input type="text" value={element.playable?.title || element.title || ''} onChange={(e) => handleChange('title', e.target.value)} placeholder="My Game" />
+                    </div>
+                    <div className="form-row">
+                        <label>Description</label>
+                        <textarea value={element.playable?.description || element.description || ''} onChange={(e) => handleChange('description', e.target.value)} placeholder="What is this about?" rows={3} />
+                    </div>
+                    <div className="form-row">
+                        <label>Poster image URL</label>
+                        <input type="text" value={element.playable?.poster || element.poster || ''} onChange={(e) => handleChange('poster', e.target.value)} placeholder="https://…" />
+                    </div>
+                    <div className="form-row">
+                        <label>Width</label>
+                        <input type="number" value={element.playable?.dimensions?.width || element.dimensions?.width || 800} onChange={(e) => {
+                            const d = { ...(element.playable?.dimensions || element.dimensions || {}), width: parseInt(e.target.value, 10) || 800 };
+                            handleChange('dimensions', d);
+                        }} min={1} />
+                    </div>
+                    <div className="form-row">
+                        <label>Height</label>
+                        <input type="number" value={element.playable?.dimensions?.height || element.dimensions?.height || 600} onChange={(e) => {
+                            const d = { ...(element.playable?.dimensions || element.dimensions || {}), height: parseInt(e.target.value, 10) || 600 };
+                            handleChange('dimensions', d);
+                        }} min={1} />
+                    </div>
+                    <div className="form-row">
+                        <label>Bundle URL</label>
+                        <input type="text" value={element.bundle?.uri || ''} onChange={(e) => {
+                            const b = { ...(element.bundle || {}), uri: e.target.value };
+                            handleChange('bundle', b);
+                        }} placeholder="https://…/game.spritz or /api/spritz/123" />
+                    </div>
+                    <div className="form-row">
+                        <label>Manifest Hash (SHA-256)</label>
+                        <input type="text" value={element.bundle?.manifestHash || ''} onChange={(e) => {
+                            const b = { ...(element.bundle || {}), manifestHash: e.target.value };
+                            handleChange('bundle', b);
+                        }} placeholder="sha256:…" />
+                    </div>
+                    <div className="form-row">
+                        <label>Player Version</label>
+                        <input type="text" value={element.bundle?.playerVersion || '1.0.0'} onChange={(e) => {
+                            const b = { ...(element.bundle || {}), playerVersion: e.target.value };
+                            handleChange('bundle', b);
+                        }} placeholder="1.0.0" />
+                    </div>
+                </div>
+            )}
+
             {element.type === 'shader' && (
                 <div className="prop-section">
                     <h4>Shader Settings</h4>
