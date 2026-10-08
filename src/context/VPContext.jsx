@@ -625,7 +625,7 @@ const VPProvider = ({ children }) => {
      */
     const applyUiTheme = (theme) => {
         const next = theme === 'light' ? 'light' : 'dark'
-        document.documentElement.setAttribute('data-ui-theme', next)
+        document.documentElement.setAttribute('data-theme', next)
         localStorage.setItem('vp_ui_theme', next)
         setVpState(prev => ({ ...prev, uiTheme: next }))
     }
@@ -644,7 +644,7 @@ const VPProvider = ({ children }) => {
     }
 
     useEffect(() => {
-        document.documentElement.setAttribute('data-ui-theme', vpState.uiTheme || 'dark')
+        document.documentElement.setAttribute('data-theme', vpState.uiTheme || 'dark')
     }, [vpState.uiTheme])
 
     const themes = {
@@ -2120,7 +2120,7 @@ const VPProvider = ({ children }) => {
                 setVpState(prev => ({ ...prev, projects: next, currentProject: project }))
             }
             closeModal('publishModal')
-            toast('🚀 Pixozine published! Go to Discover to see it live.', 'success')
+            toast('🚀 Pixozine published! It now shows as Published in your library.', 'success')
         } catch (e) {
             toast('Publish failed: ' + (e.message || 'Error'), 'error')
         }
@@ -2237,6 +2237,22 @@ const VPProvider = ({ children }) => {
                 width: 200,
                 height: 200,
                 opacity: 1
+            }
+        } else if (type === 'playable') {
+            // Playable = embedded spritz (game). assetId is the spritz ID or URL.
+            el = {
+                ...base,
+                type: 'playable',
+                width: 400,
+                height: 300,
+                title: 'Embedded Game',
+                description: '',
+                poster: '',
+                bundle: {
+                    uri: assetId || '',
+                    manifestHash: '',
+                    playerVersion: '1.0.0'
+                }
             }
         }
         addElement(pageIdx, el)
